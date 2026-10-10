@@ -1,0 +1,76 @@
+# Security model
+
+Zero signup + instant payments make this a target for card testers, scammers and trolls.
+This maps each threat to where it is handled. **Code** items ship in this repo.
+**Config** items are dashboard settings someone must turn on before launch.
+
+## 1. Fake payments ("I paid $1000" injection)
+
+| Defence | Where |
+|---|---|
+| The browser never writes ad state. Only `settle_bid()` changes the throne, and only the backend calls it | Code: `game.js`, `schema.sql` |
+| Production settlement only happens from a Stripe webhook whose signature passes `stripe.webhooks.constructEvent` | Code: `server.js` |
+| The amount comes from our own `bids` row, never from the client or Stripe metadata | Code |
+| RLS on, with no policies, on every table, and SQL functions revoked from `anon`/`authenticated`. A leaked anon key can't read or write anything | Code: `schema.sql` |
+| `NODE_ENV=production` refuses to boot without Stripe, so the demo-pay route can't exist in prod | Code: `config.js` |
+| Concurrent payments are serialized by a row lock. The loser is auto-refunded | Code: `schema.sql` |
+| Throne Credits: the wallet code is 256 random bits, and the DB stores only its SHA-256 hash. Spending happens inside `settle_bid()` with a `balance >= amount` check, so a double-spend is voided and refunded, never charged twice. The balance can't go negative (CHECK constraint) | Code: `wallets.js`, `schema.sql` |
+
+## 2. Card testing and chargebacks
+
+| Defence | Where |
+|---|---|
+| Wallet-first checkout (Apple Pay / Google Pay need biometrics). `VITE_ALLOW_CARDS=false` hides typed cards entirely | Code: `StripeCheckout.jsx` |
+| 3D Secure on typed cards: `STRIPE_3DS=automatic` (default) or `any` (always challenge) | Code: `payments.js` |
+| Cloudflare Turnstile bot check in the bid form, verified server-side before anything else runs (single-use tokens). Required in production | Code: `Turnstile.jsx`, `turnstile.js` |
+| Bid endpoint limited to 6/min per IP, before any PaymentIntent exists | Code: `server.js` |
+| Stripe Radar is on by default. Add these rules: | **Config: Stripe → Radar → Rules** |
+
+Suggested Radar rules (test in "review" mode first):
+```
+Block if :card_count_for_ip_address_daily: > 3
+Block if :total_charges_per_ip_address_hourly: > 10
+Request 3D Secure if :risk_level: = 'elevated'
+Block if :risk_level: = 'highest'
+Block if :is_anonymous_ip: = true and :digital_wallet: = 'none'
+```
+Server-side wallet *enforcement* (rejecting typed cards even if a bot skips the UI) needs the
+Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plus Radar rules cover it.
+
+## 3. Malicious links, XSS and clickjacking
+
+| Defence | Where |
+|---|---|
+| Only `http(s)` links. Blocks `javascript:`, `data:`, credentials-in-URL tricks, IP-literal and localhost hosts | Code: `linkSafety.js` |
+| Google Web Risk check for malware/phishing before payment. Fails closed | Code: `linkSafety.js` (needs `WEB_RISK_API_KEY`) |
+| Every ad click goes through the `/go/:id` warning page showing the real destination host | Code: `GoPage.jsx` |
+| Outbound links use `rel="noopener noreferrer"`. React escapes all ad text, and no `dangerouslySetInnerHTML` is used | Code |
+| Images are re-hosted (can't be swapped after moderation), magic-byte checked, no SVG, served with `CSP: sandbox` + `nosniff` | Code: `images.js`, `server.js` |
+| Strict CSP: only our scripts + Stripe. `frame-ancestors 'none'` + `X-Frame-Options: DENY` block clickjacking | Code: `vite.config.js` emits `dist/_headers` |
+| Helmet security headers on the API | Code: `server.js` |
+
+## 4. DoS on the auction
+
+| Defence | Where |
+|---|---|
+| Global 300 req/min per IP on `/api`, 6/min on bids, 20/min on clicks | Code |
+| Max 5 live streams per IP, 20k total | Code: `realtime.js` |
+| Countdowns run in each browser from server timestamps, so flooding the server can't freeze the clock | Code |
+| Cloudflare proxy (orange cloud) on frontend and API. WAF managed rules on. Rate-limit rule on `POST /api/bids`. Bot Fight Mode on. "Under Attack" mode for emergencies | **Config: Cloudflare** |
+| Set `TRUST_PROXY` to the real hop count (Cloudflare → host = usually 2) so limits key on the visitor IP, not Cloudflare's | **Config: env** |
+| Origin lock: the API rejects (403) any request without the `X-Origin-Secret` header that only Cloudflare adds, so `*.onrender.com` can't be used to bypass the WAF or spoof client IPs. Required in production | Code: `server.js`. **Config: Cloudflare Transform Rule** (DEPLOY.md step 6) |
+| Exclude `/api/webhooks/stripe` from WAF challenges (Stripe can't solve them) | **Config: Cloudflare** |
+
+## 5. Admin access
+
+| Defence | Where |
+|---|---|
+| `/api/admin/*` only exists when `ADMIN_TOKEN` is set; 32-char minimum enforced at boot | Code: `config.js` |
+| Constant-time token comparison (SHA-256 digests + `timingSafeEqual`), 30 req/min limit, `Cache-Control: no-store` | Code: `admin.js`, `server.js` |
+| The `/admin` page is `noindex`, and the token lives in `sessionStorage` (gone when the tab closes) | Code: `AdminPage.jsx` |
+| For extra safety, put `/admin` and `/api/admin/*` behind Cloudflare Access (free for small teams) so only your team's emails reach it | **Config: Cloudflare** |
+
+## Known gaps before launch
+- No admin takedown / report button yet. You need one for legal notices (DMCA, trademark).
+- Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
+- Click counts are best-effort and can be inflated. Label them as approximate to advertisers.

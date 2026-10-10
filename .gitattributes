@@ -1,0 +1,2 @@
+# Keep LF everywhere: the API, worker image and SQL all run on Linux.
+* text=auto eol=lf

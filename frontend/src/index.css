@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans font-medium text-ink antialiased;
+  }
+  ::selection {
+    @apply bg-bh-yellow text-ink;
+  }
+}
+
+@layer components {
+  /* Headlines: massive, uppercase, tight. */
+  .display {
+    @apply font-black uppercase leading-[0.9] tracking-tighter;
+  }
+  .label {
+    @apply text-xs font-bold uppercase tracking-widest;
+  }
+
+  /* Buttons physically "press" into their hard shadow. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 border-2 border-ink px-5 py-3 font-bold uppercase tracking-wider shadow-hard-sm transition duration-200 ease-out;
+    @apply active:translate-x-[2px] active:translate-y-[2px] active:shadow-none;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
+    @apply disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-red {
+    @apply btn bg-bh-red text-white hover:bg-bh-red/90;
+  }
+  .btn-blue {
+    @apply btn bg-bh-blue text-white hover:bg-bh-blue/90;
+  }
+  .btn-yellow {
+    @apply btn bg-bh-yellow text-ink hover:bg-bh-yellow/90;
+  }
+  .btn-outline {
+    @apply btn bg-white text-ink hover:bg-muted;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs shadow-hard-xs;
+  }
+
+  /* Cards: thick border, hard shadow; both scale up on desktop. */
+  .card {
+    @apply relative border-2 border-ink bg-white shadow-hard-sm lg:border-4 lg:shadow-hard-lg;
+  }
+
+  .field {
+    @apply w-full border-2 border-ink bg-white px-3 py-2.5 font-medium text-ink outline-none transition duration-200 ease-out;
+    @apply placeholder:text-ink/40 focus:bg-bh-cream focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
+  }
+
+  .link {
+    @apply font-bold uppercase tracking-wider underline decoration-2 underline-offset-4 transition duration-200 hover:text-bh-red;
+  }
+}
+
+@layer utilities {
+  .triangle {
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  }
+  .dot-grid {
+    background-image: radial-gradient(rgb(255 255 255 / 0.35) 2px, transparent 2px);
+    background-size: 20px 20px;
+  }
+  .dot-grid-ink {
+    background-image: radial-gradient(rgb(18 18 18 / 0.12) 2px, transparent 2px);
+    background-size: 20px 20px;
+  }
+}
