@@ -33,7 +33,7 @@ const STATUS = {
   red: { label: 'Alert', block: 'bg-bh-red text-white', shape: 'square' },
 };
 
-function Metric({ label, value, note, tone = 'bg-white' }) {
+function Metric({ label, value, note, tone = 'bg-paper' }) {
   return (
     <div className={`card p-5 ${tone}`}>
       <p className="label opacity-70">{label}</p>
@@ -138,7 +138,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="border-b-4 border-ink bg-ink text-white">
+      <header className="border-b-4 border-ink bg-onyx text-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             <Logo inverted />
@@ -217,13 +217,14 @@ function Dashboard({ health: h, error }) {
         <Metric label="Ad revenue" value={formatMoney(h.grossCents)} note={`${h.wonBids.toLocaleString()} paid ads`} />
         <Metric label="Net after fees" value={formatMoney(h.netCents)} note="Minus estimated card fees" tone="bg-bh-yellow" />
         <Metric label="The Throne" value={formatMoney(h.throneGrossCents)} note="Auction revenue" tone="bg-bh-blue text-white" />
-        <Metric label="The Court" value={formatMoney(h.boardsGrossCents)} note={`${h.bookings} bookings · ${h.relegations} relegations`} tone="bg-ink text-white" />
+        <Metric label="The Court" value={formatMoney(h.boardsGrossCents)} note={`${h.bookings} bookings · ${h.relegations} relegations`} tone="bg-onyx text-white" />
       </section>
 
       <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card">
           <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Payments</h2>
           <dl className="divide-y-2 divide-ink">
+            <Row label="Map add-ons" hint="Included in ad revenue" value={formatMoney(h.addonCents ?? 0)} />
             <Row label="Est. card fees" hint="30¢ + 2.9% per real charge, incl. refunded ones" value={`−${formatMoney(h.estFeesCents)}`} />
             <Row label="Refunded" hint="Throne race losers and duplicate relegations; the fee is kept" value={formatMoney(h.refundedCents)} />
             <Row

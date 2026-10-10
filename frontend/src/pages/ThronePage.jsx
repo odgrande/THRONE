@@ -4,7 +4,6 @@ import { api, formatMoney } from '../lib/api.js';
 import { minNextBidCents } from '../lib/rules.js';
 import { gsap, reducedMotion, ScrollTrigger, useGSAP } from '../lib/motion.js';
 import { announceCrowned, announceTakeover, sfx } from '../lib/sound.js';
-import SoundControls from '../components/SoundControls.jsx';
 import CrownBand from '../components/CrownBand.jsx';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
@@ -13,6 +12,7 @@ import Billboard, { BillboardStats } from '../components/Billboard.jsx';
 import BidForm from '../components/BidForm.jsx';
 import StatsStrip from '../components/StatsStrip.jsx';
 import Court from '../components/Court.jsx';
+import MapCard from '../components/MapCard.jsx';
 import Showcase from '../components/Showcase.jsx';
 import Ticker from '../components/Ticker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
@@ -168,9 +168,7 @@ export default function ThronePage() {
 
   return (
     <div ref={page} className="min-h-screen overflow-x-hidden bg-canvas">
-      <Header>
-        <SoundControls />
-      </Header>
+      <Header />
 
       <div aria-live="polite" className="overflow-hidden">
         {banner && (
@@ -211,6 +209,7 @@ export default function ThronePage() {
             <div className="mt-10">
               <Billboard throne={state.throne} now={now} />
               <BillboardStats stats={state.stats} />
+              {state.throne && !state.throne.removed && <MapCard ad={state.throne} addonCents={state.rules.mapAddonCents} />}
             </div>
           </div>
 
@@ -226,11 +225,11 @@ export default function ThronePage() {
 
       <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />
 
-      <Court boards={state.boards} now={now} />
+      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
 
       <RecentlyDethroned legends={state.recentlyDethroned} now={now} />
 
-      <Showcase stats={state.stats} />
+      <Showcase stats={state.stats} topAdvertisers={state.topAdvertisers} />
 
       <section className="border-b-4 border-ink">
         <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-3 lg:px-8 lg:py-24">
@@ -240,7 +239,7 @@ export default function ThronePage() {
 
           <a
             href="/kings"
-            className="archive-teaser card group flex flex-col justify-between overflow-hidden bg-ink p-6 text-white transition duration-200 ease-out hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bh-yellow lg:p-8"
+            className="archive-teaser card group flex flex-col justify-between overflow-hidden bg-onyx p-6 text-white transition duration-200 ease-out hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bh-yellow lg:p-8"
           >
             {/* Geometric composition: a crowned "face" of stacked shapes. */}
             <div className="relative h-40" aria-hidden="true">

@@ -2,12 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens (RGB triplets, so Tailwind can add alpha: text-ink/60).
+   Light is the default; <html class="dark"> switches everything at once. */
+:root {
+  --ink: 18 18 18;
+  --canvas: 240 240 240;
+  --paper: 255 255 255;
+  --muted: 224 224 224;
+  --field-focus: 255 249 196;
+  color-scheme: light;
+}
+.dark {
+  --ink: 240 240 240;
+  --canvas: 18 18 18;
+  --paper: 30 30 30;
+  --muted: 52 52 52;
+  --field-focus: 44 41 22;
+  color-scheme: dark;
+}
+/* Yellow and cream surfaces stay light in both themes, so everything drawn
+   on them (text, borders, shadows, inputs) keeps the light-theme ink. */
+.dark .bg-bh-yellow,
+.dark .bg-bh-cream,
+.dark .btn-yellow,
+.dark [class*='bg-bh-yellow/'] {
+  --ink: 18 18 18;
+  --paper: 255 255 255;
+  --muted: 224 224 224;
+  --canvas: 240 240 240;
+  --field-focus: 255 249 196;
+  /* Inherited text colour is computed once at <body>, so it must be reset
+     here too, or unstyled text inside would stay light. */
+  color: rgb(var(--ink));
+}
+
+/* Small red/blue text on a dark surface falls below readable contrast, so in
+   dark mode it gets lighter tints. Backgrounds keep the true primaries, and
+   text on light (yellow/cream) islands keeps them too. */
+.dark .text-bh-blue {
+  color: #8aa4ff;
+}
+.dark .text-bh-red {
+  color: #ff6b6b;
+}
+.dark .bg-bh-yellow .text-bh-blue,
+.dark .bg-bh-cream .text-bh-blue {
+  color: #1040c0;
+}
+.dark .bg-bh-yellow .text-bh-red,
+.dark .bg-bh-cream .text-bh-red {
+  color: #d02020;
+}
+
 @layer base {
   body {
     @apply bg-canvas font-sans font-medium text-ink antialiased;
   }
   ::selection {
-    @apply bg-bh-yellow text-ink;
+    background: #f0c020;
+    color: #121212;
   }
 }
 
@@ -24,7 +77,7 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 border-2 border-ink px-5 py-3 font-bold uppercase tracking-wider shadow-hard-sm transition duration-200 ease-out;
     @apply active:translate-x-[2px] active:translate-y-[2px] active:shadow-none;
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
     @apply disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-red {
@@ -37,7 +90,7 @@
     @apply btn bg-bh-yellow text-ink hover:bg-bh-yellow/90;
   }
   .btn-outline {
-    @apply btn bg-white text-ink hover:bg-muted;
+    @apply btn bg-paper text-ink hover:bg-muted;
   }
   .btn-sm {
     @apply px-3 py-1.5 text-xs shadow-hard-xs;
@@ -45,12 +98,15 @@
 
   /* Cards: thick border, hard shadow; both scale up on desktop. */
   .card {
-    @apply relative border-2 border-ink bg-white shadow-hard-sm lg:border-4 lg:shadow-hard-lg;
+    @apply relative border-2 border-ink bg-paper shadow-hard-sm lg:border-4 lg:shadow-hard-lg;
   }
 
   .field {
-    @apply w-full border-2 border-ink bg-white px-3 py-2.5 font-medium text-ink outline-none transition duration-200 ease-out;
-    @apply placeholder:text-ink/40 focus:bg-bh-cream focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2;
+    @apply w-full border-2 border-ink bg-paper px-3 py-2.5 font-medium text-ink outline-none transition duration-200 ease-out;
+    @apply placeholder:text-ink/40 focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas;
+  }
+  .field:focus {
+    background-color: rgb(var(--field-focus));
   }
 
   .link {
@@ -67,7 +123,7 @@
     background-size: 20px 20px;
   }
   .dot-grid-ink {
-    background-image: radial-gradient(rgb(18 18 18 / 0.12) 2px, transparent 2px);
+    background-image: radial-gradient(rgb(var(--ink) / 0.12) 2px, transparent 2px);
     background-size: 20px 20px;
   }
 }

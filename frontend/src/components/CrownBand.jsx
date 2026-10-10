@@ -14,7 +14,7 @@ export default function CrownBand({ crown, rules, now }) {
 
   return (
     <section
-      className={`relative overflow-hidden border-b-4 border-ink ${urgent ? 'bg-bh-red' : 'bg-ink'} text-white`}
+      className={`relative overflow-hidden border-b-4 border-ink ${urgent ? 'bg-bh-red' : 'bg-onyx'} text-white`}
       aria-label="King of the Day countdown"
     >
       <Shape kind="circle" color="yellow" className="absolute -left-10 -top-10 hidden h-28 w-28 border-4 border-ink sm:block" />

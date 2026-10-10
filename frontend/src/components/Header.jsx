@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import Logo from './Logo.jsx';
+import SoundControls from './SoundControls.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 
 const NAV = [
   { href: '/', label: 'The Throne' },
@@ -24,7 +26,7 @@ export default function Header({ children }) {
   );
 
   return (
-    <header className="border-b-4 border-ink bg-white">
+    <header className="border-b-4 border-ink bg-paper">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-10">
           <Logo />
@@ -32,6 +34,9 @@ export default function Header({ children }) {
         </div>
         <div className="flex items-center gap-3">
           {children}
+          {/* On every page, so music and effects follow the visitor around the site. */}
+          <SoundControls />
+          <ThemeToggle />
           <button
             className="btn-outline btn-sm md:hidden"
             aria-label={open ? 'Close menu' : 'Open menu'}

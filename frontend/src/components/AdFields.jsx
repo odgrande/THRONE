@@ -1,4 +1,5 @@
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, MapPin, X } from 'lucide-react';
+import { formatMoney } from '../lib/api.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -11,7 +12,10 @@ const readAsDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
-export const EMPTY_AD = { name: '', tagline: '', targetUrl: '', image: null };
+export const EMPTY_AD = { name: '', tagline: '', targetUrl: '', image: null, withMap: false, address: '' };
+
+// What the map add-on adds to the charge for this ad.
+export const addonFor = (ad, rules) => (ad.withMap ? rules.mapAddonCents : 0);
 
 export function Field({ label, hint, children }) {
   return (
@@ -27,7 +31,7 @@ export function Field({ label, hint, children }) {
 
 // The ad itself: name, tagline, image (upload or paste) and link.
 // Shared by the throne bid form and board bookings.
-export default function AdFields({ ad, onChange, onError, idPrefix = 'ad' }) {
+export default function AdFields({ ad, onChange, onError, idPrefix = 'ad', mapAddonCents }) {
   const set = (patch) => onChange({ ...ad, ...patch });
 
   const takeFile = async (file) => {
@@ -63,7 +67,7 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad' }) {
         </span>
         {ad.image ? (
           <div className="relative border-2 border-ink">
-            <img src={ad.image} alt="Your ad preview" className="aspect-video w-full bg-ink object-contain" />
+            <img src={ad.image} alt="Your ad preview" className="aspect-video w-full bg-onyx object-contain" />
             <button type="button" onClick={() => set({ image: null })} aria-label="Remove image" className="btn-outline btn-sm absolute right-2 top-2">
               <X className="h-4 w-4" strokeWidth={3} />
             </button>
@@ -84,6 +88,41 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad' }) {
       <Field label="Link" hint="Where clicks go">
         <input className="field" type="url" placeholder="https://" value={ad.targetUrl} onChange={(e) => set({ targetUrl: e.target.value })} required />
       </Field>
+
+      {mapAddonCents > 0 && (
+        <div className={`border-2 border-ink ${ad.withMap ? 'bg-bh-cream' : 'bg-paper'}`}>
+          <label className="flex cursor-pointer items-start gap-3 p-3">
+            <input
+              type="checkbox"
+              checked={ad.withMap}
+              onChange={(e) => set({ withMap: e.target.checked })}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-bh-blue"
+            />
+            <span className="text-sm font-medium leading-snug">
+              <span className="flex items-center gap-1.5 font-bold uppercase tracking-wide">
+                <MapPin className="h-4 w-4" strokeWidth={3} /> Add a business map · +{formatMoney(mapAddonCents)}
+              </span>
+              <span className="text-ink/70">Visitors see your address on a map with directions. Without it, your ad shows a faded map.</span>
+            </span>
+          </label>
+          {ad.withMap && (
+            <div className="border-t-2 border-ink p-3">
+              <Field label="Business address">
+                <input
+                  className="field"
+                  value={ad.address}
+                  onChange={(e) => set({ address: e.target.value })}
+                  minLength={5}
+                  maxLength={160}
+                  placeholder="e.g. 12 Admiralty Way, Lekki, Lagos"
+                  autoComplete="street-address"
+                  required
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

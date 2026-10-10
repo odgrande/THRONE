@@ -76,12 +76,14 @@ export function createMemoryStore() {
     kind: 'memory',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ board, amountCents, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
       const bid = {
         id: randomUUID(),
         board,
         status: 'pending',
         amountCents,
+        addonCents,
+        address,
         shieldSeconds,
         shieldEndsAt: null,
         days,
@@ -207,6 +209,22 @@ export function createMemoryStore() {
 
     async hasRelegation(bidId) {
       return [...bids.values()].some((b) => b.relegatedFrom === bidId && b.status === 'won');
+    },
+
+    // Leaderboard: total spent per advertiser (grouped by ad name, case-insensitive),
+    // across all boards, excluding removed ads. Mirrors top_advertisers() in schema.sql.
+    async getTopAdvertisers(limit) {
+      const byName = new Map();
+      for (const b of bids.values()) {
+        if (b.status !== 'won' || b.removedAt) continue;
+        const key = b.name.trim().toLowerCase();
+        const row = byName.get(key) ?? { name: b.name.trim(), totalCents: 0, ads: 0, lastAt: b.settledAt };
+        row.totalCents += b.amountCents + b.addonCents;
+        row.ads += 1;
+        if (b.settledAt > row.lastAt) Object.assign(row, { lastAt: b.settledAt, name: b.name.trim() });
+        byName.set(key, row);
+      }
+      return [...byName.values()].sort((a, b) => b.totalCents - a.totalCents || b.ads - a.ads).slice(0, limit);
     },
 
     // Distinct advertisers, and ads published on any board (not removed).
@@ -346,7 +364,9 @@ export function createMemoryStore() {
     // --- Admin: mirrors admin_financials() in schema.sql ---
     async getFinancials() {
       const all = [...bids.values()];
-      const sum = (list) => list.reduce((s, b) => s + b.amountCents, 0);
+      // Totals include the map add-on; the throne/board split counts ad prices only.
+      const sum = (list) => list.reduce((s, b) => s + b.amountCents + b.addonCents, 0);
+      const sumAds = (list) => list.reduce((s, b) => s + b.amountCents, 0);
       const won = all.filter((b) => b.status === 'won');
       const refunded = all.filter((b) => b.status === 'refunded');
       const charged = [...won, ...refunded].filter((b) => b.paymentRef && !b.paymentRef.startsWith('demo_'));
@@ -356,11 +376,12 @@ export function createMemoryStore() {
       return {
         wonBids: won.length,
         grossCents: sum(won),
-        throneGrossCents: sum(won.filter((b) => b.board === 'throne')),
-        boardsGrossCents: sum(won.filter((b) => b.board !== 'throne')),
+        throneGrossCents: sumAds(won.filter((b) => b.board === 'throne')),
+        boardsGrossCents: sumAds(won.filter((b) => b.board !== 'throne')),
         bookings: won.filter((b) => b.board !== 'throne').length,
         relegations: won.filter((b) => b.relegatedFrom).length,
-        estFeesCents: charged.reduce((s, b) => s + 30 + Math.ceil(b.amountCents * 0.029), 0),
+        addonCents: won.reduce((s, b) => s + b.addonCents, 0),
+        estFeesCents: charged.reduce((s, b) => s + 30 + Math.ceil((b.amountCents + b.addonCents) * 0.029), 0),
         refundedCents: sum(refunded),
         stalePending: all.filter((b) => b.status === 'pending' && b.createdAt < hourAgo).length,
         hype,

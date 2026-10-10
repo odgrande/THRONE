@@ -6,7 +6,7 @@ import { openSeasonPriceCents } from '../lib/rules.js';
 const BADGES = [
   { shape: 'rounded-full bg-bh-red text-white', inner: '' },
   { shape: 'bg-bh-blue text-white', inner: '' },
-  { shape: 'rotate-45 bg-white text-ink', inner: '-rotate-45' },
+  { shape: 'rotate-45 bg-paper text-ink', inner: '-rotate-45' },
 ];
 
 function Stat({ index, icon: Icon, label, value, children }) {
@@ -61,7 +61,7 @@ export default function StatsStrip({ throne, minNextBidCents, stats, rules, now 
           {shielded ? (
             <>
               <div
-                className="mt-3 h-4 border-2 border-ink bg-white"
+                className="mt-3 h-4 border-2 border-ink bg-paper"
                 role="progressbar"
                 aria-label="Shield remaining"
                 aria-valuenow={Math.round(pctLeft)}

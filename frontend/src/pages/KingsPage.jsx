@@ -15,7 +15,7 @@ const SORTS = [
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 function LegendCard({ legend, index }) {
-  const faceClass = 'block aspect-video overflow-hidden border-b-2 border-ink bg-ink lg:border-b-4';
+  const faceClass = 'block aspect-video overflow-hidden border-b-2 border-ink bg-onyx lg:border-b-4';
   return (
     <article className="card group flex flex-col transition duration-200 ease-out hover:-translate-y-1">
       {/* The fallen are shown in grayscale; color returns on hover. Archived ads
@@ -99,7 +99,7 @@ function DayKings({ kings }) {
         <h2 id="day-kings" className="display mt-2 text-4xl sm:text-5xl">Kings of the Day</h2>
         <ol className="mt-8 flex gap-5 overflow-x-auto pb-3">
           {kings.map((k, i) => (
-            <li key={k.roundId} className="card w-64 shrink-0 bg-white p-4 text-ink">
+            <li key={k.roundId} className="card w-64 shrink-0 bg-paper p-4 text-ink">
               <div className="flex items-center gap-3">
                 <span className="relative h-16 w-16 shrink-0">
                   <span className="block h-16 w-16 overflow-hidden rounded-full border-4 border-ink bg-bh-yellow">
@@ -178,7 +178,7 @@ export default function KingsPage() {
           <p className="mt-6 max-w-xl text-lg font-medium leading-relaxed text-white/90">
             Every ad that ever held the throne, kept forever.
           </p>
-          <p className="mt-8 inline-flex items-baseline gap-3 border-4 border-ink bg-white px-5 py-3 text-ink shadow-hard-md">
+          <p className="mt-8 inline-flex items-baseline gap-3 border-4 border-ink bg-paper px-5 py-3 text-ink shadow-hard-md">
             <span className="text-4xl font-black tabular-nums">{total.toLocaleString()}</span>
             <span className="label">kings fallen</span>
           </p>

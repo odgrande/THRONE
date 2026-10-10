@@ -54,7 +54,7 @@ function RelegateDialog({ offer, onClose }) {
   }, [offer]);
 
   return (
-    <dialog ref={dialog} aria-labelledby="relegate-title" className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-white p-0 text-ink shadow-hard-lg backdrop:bg-ink/60">
+    <dialog ref={dialog} aria-labelledby="relegate-title" className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60">
       <div className="flex items-center justify-between gap-3 border-b-4 border-ink bg-bh-blue px-5 py-3 text-white">
         <h2 id="relegate-title" className="font-black uppercase tracking-wider">Keep your ad up</h2>
         <button type="button" onClick={() => dialog.current.close()} aria-label="Close">
@@ -133,7 +133,7 @@ export function RelegationBanner({ offer, onDismiss }) {
 export function RecentlyDethroned({ legends, now }) {
   if (!legends?.length) return null;
   return (
-    <section className="border-b-4 border-ink bg-white" aria-labelledby="dethroned-title">
+    <section className="border-b-4 border-ink bg-paper" aria-labelledby="dethroned-title">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="dethroned-title" className="text-2xl font-black uppercase tracking-tighter">Recently dethroned</h2>

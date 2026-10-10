@@ -15,7 +15,7 @@ import { isOwner } from './services/owners.js';
 export function maskRemoved(entry) {
   if (!entry) return entry;
   if (!entry.removedAt) return { ...entry, removed: false };
-  return { ...entry, name: 'Removed ad', tagline: null, imageUrl: null, targetUrl: null, removed: true };
+  return { ...entry, name: 'Removed ad', tagline: null, imageUrl: null, targetUrl: null, address: null, removed: true };
 }
 
 // Core rules: the throne auction, board bookings, relegation, King of the Day.
@@ -31,6 +31,8 @@ export function createGame({ store, payments, realtime, hype, rules }) {
       imageUrl: b.imageUrl,
       targetUrl: b.targetUrl,
       amountCents: b.amountCents,
+      // Only ads that paid for the map add-on carry an address.
+      address: b.addonCents > 0 || b.relegatedFrom ? b.address : null,
       clicks: b.clicks,
       removedAt: b.removedAt,
       ...(b.board === 'throne'
@@ -49,7 +51,7 @@ export function createGame({ store, payments, realtime, hype, rules }) {
   async function getState() {
     const now = Date.now();
     const recentSince = new Date(now - rules.recentlyDethronedHours * 3600_000).toISOString();
-    const [{ bid, takeovers, volumeCents, recordCents }, boards, recent, recentlyDethroned, { round }, [lastKing], { advertisers, ads }] = await Promise.all([
+    const [{ bid, takeovers, volumeCents, recordCents }, boards, recent, recentlyDethroned, { round }, [lastKing], { advertisers, ads }, topAdvertisers] = await Promise.all([
       store.getThrone(),
       store.getBoards(now),
       store.getLegends({ sort: 'recent', limit: 15, offset: 0 }),
@@ -57,6 +59,7 @@ export function createGame({ store, payments, realtime, hype, rules }) {
       store.tickThrone(rules),
       store.getDayKings(1),
       store.countAdvertisers(),
+      store.getTopAdvertisers(8),
     ]);
     crownDueAt = Math.min(Date.parse(round.endsAt), bid ? termEndsAtMs(bid, rules) : Infinity);
 
@@ -82,6 +85,8 @@ export function createGame({ store, payments, realtime, hype, rules }) {
         .slice(0, 8)
         .map((l) => maskRemoved(l)),
       stats: { takeovers, volumeCents, recordCents, advertisers, ads },
+      // Public already (every price is shown on the boards); summed per advertiser.
+      topAdvertisers,
       crown: { round: publicRound(round), lastKing: maskRemoved(lastKing) ?? null },
       recentLegends: recent.items.map(maskRemoved),
       rules,
@@ -170,7 +175,8 @@ export function createGame({ store, payments, realtime, hype, rules }) {
     // 'void': a relegation that was already used. Either way: full refund.
     if (result.status === 'outbid' || result.status === 'void') {
       try {
-        if (paymentRef) await payments.refund(paymentRef, result.bid.amountCents, `${result.status}-${bidId}`);
+        // Refund everything that was charged, including any map add-on.
+        if (paymentRef) await payments.refund(paymentRef, result.bid.amountCents + (result.bid.addonCents ?? 0), `${result.status}-${bidId}`);
         await store.setStatus(bidId, 'refunded');
       } catch (err) {
         console.error(`[game] REFUND FAILED for ${result.status} ad ${bidId}; refund manually.`, err);

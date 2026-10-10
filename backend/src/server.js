@@ -330,7 +330,16 @@ function validateBid(body) {
   } catch (err) {
     return { error: err.message };
   }
-  return { name, tagline, targetUrl, amountCents };
+
+  // Map add-on: a business address, charged on top of the ad price.
+  let address = null;
+  let addonCents = 0;
+  if (body.withMap === true) {
+    address = typeof body.address === 'string' ? body.address.trim().replace(/\s+/g, ' ') : '';
+    if (address.length < 5 || address.length > 160) return { error: 'Business address must be 5-160 characters.' };
+    addonCents = config.rules.mapAddonCents;
+  }
+  return { name, tagline, targetUrl, amountCents, address, addonCents };
 }
 
 // Thrown inside the vetting pipeline to answer the client with a clean error.
@@ -378,7 +387,7 @@ async function vetAd(req, input) {
   if (!linkVerdict.ok) throw new Reject(422, 'That link is flagged as unsafe (malware or phishing). You have not been charged.');
 
   const verdict = await moderation.check({
-    text: [input.name, input.tagline, input.targetUrl].filter(Boolean).join('\n'),
+    text: [input.name, input.tagline, input.targetUrl, input.address].filter(Boolean).join('\n'),
     imageDataUrl: image?.dataUrl,
   });
   if (!verdict.ok) throw new Reject(422, 'This ad breaks the content rules, so it was blocked. You have not been charged.');
@@ -391,11 +400,14 @@ async function vetAd(req, input) {
 async function createPaidAd(res, fields, description) {
   const owner = newOwnerToken();
   const bid = await store.createBid({ ...fields, ownerHash: owner.hash });
-  const { clientSecret } = await payments.createIntent({ bidId: bid.id, amountCents: bid.amountCents, description });
+  // The charge is the ad price plus any add-on; amountCents alone is the bid.
+  const chargeCents = bid.amountCents + (bid.addonCents ?? 0);
+  const { clientSecret } = await payments.createIntent({ bidId: bid.id, amountCents: chargeCents, description });
   res.status(201).json({
     bidId: bid.id,
     board: bid.board,
-    amountCents: bid.amountCents,
+    amountCents: chargeCents,
+    addonCents: bid.addonCents ?? 0,
     clientSecret,
     paymentsMode: payments.mode,
     ownerToken: owner.token,
@@ -494,6 +506,8 @@ app.post(
         tagline: bid.tagline,
         imageUrl: bid.imageUrl,
         targetUrl: bid.targetUrl,
+        // The map was paid for with the original ad: it travels with it, free.
+        address: bid.addonCents > 0 ? bid.address : null,
       },
       `Relegation of ${bid.name} to ${offer.boardName}`,
     );

@@ -13,7 +13,8 @@ function buildCsp(apiOrigin, mediaOrigin) {
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob:${api}${media}`,
     `connect-src 'self'${api} https://api.stripe.com`,
-    'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com',
+    // Google Maps Embed (map add-on), loaded only when a visitor clicks "Show map".
+    'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://www.google.com',
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

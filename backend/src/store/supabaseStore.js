@@ -18,6 +18,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       board: r.board,
       status: r.status,
       amountCents: r.amount_cents,
+      addonCents: r.addon_cents,
+      address: r.address,
       shieldSeconds: r.shield_seconds,
       shieldEndsAt: r.shield_ends_at,
       days: r.days,
@@ -72,13 +74,15 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     kind: 'supabase',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ board, amountCents, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
       const row = check(
         await db
           .from('bids')
           .insert({
             board,
             amount_cents: amountCents,
+            addon_cents: addonCents,
+            address,
             shield_seconds: shieldSeconds,
             days,
             relegated_from: relegatedFrom,
@@ -167,6 +171,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     async hasRelegation(bidId) {
       const rows = check(await db.from('bids').select('id').eq('relegated_from', bidId).eq('status', 'won').limit(1));
       return rows.length > 0;
+    },
+
+    async getTopAdvertisers(limit) {
+      const rows = check(await db.rpc('top_advertisers', { p_limit: limit }));
+      return rows.map((r) => ({ name: r.name, totalCents: Number(r.total_cents), ads: Number(r.ads), lastAt: r.last_at }));
     },
 
     async countAdvertisers() {
@@ -316,6 +325,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return {
         wonBids: Number(f.won_bids),
         grossCents: Number(f.gross_cents),
+        addonCents: Number(f.addon_cents),
         throneGrossCents: Number(f.throne_gross_cents),
         boardsGrossCents: Number(f.boards_gross_cents),
         bookings: Number(f.bookings),

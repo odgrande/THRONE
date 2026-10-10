@@ -70,6 +70,15 @@ The throne never closes, but every day has a champion. Whoever holds the throne 
   transaction (`tick_crown()`). A payment that clears after the clock hit zero can't steal the crown.
 - All timings are env-tunable (`CROWN_*`).
 
+## Add-ons and site experience
+- **Map add-on (+$2, `MAP_ADDON_CENTS`):** the advertiser adds a business address. Their ad shows a map card with **Directions**; ads without it show a faded, locked map (the upsell). Maps use the free Google Maps Embed API (`VITE_GOOGLE_MAPS_EMBED_KEY`, restrict it to your domain) and only load when a visitor clicks "Show map". The fee is charged on top of the ad price and **never counts toward throne bids**; refunds return it too.
+- **Billboard:** the frame colour changes with every new king, a ring counts down the shield, and a bar under it shows Total pool / Highest bid / Takeovers.
+- **Businesses we've helped:** live counts of businesses and ads, a **Top advertisers** leaderboard (total spent per business, grouped by name), and a logo wall that shows **labelled example brands** until real ones are added with permission (`frontend/src/data/showcase.js`).
+- **Sound:** synthesized effects (clicks, takeover stamp, dethrone crash, crowning, bookings), voice announcements and generative background music. Off by default, toggles on every page, remembered per browser.
+- **Motion:** GSAP (hero reveal, takeover stamp, count-ups, marquee, scroll entrances that never hide content). Respects "reduce motion".
+- **Light/dark mode:** follows the device on first visit, with a toggle in the header. Colours are CSS variables (`frontend/src/index.css`); yellow surfaces stay light in both themes.
+- **Cookie notice:** small and honest. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
+
 ## Reports, takedowns and legal pages
 - Visitors can **report** any ad, anonymously. Five reports from different people hide a live ad pending review.
 - **Admin → Moderation** (`/admin`) shows the report queue. You can take an ad down (optionally deleting its image for good), dismiss the reports, or restore it. Taken-down ads are masked everywhere.

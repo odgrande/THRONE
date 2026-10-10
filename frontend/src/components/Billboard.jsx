@@ -37,7 +37,7 @@ function Structure({ children, lamp = 'yellow' }) {
       {children}
       <div aria-hidden="true">
         {/* Catwalk with running lights. */}
-        <div className="mx-[4%] flex h-4 items-center justify-around border-x-4 border-b-4 border-ink bg-white">
+        <div className="mx-[4%] flex h-4 items-center justify-around border-x-4 border-b-4 border-ink bg-paper">
           {Array.from({ length: 9 }, (_, i) => (
             <span key={i} className={`h-1.5 w-1.5 ${i % 3 === 2 ? 'rotate-45' : ''} bg-ink`} />
           ))}
@@ -93,7 +93,7 @@ function AdFace({ throne }) {
         </div>
       )}
       {throne.imageUrl && throne.tagline && (
-        <p className="absolute inset-x-0 bottom-0 border-t-2 border-ink bg-white px-4 py-3 text-lg font-bold uppercase tracking-tight sm:text-2xl">
+        <p className="absolute inset-x-0 bottom-0 border-t-2 border-ink bg-paper px-4 py-3 text-lg font-bold uppercase tracking-tight sm:text-2xl">
           {throne.tagline}
         </p>
       )}
@@ -125,7 +125,7 @@ function ShieldRing({ throne, now, accent }) {
           strokeDashoffset={c * (1 - frac)}
           style={{ transition: 'stroke-dashoffset 250ms linear' }}
         />
-        <text x="25" y="25" transform="rotate(90 25 25)" textAnchor="middle" dominantBaseline="central" className="fill-ink text-[11px] font-black">
+        <text x="25" y="25" transform="rotate(90 25 25)" textAnchor="middle" dominantBaseline="central" className="fill-onyx text-[11px] font-black">
           {label}
         </text>
       </svg>
@@ -148,7 +148,7 @@ export function BillboardStats({ stats }) {
   return (
     <dl className="mt-6 grid grid-cols-3 gap-1 border-2 border-ink bg-ink lg:border-4">
       {cells.map((c) => (
-        <div key={c.label} className="bg-white px-3 py-3 text-center sm:px-4">
+        <div key={c.label} className="bg-paper px-3 py-3 text-center sm:px-4">
           <dt className="label text-[10px] text-ink/60 sm:text-xs">{c.label}</dt>
           <dd className="mt-1 text-xl font-black tracking-tighter sm:text-3xl">{c.value}</dd>
         </div>
@@ -184,7 +184,7 @@ export default function Billboard({ throne, now = Date.now(), practice = false }
     );
   }
 
-  const faceClass = 'group relative block aspect-video overflow-hidden bg-ink';
+  const faceClass = 'group relative block aspect-video overflow-hidden bg-onyx';
 
   return (
     <div ref={scope}>
@@ -227,16 +227,17 @@ export default function Billboard({ throne, now = Date.now(), practice = false }
           <div aria-hidden="true" className={`pointer-events-none -mt-[6px] h-[6px] border-t-[6px] ${accent.frame}`} />
 
           <div className="flex flex-wrap items-stretch justify-between border-t-2 border-ink lg:border-t-4">
-            <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3">
+            {/* Phones: the name gets its own row; ring and price share the next. */}
+            <div className="flex min-w-0 flex-1 basis-full items-center gap-3 border-b-2 border-ink px-4 py-3 sm:basis-auto sm:border-b-0">
               <Shape kind="square" color={accent.name} className="h-4 w-4 shrink-0 rotate-45 border-2 border-ink" />
               <p className="truncate text-xl font-black uppercase tracking-tight sm:text-2xl">{throne.name}</p>
             </div>
             {!practice && throne.shieldEndsAt && (
-              <div className="flex items-center border-l-2 border-ink px-3 lg:border-l-4">
+              <div className="flex items-center border-ink px-3 sm:border-l-2 lg:border-l-4">
                 <ShieldRing throne={throne} now={now} accent={accent} />
               </div>
             )}
-            <div className="flex items-center gap-3 border-l-2 border-ink bg-bh-yellow px-5 py-3 lg:border-l-4">
+            <div className="flex flex-1 items-center justify-end gap-3 border-l-2 border-ink bg-bh-yellow px-5 py-3 sm:flex-none lg:border-l-4">
               <span className="label">Paid</span>
               <span className="text-2xl font-black tabular-nums sm:text-3xl">{formatMoney(throne.amountCents)}</span>
             </div>

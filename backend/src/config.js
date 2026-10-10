@@ -61,6 +61,9 @@ export const config = {
     relegationWindowHours: int('RELEGATION_WINDOW_HOURS', 24),
     // Dethroned ads also show free in the "Recently dethroned" strip this long.
     recentlyDethronedHours: int('RECENTLY_DETHRONED_HOURS', 24),
+    // Map add-on: business address map on the ad. Charged on top of the bid or
+    // booking price and never counted in throne price comparisons.
+    mapAddonCents: int('MAP_ADDON_CENTS', 200),
 
     // King of the Day: whoever holds the throne at the daily cutoff is crowned.
     // Rounds are crownRoundSeconds long, ending at crownCutoffHourUtc.

@@ -51,7 +51,7 @@ function ReportDialog({ bidId, adName, onClose }) {
     <dialog
       ref={dialog}
       aria-labelledby="report-title"
-      className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-white p-0 text-ink shadow-hard-lg backdrop:bg-ink/60"
+      className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60"
     >
       <div className="flex items-center justify-between gap-3 border-b-4 border-ink bg-bh-red px-5 py-3 text-white">
         <h2 id="report-title" className="font-black uppercase tracking-wider">Report this ad</h2>
@@ -82,7 +82,7 @@ function ReportDialog({ bidId, adName, onClose }) {
               <label
                 key={r.key}
                 className={`flex cursor-pointer items-center gap-3 border-2 border-ink px-3 py-2 font-medium transition duration-200 ${
-                  reason === r.key ? 'bg-bh-yellow' : 'bg-white hover:bg-bh-cream'
+                  reason === r.key ? 'bg-bh-yellow' : 'bg-paper hover:bg-bh-cream'
                 }`}
               >
                 <input

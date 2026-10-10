@@ -30,7 +30,7 @@ export default function CookieNotice() {
   return (
     <aside
       aria-label="Cookie notice"
-      className="fixed bottom-4 left-4 right-4 z-40 border-2 border-ink bg-white p-4 shadow-hard-sm sm:right-auto sm:max-w-sm"
+      className="fixed bottom-4 left-4 right-4 z-40 border-2 border-ink bg-paper p-4 shadow-hard-sm sm:right-auto sm:max-w-sm"
     >
       <div className="flex items-start gap-3">
         <Cookie className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />

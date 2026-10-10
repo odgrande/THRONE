@@ -3,12 +3,12 @@ import { Loader2 } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { CornerMark } from './Shape.jsx';
-import AdFields, { EMPTY_AD } from './AdFields.jsx';
+import AdFields, { EMPTY_AD, addonFor } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 
 export const RANGE_CLASS =
-  'mt-3 h-3 w-full cursor-pointer appearance-none border-2 border-ink bg-white accent-bh-red [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ink [&::-moz-range-thumb]:bg-bh-red [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ink [&::-webkit-slider-thumb]:bg-bh-red';
+  'mt-3 h-3 w-full cursor-pointer appearance-none border-2 border-ink bg-paper accent-bh-red [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ink [&::-moz-range-thumb]:bg-bh-red [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ink [&::-webkit-slider-thumb]:bg-bh-red';
 
 export function LegalNote() {
   return (
@@ -133,7 +133,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
   } else {
     body = (
       <form onSubmit={submit} className="space-y-4">
-        <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix="throne" />
+        <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix="throne" mapAddonCents={rules.mapAddonCents} />
 
         <div>
           <span className="label mb-1.5 flex justify-between">
@@ -196,6 +196,8 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
             <>
               <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> Checking your ad
             </>
+          ) : addonFor(ad, rules) > 0 ? (
+            `Take the throne · ${formatMoney(amountCents)} + ${formatMoney(addonFor(ad, rules))} map`
           ) : (
             `Take the throne · ${formatMoney(amountCents)}`
           )}

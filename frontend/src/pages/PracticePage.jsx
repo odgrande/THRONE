@@ -7,7 +7,6 @@ import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
 import Billboard, { BillboardStats } from '../components/Billboard.jsx';
 import { ThroneRules } from '../components/BidForm.jsx';
-import SoundControls from '../components/SoundControls.jsx';
 import { sfx } from '../lib/sound.js';
 import StatsStrip from '../components/StatsStrip.jsx';
 import Shape, { CornerMark } from '../components/Shape.jsx';
@@ -80,9 +79,7 @@ function Arena({ rules }) {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <Header>
-        <SoundControls />
-      </Header>
+      <Header />
 
       {/* Unmissable: nothing on this page is real. */}
       <p className="border-b-4 border-ink bg-bh-yellow px-4 py-3 text-center text-sm font-black uppercase tracking-wider">
@@ -127,7 +124,7 @@ function Arena({ rules }) {
                   <p className="label text-ink/70">Play money</p>
                   <p className="text-xl font-black tabular-nums">{formatMoney(sim.playMoneyCents)}</p>
                 </div>
-                <div className="bg-white p-3">
+                <div className="bg-paper p-3">
                   <p className="label text-ink/70">Times you took it</p>
                   <p className="text-xl font-black tabular-nums">{sim.timesCrowned}</p>
                 </div>
@@ -171,7 +168,7 @@ function Arena({ rules }) {
                     step={50}
                     value={Math.min(Math.max(amountCents, minNext), sliderMax)}
                     onChange={(e) => setAmountText((Number(e.target.value) / 100).toFixed(2))}
-                    className="mt-3 h-3 w-full cursor-pointer appearance-none border-2 border-ink bg-white accent-bh-red [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ink [&::-moz-range-thumb]:bg-bh-red [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ink [&::-webkit-slider-thumb]:bg-bh-red"
+                    className="mt-3 h-3 w-full cursor-pointer appearance-none border-2 border-ink bg-paper accent-bh-red [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ink [&::-moz-range-thumb]:bg-bh-red [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ink [&::-webkit-slider-thumb]:bg-bh-red"
                   />
                 </div>
                 {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}

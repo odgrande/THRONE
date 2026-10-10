@@ -41,7 +41,7 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
         </p>
       ) : checkout.paymentsMode === 'demo' ? (
         <>
-          <button onClick={() => finish(() => api.demoPay(checkout.bidId))} className="btn w-full bg-ink text-white hover:bg-ink/90">
+          <button onClick={() => finish(() => api.demoPay(checkout.bidId))} className="btn w-full bg-onyx text-white hover:bg-onyx/90">
             Pay {price} (demo)
           </button>
           <p className="text-sm text-ink/60">Test site: payments are simulated. No money moves.</p>

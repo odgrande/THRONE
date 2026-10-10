@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { SHOWCASE } from '../data/showcase.js';
+import { formatMoney } from '../lib/api.js';
 import { gsap, reducedMotion, useGSAP } from '../lib/motion.js';
 // Section entrance animation is handled by the page (ScrollTrigger.batch).
 import CountUp from './CountUp.jsx';
@@ -28,7 +29,7 @@ function BrandMark({ brand }) {
 function LogoTile({ brand, duplicate }) {
   return (
     // The second copy only exists for the seamless loop: hide it from screen readers.
-    <li aria-hidden={duplicate || undefined} className="flex w-64 shrink-0 items-center gap-3 border-2 border-ink bg-white px-4 py-3 shadow-hard-xs">
+    <li aria-hidden={duplicate || undefined} className="flex w-64 shrink-0 items-center gap-3 border-2 border-ink bg-paper px-4 py-3 shadow-hard-xs">
       <BrandMark brand={brand} />
       <span className="min-w-0">
         <span className="block truncate font-black uppercase tracking-tight">{brand.name}</span>
@@ -38,8 +39,55 @@ function LogoTile({ brand, duplicate }) {
   );
 }
 
+const RANK_SHAPES = [
+  ['circle', 'red'],
+  ['square', 'blue'],
+  ['triangle', 'yellow'],
+];
+
+// Top advertisers by total spend, all boards. Every price is already public on
+// the boards and in the archive; this just sums them per business.
+function Leaderboard({ rows }) {
+  if (!rows?.length) return null;
+  const top = rows[0].totalCents;
+  return (
+    <div className="card mt-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-ink px-5 py-4 lg:border-b-4">
+        <h3 className="text-2xl font-black uppercase tracking-tighter">Top advertisers</h3>
+        <span className="label text-ink/60">Total spent on ads, all boards</span>
+      </div>
+      <ol className="divide-y-2 divide-ink">
+        {rows.map((r, i) => (
+          <li key={r.name} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 px-5 py-3">
+            <span className="flex h-8 w-8 items-center justify-center">
+              {i < 3 ? (
+                <Shape kind={RANK_SHAPES[i][0]} color={RANK_SHAPES[i][1]} className={`h-7 w-7 ${i < 2 ? 'border-2 border-ink' : ''}`} />
+              ) : (
+                <span className="font-black tabular-nums text-ink/50">{i + 1}</span>
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-black uppercase tracking-tight">{r.name}</span>
+              {/* Bar shows spend relative to the top advertiser. */}
+              <span className="mt-1 block h-2 border border-ink bg-canvas">
+                <span className="block h-full bg-bh-blue" style={{ width: `${Math.max(4, (r.totalCents / top) * 100)}%` }} />
+              </span>
+            </span>
+            <span className="text-right">
+              <span className="block text-xl font-black tabular-nums">{formatMoney(r.totalCents)}</span>
+              <span className="text-xs text-ink/60">
+                {r.ads} ad{r.ads === 1 ? '' : 's'}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 // "Businesses we've helped": live numbers from the database plus a logo wall.
-export default function Showcase({ stats }) {
+export default function Showcase({ stats, topAdvertisers }) {
   const scope = useRef(null);
   const track = useRef(null);
   const { brands, isExample } = SHOWCASE;
@@ -74,7 +122,7 @@ export default function Showcase({ stats }) {
         {/* Pool, record bid and takeovers live under the billboard; this
             section counts the businesses and their ads. */}
         <div className="mt-10 grid grid-cols-1 gap-1 border-4 border-ink bg-ink sm:grid-cols-2">
-          <div className="showcase-stat flex items-end justify-between gap-4 bg-white p-6">
+          <div className="showcase-stat flex items-end justify-between gap-4 bg-paper p-6">
             <div>
               <p className="label text-ink/60">Businesses advertised</p>
               <p className="mt-2 text-6xl font-black tracking-tighter lg:text-7xl">
@@ -83,7 +131,7 @@ export default function Showcase({ stats }) {
             </div>
             <Shape kind="circle" color="red" className="mb-2 h-10 w-10 border-2 border-ink" />
           </div>
-          <div className="showcase-stat flex items-end justify-between gap-4 bg-white p-6">
+          <div className="showcase-stat flex items-end justify-between gap-4 bg-paper p-6">
             <div>
               <p className="label text-ink/60">Ads published</p>
               <p className="mt-2 text-6xl font-black tracking-tighter lg:text-7xl">
@@ -94,12 +142,14 @@ export default function Showcase({ stats }) {
             <Shape kind="square" color="blue" className="mb-2 h-10 w-10 rotate-45 border-2 border-ink" />
           </div>
         </div>
+
+        <Leaderboard rows={topAdvertisers} />
       </div>
 
       <div className="border-t-4 border-ink bg-canvas py-6">
         {isExample && (
           <p className="mx-auto mb-4 max-w-7xl px-4 sm:px-6 lg:px-8">
-            <span className="label border-2 border-ink bg-white px-2 py-1">Example brands · design preview</span>
+            <span className="label border-2 border-ink bg-paper px-2 py-1">Example brands · design preview</span>
           </p>
         )}
         <div className="overflow-hidden" aria-label={isExample ? 'Example brands' : 'Businesses that advertised with us'}>

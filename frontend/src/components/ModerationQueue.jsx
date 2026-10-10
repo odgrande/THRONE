@@ -12,7 +12,7 @@ const BOARD_LABEL = { throne: 'The Throne', b2: 'Board 2', b3: 'Board 3' };
 function AdPreview({ bid }) {
   return (
     <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
-      <div className="aspect-video overflow-hidden border-2 border-ink bg-ink">
+      <div className="aspect-video overflow-hidden border-2 border-ink bg-onyx">
         {bid.imageUrl ? (
           <img src={bid.imageUrl} alt="" className="h-full w-full object-contain" />
         ) : (
@@ -80,7 +80,7 @@ function QueueItem({ item, act, busy }) {
           {item.reports.length} report{item.reports.length === 1 ? '' : 's'}
         </span>
         {Object.entries(counts).map(([reason, n]) => (
-          <span key={reason} className="border-2 border-ink bg-white px-2 py-0.5 text-xs font-bold uppercase tracking-wider">
+          <span key={reason} className="border-2 border-ink bg-paper px-2 py-0.5 text-xs font-bold uppercase tracking-wider">
             {REASON_LABEL[reason] ?? reason} ×{n}
           </span>
         ))}

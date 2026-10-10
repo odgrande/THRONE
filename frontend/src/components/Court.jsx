@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ArrowUpRight, CalendarDays, Loader2, X } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Loader2, Lock, MapPin, X } from 'lucide-react';
+import MapCard from './MapCard.jsx';
 import { api, formatMoney } from '../lib/api.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { useModal } from '../lib/useModal.js';
@@ -35,7 +36,7 @@ function BoardFace({ ad, look }) {
   );
 }
 
-function MiniBoard({ board, now, onBook }) {
+function MiniBoard({ board, now, onBook, onMap }) {
   const look = LOOK[board.id];
   const ad = board.current;
   const cheapest = Math.min(...Object.entries(board.prices).map(([d, p]) => p / Number(d)));
@@ -50,7 +51,7 @@ function MiniBoard({ board, now, onBook }) {
         <span className="label opacity-80">Guaranteed time</span>
       </div>
 
-      <div className="relative aspect-video overflow-hidden border-b-2 border-ink bg-ink lg:border-b-4">
+      <div className="relative aspect-video overflow-hidden border-b-2 border-ink bg-onyx lg:border-b-4">
         {ad ? (
           ad.removed ? (
             <BoardFace ad={ad} look={look} />
@@ -87,7 +88,20 @@ function MiniBoard({ board, now, onBook }) {
           <button type="button" onClick={() => onBook(board)} className="btn-blue btn-sm">
             Book from {formatMoney(Math.ceil(cheapest))}/day
           </button>
-          {ad && !ad.removed && <ReportButton bidId={ad.id} adName={ad.name} className="text-ink/50" />}
+          {ad && !ad.removed && (
+            <span className="flex items-center gap-4">
+              {/* Paid map: opens it. No map: a faded, locked pin. */}
+              <button
+                type="button"
+                onClick={() => onMap(ad)}
+                className={`label inline-flex items-center gap-1.5 ${ad.address ? 'hover:text-bh-red' : 'text-ink/30'}`}
+                title={ad.address ? `Map: ${ad.address}` : 'This advertiser has no map'}
+              >
+                {ad.address ? <MapPin className="h-3.5 w-3.5" strokeWidth={3} /> : <Lock className="h-3.5 w-3.5" strokeWidth={3} />} Map
+              </button>
+              <ReportButton bidId={ad.id} adName={ad.name} className="text-ink/50" />
+            </span>
+          )}
         </div>
       </div>
     </article>
@@ -96,7 +110,7 @@ function MiniBoard({ board, now, onBook }) {
 
 const PACKAGE_COPY = { 1: '1 day', 3: '3 days', 7: '7 days' };
 
-function BookingDialog({ board, now, onClose }) {
+function BookingDialog({ board, now, mapAddonCents, onClose }) {
   const dialog = useModal(onClose);
   const [days, setDays] = useState(7);
   const [ad, setAd] = useState(EMPTY_AD);
@@ -130,7 +144,7 @@ function BookingDialog({ board, now, onClose }) {
     <dialog
       ref={dialog}
       aria-labelledby="booking-title"
-      className="m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto border-4 border-ink bg-white p-0 text-ink shadow-hard-lg backdrop:bg-ink/60"
+      className="m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60"
     >
       <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-b-4 border-ink px-5 py-3 ${LOOK[board.id].accent}`}>
         <h2 id="booking-title" className="font-black uppercase tracking-wider">Book the {board.name}</h2>
@@ -180,7 +194,7 @@ function BookingDialog({ board, now, onClose }) {
                 {[1, 3, 7].map((d) => (
                   <label
                     key={d}
-                    className={`cursor-pointer border-2 border-ink p-3 text-center transition duration-200 ${days === d ? 'bg-bh-yellow shadow-hard-xs' : 'bg-white hover:bg-bh-cream'}`}
+                    className={`cursor-pointer border-2 border-ink p-3 text-center transition duration-200 ${days === d ? 'bg-bh-yellow shadow-hard-xs' : 'bg-paper hover:bg-bh-cream'}`}
                   >
                     <input type="radio" name="days" value={d} checked={days === d} onChange={() => setDays(d)} className="sr-only" />
                     <span className="block text-sm font-bold uppercase">{PACKAGE_COPY[d]}</span>
@@ -196,7 +210,7 @@ function BookingDialog({ board, now, onClose }) {
               </p>
             </fieldset>
 
-            <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} />
+            <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} mapAddonCents={mapAddonCents} />
 
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
             <Turnstile ref={turnstileRef} onToken={setBotToken} />
@@ -209,7 +223,7 @@ function BookingDialog({ board, now, onClose }) {
               ) : waitingForBotCheck ? (
                 'Checking you are human…'
               ) : (
-                `Book ${PACKAGE_COPY[days]} · ${formatMoney(board.prices[days])}`
+                `Book ${PACKAGE_COPY[days]} · ${formatMoney(board.prices[days] + (ad.withMap ? mapAddonCents : 0))}`
               )}
             </button>
             <LegalNote />
@@ -221,8 +235,26 @@ function BookingDialog({ board, now, onClose }) {
 }
 
 // The Court: two smaller boards sold as fixed-price, guaranteed-time bookings.
-export default function Court({ boards, now }) {
+function MapDialog({ ad, addonCents, onClose }) {
+  const dialog = useModal(onClose);
+  return (
+    <dialog ref={dialog} aria-label={`Map for ${ad.name}`} className="m-auto w-[calc(100%-2rem)] max-w-2xl border-4 border-ink bg-paper p-0 shadow-hard-lg backdrop:bg-ink/60">
+      <div className="flex items-center justify-between border-b-4 border-ink bg-onyx px-5 py-3 text-white">
+        <span className="font-black uppercase tracking-wider">{ad.name}</span>
+        <button type="button" onClick={() => dialog.current.close()} aria-label="Close">
+          <X className="h-5 w-5" strokeWidth={3} />
+        </button>
+      </div>
+      <div className="p-4 [&>div]:mt-0">
+        <MapCard ad={ad} addonCents={addonCents} />
+      </div>
+    </dialog>
+  );
+}
+
+export default function Court({ boards, now, mapAddonCents }) {
   const [booking, setBooking] = useState(null);
+  const [mapFor, setMapFor] = useState(null);
   return (
     <section className="border-b-4 border-ink bg-canvas" aria-labelledby="court-title">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
@@ -239,11 +271,12 @@ export default function Court({ boards, now }) {
         </div>
         <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2">
           {boards.map((b) => (
-            <MiniBoard key={b.id} board={b} now={now} onBook={setBooking} />
+            <MiniBoard key={b.id} board={b} now={now} onBook={setBooking} onMap={setMapFor} />
           ))}
         </div>
       </div>
-      {booking && <BookingDialog board={booking} now={now} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} onClose={() => setBooking(null)} />}
+      {mapFor && <MapDialog ad={mapFor} addonCents={mapAddonCents} onClose={() => setMapFor(null)} />}
     </section>
   );
 }

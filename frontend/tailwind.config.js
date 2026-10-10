@@ -12,10 +12,14 @@ export default {
       full: '9999px',
     },
     extend: {
+      // Theme-aware tokens are CSS variables (see index.css), so light/dark is
+      // one class on <html>. The primaries and `onyx` never change.
       colors: {
-        ink: '#121212',
-        canvas: '#F0F0F0',
-        muted: '#E0E0E0',
+        ink: 'rgb(var(--ink) / <alpha-value>)', // text, borders, hard shadows
+        canvas: 'rgb(var(--canvas) / <alpha-value>)', // page background
+        paper: 'rgb(var(--paper) / <alpha-value>)', // cards, inputs, dialogs
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        onyx: '#121212', // designed-dark blocks that stay dark in both themes
         bh: {
           red: '#D02020',
           blue: '#1040C0',
@@ -27,10 +31,10 @@ export default {
         sans: ['Outfit', ...defaultTheme.fontFamily.sans],
       },
       boxShadow: {
-        'hard-xs': '3px 3px 0px 0px #121212',
-        'hard-sm': '4px 4px 0px 0px #121212',
-        'hard-md': '6px 6px 0px 0px #121212',
-        'hard-lg': '8px 8px 0px 0px #121212',
+        'hard-xs': '3px 3px 0px 0px rgb(var(--ink))',
+        'hard-sm': '4px 4px 0px 0px rgb(var(--ink))',
+        'hard-md': '6px 6px 0px 0px rgb(var(--ink))',
+        'hard-lg': '8px 8px 0px 0px rgb(var(--ink))',
       },
       keyframes: {
         slam: {

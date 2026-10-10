@@ -29,6 +29,10 @@ create table if not exists bids (
   tagline        text check (char_length(tagline) <= 100),
   image_url      text,
   target_url     text not null,
+  -- Map add-on: business address shown on a map. addon_cents is charged on top
+  -- of amount_cents and never used to compare throne bids.
+  address        text check (char_length(address) between 5 and 160),
+  addon_cents    integer not null default 0 check (addon_cents >= 0),
   payment_ref    text,
   clicks         integer not null default 0,
   created_at     timestamptz not null default now(),
@@ -409,6 +413,25 @@ as $$
     from bids where status = 'won' and removed_at is null;
 $$;
 
+-- Leaderboard: total spent per advertiser (grouped by ad name, case-insensitive),
+-- across all boards, excluding removed ads. Shows the name from their latest ad.
+-- Mirrors getTopAdvertisers() in backend/src/store/memoryStore.js.
+create or replace function top_advertisers(p_limit integer)
+returns table (name text, total_cents bigint, ads bigint, last_at timestamptz)
+language sql
+stable
+as $$
+  select (array_agg(trim(b.name) order by b.settled_at desc))[1],
+         sum(b.amount_cents + b.addon_cents),
+         count(*),
+         max(b.settled_at)
+    from bids b
+   where b.status = 'won' and b.removed_at is null
+   group by lower(trim(b.name))
+   order by 2 desc, 3 desc
+   limit least(greatest(p_limit, 1), 50);
+$$;
+
 create or replace function record_click(p_bid_id uuid) returns void
 language sql
 as $$
@@ -439,14 +462,15 @@ stable
 as $$
   select json_build_object(
     'won_bids',            (select count(*) from bids where status = 'won'),
-    'gross_cents',         (select coalesce(sum(amount_cents), 0) from bids where status = 'won'),
+    'gross_cents',         (select coalesce(sum(amount_cents + addon_cents), 0) from bids where status = 'won'),
+    'addon_cents',         (select coalesce(sum(addon_cents), 0) from bids where status = 'won'),
     'throne_gross_cents',  (select coalesce(sum(amount_cents), 0) from bids where status = 'won' and board = 'throne'),
     'boards_gross_cents',  (select coalesce(sum(amount_cents), 0) from bids where status = 'won' and board <> 'throne'),
     'bookings',            (select count(*) from bids where status = 'won' and board <> 'throne'),
     'relegations',         (select count(*) from bids where status = 'won' and relegated_from is not null),
-    'est_fees_cents',      (select coalesce(sum(30 + ceil(amount_cents * 0.029)), 0)
+    'est_fees_cents',      (select coalesce(sum(30 + ceil((amount_cents + addon_cents) * 0.029)), 0)
                               from bids where status in ('won', 'refunded') and payment_ref not like 'demo_%'),
-    'refunded_cents',      (select coalesce(sum(amount_cents), 0) from bids where status = 'refunded'),
+    'refunded_cents',      (select coalesce(sum(amount_cents + addon_cents), 0) from bids where status = 'refunded'),
     'stale_pending',       (select count(*) from bids
                              where status = 'pending' and created_at < now() - interval '1 hour'),
     'hype',                (select coalesce(json_object_agg(status, n), '{}'::json)
@@ -459,6 +483,7 @@ revoke execute on function tick_throne(jsonb) from public, anon, authenticated;
 revoke execute on function report_bid(uuid, text, text, text, integer) from public, anon, authenticated;
 revoke execute on function record_click(uuid) from public, anon, authenticated;
 revoke execute on function count_advertisers() from public, anon, authenticated;
+revoke execute on function top_advertisers(integer) from public, anon, authenticated;
 revoke execute on function claim_hype_job() from public, anon, authenticated;
 revoke execute on function admin_financials() from public, anon, authenticated;
 revoke execute on function archive_deposed_king() from public, anon, authenticated;

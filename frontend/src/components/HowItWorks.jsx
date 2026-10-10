@@ -42,7 +42,7 @@ export default function HowItWorks({ rules, boards = [] }) {
           {steps.map((step, i) => (
             <li key={step.title} className="how-step">
               {/* Rotated square, counter-rotated number. */}
-              <span className="flex h-14 w-14 rotate-45 items-center justify-center border-4 border-ink bg-white shadow-hard-sm">
+              <span className="flex h-14 w-14 rotate-45 items-center justify-center border-4 border-ink bg-paper shadow-hard-sm">
                 <span className="-rotate-45 text-2xl font-black text-ink">{i + 1}</span>
               </span>
               <h3 className="mt-6 text-2xl font-bold uppercase tracking-tight">{step.title}</h3>
