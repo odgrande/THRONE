@@ -7,42 +7,23 @@ const LEGEND_SORTS = {
   priciest: (a, b) => b.amountCents - a.amountCents,
 };
 
+const iso = (ms) => new Date(ms).toISOString();
+
 // In-process store for local development. Resets on restart.
-// Node runs each method synchronously up to its return, so settleBid is
+// Node runs each method synchronously up to its return, so settlement is
 // atomic without locks. Mirrors the SQL in supabase/schema.sql.
 export function createMemoryStore() {
   const bids = new Map();
-  const wallets = new Map();
-  const walletIdByHash = new Map();
   const legends = [];
   const hypeJobs = [];
   const rounds = [];
   const reports = [];
+  const boardsBookedUntil = { b2: null, b3: null };
   let throneBidId = null;
-  let creatorFundCents = 0;
   let takeovers = 0;
   let volumeCents = 0;
 
-  // Mirrors tick_crown() in schema.sql: closes the King of the Day round once
-  // its time is up (crowning whoever holds the throne) and opens the next one.
-  const tickCrown = (rules, now) => {
-    let open = rounds.find((r) => !r.closedAt);
-    let crowned = null;
-    if (open && now >= Date.parse(open.endsAt)) {
-      open.closedAt = new Date(now).toISOString();
-      open.winnerBidId = throneBidId;
-      crowned = { roundId: open.id, bidId: throneBidId };
-      open = null;
-    }
-    if (!open) {
-      const base = new Date(nextCrownCutoffMs(now, rules)).toISOString();
-      open = { id: rounds.length + 1, baseEndsAt: base, endsAt: base, closedAt: null, winnerBidId: null, takeovers: 0 };
-      rounds.push(open);
-    }
-    return { round: open, crowned };
-  };
-
-  // Mirrors the archive_deposed_king trigger.
+  // Mirrors the archive_deposed_king trigger. winner = null means retired.
   const archive = (deposed, winner, nowIso) => {
     legends.push({
       id: legends.length + 1,
@@ -54,48 +35,68 @@ export function createMemoryStore() {
       amountCents: deposed.amountCents,
       crownedAt: deposed.settledAt,
       deposedAt: nowIso,
-      deposedByName: winner.name,
+      deposedByName: winner?.name ?? null,
+      retired: !winner,
       reignSeconds: Math.floor((Date.parse(nowIso) - Date.parse(deposed.settledAt)) / 1000),
       survivedShield: nowIso >= deposed.shieldEndsAt,
     });
   };
 
+  // Mirrors tick_throne(): close the King of the Day round when its clock hits
+  // zero, then retire a king whose term is over.
+  const tick = (rules, now) => {
+    const king = throneBidId ? bids.get(throneBidId) : null;
+    const termEnd = king ? Date.parse(king.settledAt) + rules.throneTermSeconds * 1000 : null;
+
+    let open = rounds.find((r) => !r.closedAt);
+    let crowned = null;
+    if (open && now >= Date.parse(open.endsAt)) {
+      const winner = termEnd !== null && termEnd > Date.parse(open.endsAt) ? throneBidId : null;
+      open.closedAt = iso(now);
+      open.winnerBidId = winner;
+      crowned = { roundId: open.id, bidId: winner };
+      open = null;
+    }
+    if (!open) {
+      const base = iso(nextCrownCutoffMs(now, rules));
+      open = { id: rounds.length + 1, baseEndsAt: base, endsAt: base, closedAt: null, winnerBidId: null, takeovers: 0 };
+      rounds.push(open);
+    }
+
+    let retired = null;
+    if (termEnd !== null && now >= termEnd) {
+      archive(king, null, iso(now));
+      throneBidId = null;
+      retired = { bidId: king.id };
+    }
+    return { round: open, crowned, retired };
+  };
+
   return {
     kind: 'memory',
 
-    // --- Wallets (Throne Credits) ---
-    async createWallet(tokenHash) {
-      const wallet = { id: randomUUID(), balanceCents: 0, lifetimeEarnedCents: 0, createdAt: new Date().toISOString() };
-      wallets.set(wallet.id, wallet);
-      walletIdByHash.set(tokenHash, wallet.id);
-      return { ...wallet };
-    },
-
-    async getWalletByHash(tokenHash) {
-      const id = walletIdByHash.get(tokenHash);
-      return id ? { ...wallets.get(id) } : null;
-    },
-
-    // --- Bids ---
-    async createBid({ amountCents, shieldSeconds, walletId, creditsCents, chargeCents, name, tagline, imageUrl, targetUrl }) {
+    // --- Ads (throne bids and board bookings) ---
+    async createBid({ board, amountCents, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
       const bid = {
         id: randomUUID(),
+        board,
         status: 'pending',
         amountCents,
         shieldSeconds,
-        walletId,
-        creditsCents,
-        chargeCents,
+        shieldEndsAt: null,
+        days,
+        startsAt: null,
+        endsAt: null,
+        relegatedFrom,
+        ownerHash,
         name,
         tagline,
         imageUrl,
         targetUrl,
         paymentRef: null,
-        dividendCents: 0,
         clicks: 0,
         createdAt: new Date().toISOString(),
         settledAt: null,
-        shieldEndsAt: null,
         removedAt: null,
         removedReason: null,
         removedBy: null,
@@ -115,61 +116,126 @@ export function createMemoryStore() {
       if (bid.status !== 'pending') return { status: 'duplicate', bid: { ...bid } };
 
       const now = Date.now();
-      const nowIso = new Date(now).toISOString();
-      // Close an expired King of the Day round first, so a late payment can
-      // never steal a crown that was already decided.
-      const { round, crowned } = tickCrown(rules, now);
-      const previous = throneBidId ? bids.get(throneBidId) : null;
-      const wallet = bid.walletId ? wallets.get(bid.walletId) : null;
-
       bid.paymentRef = paymentRef;
-      bid.settledAt = nowIso;
+      bid.settledAt = iso(now);
+
+      // ---- Board booking: append to the board's queue ----
+      if (bid.board !== 'throne') {
+        const used = bid.relegatedFrom && [...bids.values()].some((b) => b.relegatedFrom === bid.relegatedFrom && b.status === 'won');
+        if (used) {
+          bid.status = 'void';
+          return { status: 'void', bid: { ...bid } };
+        }
+        const start = Math.max(now, boardsBookedUntil[bid.board] ? Date.parse(boardsBookedUntil[bid.board]) : 0);
+        const end = start + bid.days * 86400_000;
+        boardsBookedUntil[bid.board] = iso(end);
+        Object.assign(bid, { status: 'won', startsAt: iso(start), endsAt: iso(end) });
+        volumeCents += bid.amountCents;
+        return { status: 'won', bid: { ...bid } };
+      }
+
+      // ---- Throne bid ----
+      // Close an expired round and retire an expired king first, so a late
+      // payment can never steal a crown that was already decided.
+      const { round, crowned, retired } = tick(rules, now);
+      const previous = throneBidId ? bids.get(throneBidId) : null;
 
       if (bid.amountCents < minNextBidCents(previous, now, rules)) {
         bid.status = 'outbid';
-        return { status: 'outbid', bid: { ...bid }, crowned };
-      }
-      // Credits were spent elsewhere between quote and payment.
-      if (bid.creditsCents > 0 && (!wallet || wallet.balanceCents < bid.creditsCents)) {
-        bid.status = 'void';
-        return { status: 'void', bid: { ...bid }, crowned };
+        return { status: 'outbid', bid: { ...bid }, crowned, retired };
       }
 
-      if (bid.creditsCents > 0) wallet.balanceCents -= bid.creditsCents;
       bid.status = 'won';
-      bid.shieldEndsAt = new Date(now + bid.shieldSeconds * 1000).toISOString();
-
-      let dividendCents = 0;
-      if (previous) {
-        archive(previous, bid, nowIso);
-        const prevWallet = previous.walletId ? wallets.get(previous.walletId) : null;
-        if (prevWallet) {
-          dividendCents = Math.floor((bid.amountCents * rules.dividendPct) / 100);
-          prevWallet.balanceCents += dividendCents;
-          prevWallet.lifetimeEarnedCents += dividendCents;
-          previous.dividendCents += dividendCents;
-        }
-      }
+      bid.shieldEndsAt = iso(now + bid.shieldSeconds * 1000);
+      if (previous) archive(previous, bid, bid.settledAt);
       throneBidId = bid.id;
-      creatorFundCents += Math.floor((bid.amountCents * rules.creatorFundPct) / 100);
       takeovers += 1;
       volumeCents += bid.amountCents;
       round.takeovers += 1;
-      round.endsAt = new Date(extendedCrownEndMs(round, now, rules)).toISOString();
+      round.endsAt = iso(extendedCrownEndMs(round, now, rules));
+      return { status: 'won', bid: { ...bid }, previous: previous ? { ...previous } : null, crowned, retired, round: { ...round } };
+    },
+
+    async setStatus(id, status) {
+      const bid = bids.get(id);
+      if (bid) bid.status = status;
+    },
+
+    async recordClick(id) {
+      const bid = bids.get(id);
+      if (bid) bid.clicks += 1;
+    },
+
+    async getThrone() {
+      const bid = throneBidId ? bids.get(throneBidId) : null;
+      const recordCents = Math.max(0, ...[...bids.values()].filter((b) => b.board === 'throne' && b.status === 'won').map((b) => b.amountCents));
+      return { bid: bid ? { ...bid } : null, takeovers, volumeCents, recordCents };
+    },
+
+    // Live booking (if any) plus queue state for each small board.
+    async getBoards(nowMs) {
+      const nowIso = iso(nowMs);
+      const out = {};
+      for (const board of Object.keys(boardsBookedUntil)) {
+        const booked = [...bids.values()]
+          .filter((b) => b.board === board && b.status === 'won' && b.endsAt > nowIso)
+          .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+        const current = booked.find((b) => b.startsAt <= nowIso) ?? null;
+        out[board] = {
+          current: current ? { ...current } : null,
+          nextStartsAt: booked.find((b) => b.startsAt > nowIso)?.startsAt ?? null,
+          upcoming: booked.filter((b) => b.startsAt > nowIso).length,
+          bookedUntil: boardsBookedUntil[board],
+        };
+      }
+      return out;
+    },
+
+    // Throne bids dethroned recently (not retired, not removed): the free
+    // "Recently dethroned" strip, and the relegation offer window.
+    async getRecentlyDethroned(sinceIso) {
+      return legends
+        .filter((l) => !l.retired && l.deposedAt >= sinceIso)
+        .sort((a, b) => b.deposedAt.localeCompare(a.deposedAt))
+        .map((l) => ({ ...l, removedAt: bids.get(l.bidId).removedAt }));
+    },
+
+    async getLegend(bidId) {
+      const l = legends.find((x) => x.bidId === bidId);
+      return l ? { ...l } : null;
+    },
+
+    async hasRelegation(bidId) {
+      return [...bids.values()].some((b) => b.relegatedFrom === bidId && b.status === 'won');
+    },
+
+    // Distinct advertisers, and ads published on any board (not removed).
+    async countAdvertisers() {
+      const names = new Set();
+      let ads = 0;
+      for (const b of bids.values()) {
+        if (b.status !== 'won' || b.removedAt) continue;
+        names.add(b.name.trim().toLowerCase());
+        ads += 1;
+      }
+      return { advertisers: names.size, ads };
+    },
+
+    async getLegends({ sort, limit, offset }) {
+      const sorted = [...legends].sort(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent);
       return {
-        status: 'won',
-        bid: { ...bid },
-        previous: previous ? { ...previous } : null,
-        dividendCents,
-        crowned,
-        round: { ...round },
+        total: legends.length,
+        items: sorted.slice(offset, offset + limit).map((l) => {
+          const bid = bids.get(l.bidId);
+          return { ...l, clicks: bid.clicks, removedAt: bid.removedAt };
+        }),
       };
     },
 
     // --- King of the Day ---
-    async tickCrown(rules) {
-      const { round, crowned } = tickCrown(rules, Date.now());
-      return { round: { ...round }, crowned };
+    async tickThrone(rules) {
+      const { round, crowned, retired } = tick(rules, Date.now());
+      return { round: { ...round }, crowned, retired };
     },
 
     async getDayKings(limit) {
@@ -256,32 +322,6 @@ export function createMemoryStore() {
       for (const l of legends) if (l.bidId === id) l.imageUrl = null;
     },
 
-    async setStatus(id, status) {
-      const bid = bids.get(id);
-      if (bid) bid.status = status;
-    },
-
-    async recordClick(id) {
-      const bid = bids.get(id);
-      if (bid) bid.clicks += 1;
-    },
-
-    async getThrone() {
-      const bid = throneBidId ? bids.get(throneBidId) : null;
-      return { bid: bid ? { ...bid } : null, creatorFundCents, takeovers, volumeCents };
-    },
-
-    async getLegends({ sort, limit, offset }) {
-      const sorted = [...legends].sort(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent);
-      return {
-        total: legends.length,
-        items: sorted.slice(offset, offset + limit).map((l) => {
-          const bid = bids.get(l.bidId);
-          return { ...l, dividendCents: bid.dividendCents, clicks: bid.clicks, removedAt: bid.removedAt };
-        }),
-      };
-    },
-
     // --- Hype video jobs ---
     async enqueueHypeJob(payload) {
       hypeJobs.push({ id: hypeJobs.length + 1, status: 'pending', payload, videoUrl: null, error: null });
@@ -306,24 +346,23 @@ export function createMemoryStore() {
     // --- Admin: mirrors admin_financials() in schema.sql ---
     async getFinancials() {
       const all = [...bids.values()];
-      const sum = (list, key) => list.reduce((s, x) => s + x[key], 0);
+      const sum = (list) => list.reduce((s, b) => s + b.amountCents, 0);
       const won = all.filter((b) => b.status === 'won');
       const refunded = all.filter((b) => b.status === 'refunded');
-      const charged = [...won, ...refunded].filter((b) => b.chargeCents > 0);
-      const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+      const charged = [...won, ...refunded].filter((b) => b.paymentRef && !b.paymentRef.startsWith('demo_'));
+      const hourAgo = iso(Date.now() - 3600_000);
       const hype = {};
       for (const j of hypeJobs) hype[j.status] = (hype[j.status] ?? 0) + 1;
       return {
-        outstandingCreditsCents: sum([...wallets.values()], 'balanceCents'),
-        creditsIssuedCents: sum([...wallets.values()], 'lifetimeEarnedCents'),
-        creditsSpentCents: sum(won, 'creditsCents'),
-        walletsWithBalance: [...wallets.values()].filter((w) => w.balanceCents > 0).length,
         wonBids: won.length,
-        cardGrossCents: sum(won, 'chargeCents'),
-        estFeesCents: charged.reduce((s, b) => s + 30 + Math.ceil(b.chargeCents * 0.029), 0),
-        refundedCents: sum(refunded, 'chargeCents'),
+        grossCents: sum(won),
+        throneGrossCents: sum(won.filter((b) => b.board === 'throne')),
+        boardsGrossCents: sum(won.filter((b) => b.board !== 'throne')),
+        bookings: won.filter((b) => b.board !== 'throne').length,
+        relegations: won.filter((b) => b.relegatedFrom).length,
+        estFeesCents: charged.reduce((s, b) => s + 30 + Math.ceil(b.amountCents * 0.029), 0),
+        refundedCents: sum(refunded),
         stalePending: all.filter((b) => b.status === 'pending' && b.createdAt < hourAgo).length,
-        creatorFundCents,
         hype,
       };
     },

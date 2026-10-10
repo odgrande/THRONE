@@ -191,23 +191,20 @@ export default function AdminPage() {
 
 function Dashboard({ health: h, error }) {
   const s = STATUS[h.status];
-  const ratio = h.creditRatioPct === null ? '—' : `${h.creditRatioPct}%`;
 
   return (
     <>
       <section className={`card relative mt-10 overflow-hidden p-6 lg:p-8 ${s.block}`} aria-live="polite">
         <Shape kind={s.shape} color="white" className="absolute -right-8 -top-8 h-28 w-28 border-4 border-ink" />
-        <p className="label">Balance-sheet health</p>
+        <p className="label">Operations</p>
         <h1 className="display mt-2 text-5xl sm:text-7xl">{s.label}</h1>
         {h.alerts.length === 0 ? (
-          <p className="mt-4 max-w-2xl text-lg font-medium">
-            Credit liability is within limits (warn at {h.thresholds.warnPct}%, alert at {h.thresholds.alertPct}% of net cash).
-          </p>
+          <p className="mt-4 max-w-2xl text-lg font-medium">No unpaid ads piling up and no failed video renders.</p>
         ) : (
           <ul className="mt-4 max-w-3xl space-y-2">
             {h.alerts.map((a) => (
               <li key={a.message} className="flex items-start gap-3 text-lg font-bold">
-                <Shape kind={a.level === 'red' ? 'square' : 'triangle'} color="ink" className="mt-1.5 h-3.5 w-3.5" />
+                <Shape kind="triangle" color="ink" className="mt-1.5 h-3.5 w-3.5" />
                 {a.message}
               </li>
             ))}
@@ -217,65 +214,38 @@ function Dashboard({ health: h, error }) {
       </section>
 
       <section className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Net card cash" value={formatMoney(h.netCashCents)} note="Card revenue minus est. Stripe fees" />
-        <Metric
-          label="Unspent credits"
-          value={formatMoney(h.outstandingCreditsCents)}
-          note={`Held by ${h.walletsWithBalance} wallet${h.walletsWithBalance === 1 ? '' : 's'}`}
-          tone="bg-bh-yellow"
-        />
-        <Metric
-          label="Coverage"
-          value={formatMoney(h.coverageCents)}
-          note="Net cash − credits − Creator Fund"
-          tone={h.coverageCents < 0 ? 'bg-bh-red text-white' : 'bg-white'}
-        />
-        <Metric label="Credit ratio" value={ratio} note="Unspent credits ÷ net cash" tone="bg-ink text-white" />
+        <Metric label="Ad revenue" value={formatMoney(h.grossCents)} note={`${h.wonBids.toLocaleString()} paid ads`} />
+        <Metric label="Net after fees" value={formatMoney(h.netCents)} note="Minus estimated card fees" tone="bg-bh-yellow" />
+        <Metric label="The Throne" value={formatMoney(h.throneGrossCents)} note="Auction revenue" tone="bg-bh-blue text-white" />
+        <Metric label="The Court" value={formatMoney(h.boardsGrossCents)} note={`${h.bookings} bookings · ${h.relegations} relegations`} tone="bg-ink text-white" />
       </section>
 
       <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card">
-          <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Cash</h2>
+          <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Payments</h2>
           <dl className="divide-y-2 divide-ink">
-            <Row label="Card revenue (won bids)" value={formatMoney(h.cardGrossCents)} />
-            <Row label="Est. Stripe fees" hint="30¢ + 2.9% per charge, incl. refunded ones" value={`−${formatMoney(h.estFeesCents)}`} />
-            <Row label="Refunded to race losers" hint="Card portion returned; fee is kept by Stripe" value={formatMoney(h.refundedCents)} />
-            <Row label="Creator Fund pledged" value={formatMoney(h.creatorFundCents)} />
+            <Row label="Est. card fees" hint="30¢ + 2.9% per real charge, incl. refunded ones" value={`−${formatMoney(h.estFeesCents)}`} />
+            <Row label="Refunded" hint="Throne race losers and duplicate relegations; the fee is kept" value={formatMoney(h.refundedCents)} />
             <Row
-              label="Stripe balance"
-              hint={h.stripeBalance ? 'Available + pending; bank payouts reduce it' : 'Demo mode: no Stripe account'}
-              value={
-                h.stripeBalance
-                  ? `${formatMoney(h.stripeBalance.availableCents)} + ${formatMoney(h.stripeBalance.pendingCents)}`
-                  : '—'
-              }
+              label="Processor balance"
+              hint={h.stripeBalance ? 'Available + pending; bank payouts reduce it' : 'Test site: payments are simulated'}
+              value={h.stripeBalance ? `${formatMoney(h.stripeBalance.availableCents)} + ${formatMoney(h.stripeBalance.pendingCents)}` : '—'}
             />
           </dl>
         </div>
 
         <div className="card">
-          <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Credits &amp; ops</h2>
+          <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Operations</h2>
           <dl className="divide-y-2 divide-ink">
-            <Row label="Credits issued (all time)" value={formatMoney(h.creditsIssuedCents)} />
-            <Row label="Credits spent on bids" value={formatMoney(h.creditsSpentCents)} />
-            <Row
-              label="Bid volume paid in credits"
-              hint="Credit-funded bids bring no cash but still mint new dividends"
-              value={h.creditFundedPct === null ? '—' : `${h.creditFundedPct}%`}
-            />
-            <Row label="Won bids" value={h.wonBids.toLocaleString()} />
-            <Row label="Unpaid bids > 1 hour" value={h.stalePending.toLocaleString()} />
-            <Row
-              label="Hype videos"
-              value={['done', 'pending', 'rendering', 'failed'].map((k) => `${h.hype[k] ?? 0} ${k}`).join(' · ')}
-            />
+            <Row label="Unpaid ads > 1 hour" value={h.stalePending.toLocaleString()} />
+            <Row label="Hype videos" value={['done', 'pending', 'rendering', 'failed'].map((k) => `${h.hype[k] ?? 0} ${k}`).join(' · ')} />
           </dl>
         </div>
       </section>
 
       <p className="mt-6 text-xs text-ink/60">
-        Updated {new Date(h.generatedAt).toLocaleTimeString()} · refreshes every 30s. Fees are estimates; Stripe's dashboard is the
-        source of truth.
+        Updated {new Date(h.generatedAt).toLocaleTimeString()} · refreshes every 30s. Fees are estimates; your payment processor's
+        dashboard is the source of truth.
       </p>
     </>
   );

@@ -43,45 +43,34 @@ export function usePracticeSim(rules, speed) {
     throne: null,
     log: [],
     stats: { takeovers: 0, volumeCents: 0 },
-    fundCents: 0,
     playMoneyCents: START_PLAY_MONEY_CENTS,
-    creditsCents: 0,
+    timesCrowned: 0,
   }));
   const simRef = useRef(sim);
   simRef.current = sim;
 
-  // Applies a takeover. If the player is being dethroned, they earn the dividend.
   const crown = useCallback(
     (bidder) =>
       setSim((s) => {
-        const now = Date.now();
-        const king = makeKing(bidder, rules, now);
-        const dividend = s.throne?.you && !bidder.you ? Math.floor((bidder.amountCents * rules.dividendPct) / 100) : 0;
+        const king = makeKing(bidder, rules, Date.now());
         return {
           ...s,
           throne: king,
-          log: [{ ...king, previousName: s.throne?.name ?? null, dividend }, ...s.log].slice(0, 12),
+          log: [{ ...king, previousName: s.throne?.name ?? null, youLost: Boolean(s.throne?.you && !bidder.you) }, ...s.log].slice(0, 12),
           stats: { takeovers: s.stats.takeovers + 1, volumeCents: s.stats.volumeCents + bidder.amountCents },
-          fundCents: s.fundCents + Math.floor((bidder.amountCents * rules.creatorFundPct) / 100),
-          creditsCents: s.creditsCents + dividend,
+          timesCrowned: s.timesCrowned + (bidder.you ? 1 : 0),
         };
       }),
     [rules],
   );
 
-  // The player pays with practice credits first, then play money.
   const playerBid = useCallback(
     ({ name, tagline, amountCents }) => {
       const s = simRef.current;
       const min = minNextBidCents(s.throne, Date.now(), rules);
       if (amountCents < min) return `Bid at least $${(min / 100).toFixed(2)}.`;
-      if (amountCents > s.playMoneyCents + s.creditsCents) return 'Not enough play money. Reset to start over.';
-      const fromCredits = Math.min(s.creditsCents, amountCents);
-      setSim((cur) => ({
-        ...cur,
-        creditsCents: cur.creditsCents - fromCredits,
-        playMoneyCents: cur.playMoneyCents - (amountCents - fromCredits),
-      }));
+      if (amountCents > s.playMoneyCents) return 'Not enough play money. Reset to start over.';
+      setSim((cur) => ({ ...cur, playMoneyCents: cur.playMoneyCents - amountCents }));
       crown({ name: name || 'You', tagline, amountCents, you: true });
       return null;
     },
@@ -118,9 +107,8 @@ export function usePracticeSim(rules, speed) {
         throne: null,
         log: [],
         stats: { takeovers: 0, volumeCents: 0 },
-        fundCents: 0,
         playMoneyCents: START_PLAY_MONEY_CENTS,
-        creditsCents: 0,
+        timesCrowned: 0,
       }),
     [],
   );

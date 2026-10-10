@@ -13,7 +13,8 @@ import { createHypeQueue } from './services/hype.js';
 import { decodeImage, saveImage } from './services/images.js';
 import { createStorage, LOCAL_DIRS } from './services/storage.js';
 import { createTurnstile } from './services/turnstile.js';
-import { findOrCreateWallet, findWallet } from './services/wallets.js';
+import { newOwnerToken } from './services/owners.js';
+import { BOARD_IDS, BOOKING_DAYS, bookingPriceCents } from './rules.js';
 import { createGame, maskRemoved } from './game.js';
 import { assessHealth, requireAdmin } from './admin.js';
 
@@ -100,6 +101,7 @@ if (storage.kind === 'local') {
 app.get('/api/health', (_req, res) =>
   res.json({
     ok: true,
+    env: config.deployEnv,
     store: store.kind,
     storage: storage.kind,
     payments: payments.mode,
@@ -119,21 +121,6 @@ app.get('/api/state', async (_req, res, next) => {
 
 app.get('/api/events', realtime.handler);
 
-// --- Throne Credits ---
-app.get('/api/wallet', async (req, res, next) => {
-  try {
-    const wallet = await findWallet(store, req.get('x-wallet-token'));
-    res.json({
-      balanceCents: wallet?.balanceCents ?? 0,
-      lifetimeEarnedCents: wallet?.lifetimeEarnedCents ?? 0,
-      known: Boolean(wallet),
-      cashoutEnabled: config.credits.cashoutEnabled,
-      cashoutMinCents: config.credits.cashoutMinCents,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
 
 // --- Admin (only exists when ADMIN_TOKEN is set) ---
 if (config.adminToken) {
@@ -346,110 +333,195 @@ function validateBid(body) {
   return { name, tagline, targetUrl, amountCents };
 }
 
-app.post('/api/bids', bidLimiter, async (req, res, next) => {
-  try {
-    const input = validateBid(req.body);
-    if (input.error) return res.status(400).json({ error: input.error });
+// Thrown inside the vetting pipeline to answer the client with a clean error.
+class Reject extends Error {
+  constructor(status, message, extra = {}) {
+    super(message);
+    this.status = status;
+    this.extra = extra;
+  }
+}
 
-    // Bot check first: it's free, and it stops card-testing scripts before
-    // they cost a moderation call or ever reach Stripe.
-    let human;
+// Bot check first: it's free, and it stops card-testing scripts before they
+// cost a moderation call or ever reach the payment processor.
+async function requireHuman(req) {
+  let human;
+  try {
+    human = await turnstile.verify(req.body.turnstileToken, req.ip);
+  } catch (err) {
+    console.error('[turnstile]', err);
+    throw new Reject(503, "We couldn't run the bot check. Please try again in a moment.", { retryTurnstile: true });
+  }
+  if (!human) throw new Reject(403, 'Bot check failed or expired. Please try again.', { retryTurnstile: true });
+}
+
+// New ad content: image decode, link safety, AI moderation, then store the
+// image. Everything happens before any payment exists, so a blocked ad is
+// never charged.
+async function vetAd(req, input) {
+  let image = null;
+  if (req.body.image) {
     try {
-      human = await turnstile.verify(req.body.turnstileToken, req.ip);
+      image = decodeImage(req.body.image);
     } catch (err) {
-      console.error('[turnstile]', err);
-      return res.status(503).json({ error: "We couldn't run the bot check. Please try again in a moment.", retryTurnstile: true });
+      throw new Reject(400, err.message);
     }
-    if (!human) {
-      return res.status(403).json({ error: 'Bot check failed or expired. Please try again.', retryTurnstile: true });
-    }
+  }
+
+  let linkVerdict;
+  try {
+    linkVerdict = await links.check(input.targetUrl);
+  } catch (err) {
+    console.error('[links]', err);
+    throw new Reject(503, "We couldn't verify that link right now. Please try again in a moment.");
+  }
+  if (!linkVerdict.ok) throw new Reject(422, 'That link is flagged as unsafe (malware or phishing). You have not been charged.');
+
+  const verdict = await moderation.check({
+    text: [input.name, input.tagline, input.targetUrl].filter(Boolean).join('\n'),
+    imageDataUrl: image?.dataUrl,
+  });
+  if (!verdict.ok) throw new Reject(422, 'This ad breaks the content rules, so it was blocked. You have not been charged.');
+
+  return image ? saveImage(image, storage) : null;
+}
+
+// Creates the ad row and its payment. The owner code is returned exactly
+// once; the browser keeps it to prove ownership later (e.g. relegation).
+async function createPaidAd(res, fields, description) {
+  const owner = newOwnerToken();
+  const bid = await store.createBid({ ...fields, ownerHash: owner.hash });
+  const { clientSecret } = await payments.createIntent({ bidId: bid.id, amountCents: bid.amountCents, description });
+  res.status(201).json({
+    bidId: bid.id,
+    board: bid.board,
+    amountCents: bid.amountCents,
+    clientSecret,
+    paymentsMode: payments.mode,
+    ownerToken: owner.token,
+  });
+}
+
+const handle = (fn) => async (req, res, next) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    if (err instanceof Reject) return res.status(err.status).json({ error: err.message, ...err.extra });
+    next(err);
+  }
+};
+
+// --- The Throne: auction ---
+app.post(
+  '/api/bids',
+  bidLimiter,
+  handle(async (req, res) => {
+    const input = validateBid(req.body);
+    if (input.error) throw new Reject(400, input.error);
+    await requireHuman(req);
 
     const minNext = await game.getMinNextBidCents();
     if (input.amountCents < minNext) {
-      return res
-        .status(409)
-        .json({ error: `Bid must be at least $${(minNext / 100).toFixed(2)}. Amount updated.`, minNextBidCents: minNext });
+      throw new Reject(409, `Bid must be at least $${(minNext / 100).toFixed(2)}. Amount updated.`, { minNextBidCents: minNext });
     }
 
-    let image = null;
-    if (req.body.image) {
-      try {
-        image = decodeImage(req.body.image);
-      } catch (err) {
-        return res.status(400).json({ error: err.message });
-      }
+    const imageUrl = await vetAd(req, input);
+    await createPaidAd(
+      res,
+      { ...input, board: 'throne', imageUrl, shieldSeconds: game.shieldSecondsFor(input.amountCents) },
+      `Throne bid by ${input.name}`,
+    );
+  }),
+);
+
+// --- Smaller boards: fixed-price bookings, guaranteed time ---
+app.post(
+  '/api/bookings',
+  bidLimiter,
+  handle(async (req, res) => {
+    const board = req.body?.board;
+    const days = req.body?.days;
+    if (!BOARD_IDS.includes(board)) throw new Reject(400, 'Unknown board.');
+    if (!BOOKING_DAYS.includes(days)) throw new Reject(400, 'Pick 1, 3 or 7 days.');
+    const amountCents = bookingPriceCents(board, days, config.rules);
+    const input = validateBid({ ...req.body, amountCents });
+    if (input.error) throw new Reject(400, input.error);
+    await requireHuman(req);
+
+    const { tooFar } = await game.bookingStartEstimate(board);
+    if (tooFar) throw new Reject(409, `This board is booked more than ${config.rules.maxBookingAheadDays} days ahead. Try the other board.`);
+
+    const imageUrl = await vetAd(req, input);
+    await createPaidAd(res, { ...input, board, days, imageUrl }, `${config.rules.boards[board].name}: ${days} day(s) for ${input.name}`);
+  }),
+);
+
+// --- Relegation: a dethroned king moves the same ad to the Prince Board ---
+const ownerToken = (req) => req.get('x-owner-token') ?? req.body?.ownerToken;
+
+app.get(
+  '/api/relegations/:bidId',
+  handle(async (req, res) => {
+    if (!UUID.test(req.params.bidId)) throw new Reject(404, 'Ad not found.');
+    const offer = await game.getRelegationOffer(req.params.bidId, ownerToken(req));
+    if (!offer.eligible) return res.json({ eligible: false, reason: offer.reason });
+    const { board, boardName, priceCents, startsAt, expiresAt } = offer;
+    res.json({ eligible: true, board, boardName, priceCents, startsAt, expiresAt });
+  }),
+);
+
+app.post(
+  '/api/relegations',
+  bidLimiter,
+  handle(async (req, res) => {
+    const fromBidId = req.body?.fromBidId;
+    if (typeof fromBidId !== 'string' || !UUID.test(fromBidId)) throw new Reject(400, 'Unknown ad.');
+    const offer = await game.getRelegationOffer(fromBidId, ownerToken(req));
+    if (!offer.eligible) {
+      const why = { 'not-owner': 'Only the dethroned advertiser can do this.', expired: 'This offer has expired.', used: 'You already used this offer.' };
+      throw new Reject(403, why[offer.reason] ?? 'This ad is not eligible.');
     }
-
-    let linkVerdict;
-    try {
-      linkVerdict = await links.check(input.targetUrl);
-    } catch (err) {
-      console.error('[links]', err);
-      return res.status(503).json({ error: "We couldn't verify that link right now. Please try again in a moment." });
-    }
-    if (!linkVerdict.ok) {
-      return res.status(422).json({ error: 'That link is flagged as unsafe (malware or phishing). You have not been charged.' });
-    }
-
-    const verdict = await moderation.check({
-      text: [input.name, input.tagline, input.targetUrl].filter(Boolean).join('\n'),
-      imageDataUrl: image?.dataUrl,
-    });
-    if (!verdict.ok) {
-      return res.status(422).json({ error: 'This ad breaks the content rules, so it was blocked. You have not been charged.' });
-    }
-
-    const imageUrl = image ? await saveImage(image, storage) : null;
-    const { wallet, newToken } = await findOrCreateWallet(store, req.body.walletToken);
-    const bid = await game.createBid({ ...input, imageUrl }, wallet, req.body.useCredits === true);
-
-    const reply = {
-      bidId: bid.id,
-      paymentsMode: payments.mode,
-      creditsCents: bid.creditsCents,
-      chargeCents: bid.chargeCents,
-      // Sent once, when the wallet is created; the browser must keep it.
-      walletToken: newToken,
-    };
-
-    // Paid entirely in Throne Credits: nothing to charge, settle right now.
-    if (bid.chargeCents === 0) {
-      await game.settle(bid.id, null);
-      const settled = await store.getBid(bid.id);
-      return res.status(201).json({ ...reply, status: settled.status });
-    }
-
-    const { clientSecret } = await payments.createIntent({
-      bidId: bid.id,
-      amountCents: bid.chargeCents,
-      description: `Throne bid by ${bid.name}`,
-    });
-    res.status(201).json({ ...reply, clientSecret });
-  } catch (err) {
-    next(err);
-  }
-});
+    // Same ad, already screened when it took the throne: no new upload or check.
+    const { bid } = offer;
+    await createPaidAd(
+      res,
+      {
+        board: offer.board,
+        days: 1,
+        amountCents: offer.priceCents,
+        relegatedFrom: bid.id,
+        name: bid.name,
+        tagline: bid.tagline,
+        imageUrl: bid.imageUrl,
+        targetUrl: bid.targetUrl,
+      },
+      `Relegation of ${bid.name} to ${offer.boardName}`,
+    );
+  }),
+);
 
 app.get('/api/bids/:id/status', async (req, res, next) => {
   try {
     const bid = UUID.test(req.params.id) ? await store.getBid(req.params.id) : null;
     if (!bid) return res.status(404).json({ error: 'Bid not found.' });
-    res.json({ status: bid.status });
+    res.json({ status: bid.status, board: bid.board, startsAt: bid.startsAt, endsAt: bid.endsAt });
   } catch (err) {
     next(err);
   }
 });
 
 // Demo mode only: stands in for a cleared Apple Pay / Google Pay payment.
-// config.js refuses to start in production without Stripe, so this route
+// config.js refuses to start a production deploy without Stripe (only an
+// explicit DEPLOY_ENV=staging test deploy may run demo payments), so this route
 // can never be reached on a live deployment.
 app.post('/api/bids/:id/demo-pay', async (req, res, next) => {
   if (payments.mode !== 'demo') return res.status(404).end();
   try {
+    if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Bid not found.' });
     const result = await game.settle(req.params.id, `demo_${req.params.id}`);
     if (result.status === 'missing') return res.status(404).json({ error: 'Bid not found.' });
     const bid = await store.getBid(req.params.id);
-    res.json({ status: bid.status });
+    res.json({ status: bid.status, board: bid.board, startsAt: bid.startsAt, endsAt: bid.endsAt });
   } catch (err) {
     next(err);
   }
@@ -460,17 +532,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
 
-// Crowns the King of the Day when a round ends, even if nobody is bidding.
-let crownTickRunning = false;
+// Crowns the King of the Day and retires a king at the end of his term, even
+// when nobody is bidding.
+let tickRunning = false;
 setInterval(async () => {
-  if (crownTickRunning) return;
-  crownTickRunning = true;
+  if (tickRunning) return;
+  tickRunning = true;
   try {
-    await game.tickCrown();
+    await game.tick();
   } catch (err) {
-    console.error('[crown] tick failed', err);
+    console.error('[throne] tick failed', err);
   } finally {
-    crownTickRunning = false;
+    tickRunning = false;
   }
 }, 1000).unref();
 

@@ -1,5 +1,5 @@
-import { BarChart3, Crown, Megaphone, Shield, Swords, Zap } from 'lucide-react';
-import { formatClock, formatDuration, formatMoney, formatMoneyShort } from '../lib/api.js';
+import { CalendarClock, Crown, Shield, Swords } from 'lucide-react';
+import { formatClock, formatDuration, formatMoney } from '../lib/api.js';
 import { openSeasonPriceCents } from '../lib/rules.js';
 
 // Numbers live inside geometric badges, cycling circle / square / rotated square.
@@ -29,7 +29,8 @@ function Stat({ index, icon: Icon, label, value, children }) {
 
 // The time multiplier made visible (shield), plus the throne's lifetime numbers.
 // `stats` is optional: practice mode passes its own.
-export default function StatsStrip({ throne, minNextBidCents, creatorFundCents, stats, rules, now }) {
+export default function StatsStrip({ throne, minNextBidCents, stats, rules, now }) {
+  const termLeft = throne?.termEndsAt ? Date.parse(throne.termEndsAt) - now : null;
   const shieldEnd = throne ? Date.parse(throne.shieldEndsAt) : 0;
   const start = throne ? Date.parse(throne.startedAt) : 0;
   const remaining = shieldEnd - now;
@@ -41,7 +42,7 @@ export default function StatsStrip({ throne, minNextBidCents, creatorFundCents, 
   return (
     // Yellow runs edge to edge; the grid itself is framed in ink on wide screens.
     <section className="border-b-4 border-ink bg-bh-yellow" aria-label="Throne status">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-1 bg-ink sm:grid-cols-2 lg:grid-cols-3 xl:border-x-4 xl:border-ink">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-1 bg-ink sm:grid-cols-2 lg:grid-cols-4 xl:border-x-4 xl:border-ink">
         <Stat index={0} icon={Crown} label="Reigning for" value={throne ? formatDuration(now - start) : '—'}>
           <p className="mt-1 text-sm font-medium">{throne ? `Since ${throne.name} took it` : 'Nobody yet'}</p>
         </Stat>
@@ -83,16 +84,13 @@ export default function StatsStrip({ throne, minNextBidCents, creatorFundCents, 
           )}
         </Stat>
 
-        <Stat index={3} icon={Zap} label="Takeovers" value={(stats?.takeovers ?? 0).toLocaleString()}>
-          <p className="mt-1 text-sm font-medium">Times the crown has changed hands</p>
-        </Stat>
-
-        <Stat index={4} icon={BarChart3} label="Total volume" value={formatMoneyShort(stats?.volumeCents ?? 0)}>
-          <p className="mt-1 text-sm font-medium">Paid for the throne, all time</p>
-        </Stat>
-
-        <Stat index={5} icon={Megaphone} label="Creator Fund" value={formatMoneyShort(creatorFundCents)}>
-          <p className="mt-1 text-sm font-medium">{rules.creatorFundPct}% of every bid sponsors creators</p>
+        {/* Term limit: an unchallenged king retires and the throne reopens. */}
+        <Stat index={3} icon={CalendarClock} label="Term ends in" value={termLeft !== null ? formatDuration(termLeft) : '—'}>
+          <p className="mt-1 text-sm font-medium">
+            {throne
+              ? `Unchallenged kings retire after ${Math.round(rules.throneTermSeconds / 86400)} days`
+              : `Kings serve up to ${Math.round(rules.throneTermSeconds / 86400)} days`}
+          </p>
         </Stat>
       </div>
     </section>

@@ -1,42 +1,48 @@
--- Project Throne schema. Run once in the Supabase SQL editor.
+-- Project Throne schema. Run once in the Supabase SQL editor (safe to re-run).
 -- All money is stored in integer cents.
+--
+-- Three boards:
+--   throne  The big billboard. Auction: outbid the king. Max term, then retire.
+--   b2, b3  Smaller boards. Fixed-price bookings with guaranteed time (1/3/7 days),
+--           queued one after another. Never knocked off.
 
--- Anonymous credit wallets. No account: the browser holds a random secret
--- token and the server stores only its SHA-256 hash.
-create table if not exists wallets (
-  id                     uuid primary key default gen_random_uuid(),
-  token_hash             text not null unique,
-  balance_cents          integer not null default 0 check (balance_cents >= 0),
-  lifetime_earned_cents  integer not null default 0,
-  created_at             timestamptz not null default now()
-);
-
+-- Every ad: throne bids and board bookings alike. Reports, takedowns, clicks
+-- and the link-warning page work the same for all of them.
 create table if not exists bids (
   id             uuid primary key default gen_random_uuid(),
+  board          text not null default 'throne' check (board in ('throne', 'b2', 'b3')),
   status         text not null default 'pending'
                  check (status in ('pending', 'won', 'outbid', 'void', 'refunded')),
   amount_cents   integer not null check (amount_cents > 0),
-  wallet_id      uuid references wallets (id),
-  credits_cents  integer not null default 0 check (credits_cents >= 0),  -- paid with Throne Credits
-  charge_cents   integer not null check (charge_cents >= 0),             -- paid by card / wallet
-  shield_seconds integer not null check (shield_seconds >= 0),
+  -- Throne only.
+  shield_seconds integer not null default 0 check (shield_seconds >= 0),
+  shield_ends_at timestamptz,
+  -- Bookings only: length and the scheduled slot (set when payment clears).
+  days           integer check (days in (1, 3, 7)),
+  starts_at      timestamptz,
+  ends_at        timestamptz,
+  -- A discounted relegation booking points at the throne bid it came from.
+  relegated_from uuid references bids (id),
+  -- SHA-256 of a private code held by the buyer's browser (no accounts).
+  owner_hash     text,
   name           text not null check (char_length(name) <= 40),
   tagline        text check (char_length(tagline) <= 100),
   image_url      text,
   target_url     text not null,
   payment_ref    text,
-  dividend_cents integer not null default 0,
   clicks         integer not null default 0,
   created_at     timestamptz not null default now(),
   settled_at     timestamptz,
-  shield_ends_at timestamptz,
   -- Takedown: a removed ad's name, tagline, image and link are hidden
   -- everywhere. The bid itself stays (the slot was paid for).
   removed_at     timestamptz,
   removed_reason text,
   removed_by     text check (removed_by in ('admin', 'auto')),
-  check (credits_cents + charge_cents = amount_cents)
+  check ((board = 'throne') = (days is null))
 );
+create index if not exists bids_board_live_idx on bids (board, starts_at) where status = 'won' and board <> 'throne';
+create index if not exists bids_relegated_idx on bids (relegated_from) where relegated_from is not null;
+create index if not exists bids_throne_record_idx on bids (amount_cents desc) where board = 'throne' and status = 'won';
 
 -- Visitor reports against an ad. Reporters are anonymous; we keep only a
 -- salted hash of their IP, enough to count each person once per ad.
@@ -52,16 +58,22 @@ create table if not exists reports (
 );
 create index if not exists reports_open_idx on reports (bid_id) where status = 'open';
 
--- Single-row table: who holds the throne, the Creator Fund tracker and
--- lifetime counters for the stats bar.
+-- Single-row table: who holds the throne, plus lifetime counters.
 create table if not exists throne (
-  id                  integer primary key default 1 check (id = 1),
-  bid_id              uuid references bids (id),
-  creator_fund_cents  bigint not null default 0,
-  takeovers           integer not null default 0,
-  volume_cents        bigint not null default 0
+  id            integer primary key default 1 check (id = 1),
+  bid_id        uuid references bids (id),
+  takeovers     integer not null default 0,
+  volume_cents  bigint not null default 0
 );
 insert into throne (id) values (1) on conflict do nothing;
+
+-- One row per small board: how far ahead it is booked. Row-locked while a
+-- booking is placed, so two payments can never get the same days.
+create table if not exists boards (
+  id            text primary key check (id in ('b2', 'b3')),
+  booked_until  timestamptz
+);
+insert into boards (id) values ('b2'), ('b3') on conflict do nothing;
 
 -- King of the Day: one row per round. Whoever holds the throne when a round
 -- ends is crowned (winner_bid_id). ends_at can move past base_ends_at by
@@ -77,8 +89,8 @@ create table if not exists crown_rounds (
 create index if not exists crown_rounds_open_idx on crown_rounds (id) where closed_at is null;
 create index if not exists crown_rounds_kings_idx on crown_rounds (closed_at desc) where winner_bid_id is not null;
 
--- The History of Kings: a permanent snapshot of every deposed holder,
--- written automatically by the trigger below. Rows are never updated.
+-- The History of Kings: a snapshot of every king when they leave the throne,
+-- either overthrown (deposed_by set) or retired at the end of their term.
 create table if not exists throne_legends (
   id               bigint generated always as identity primary key,
   bid_id           uuid not null unique references bids (id),
@@ -89,8 +101,9 @@ create table if not exists throne_legends (
   amount_cents     integer not null,
   crowned_at       timestamptz not null,
   deposed_at       timestamptz not null,
-  deposed_by       uuid not null references bids (id),
-  deposed_by_name  text not null,
+  deposed_by       uuid references bids (id),
+  deposed_by_name  text,
+  retired          boolean not null default false,
   reign_seconds    integer not null,
   survived_shield  boolean not null
 );
@@ -110,17 +123,6 @@ create table if not exists hype_jobs (
 );
 create index if not exists hype_jobs_pending_idx on hype_jobs (id) where status = 'pending';
 
--- Only the backend (service role) touches these tables. RLS on + no policies
--- means the public anon key can read/write nothing: an ad can only change via
--- the backend after a signature-verified Stripe webhook.
-alter table wallets enable row level security;
-alter table bids enable row level security;
-alter table throne enable row level security;
-alter table throne_legends enable row level security;
-alter table hype_jobs enable row level security;
-alter table reports enable row level security;
-alter table crown_rounds enable row level security;
-
 -- Public bucket for ad images and takeover videos. Anyone can read; only the
 -- backend (service role) can write, because storage.objects has no policies
 -- granting insert to anon/authenticated.
@@ -129,22 +131,35 @@ values ('media', 'media', true, 52428800,
         array['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4'])
 on conflict (id) do nothing;
 
--- Archive engine: whenever the throne changes hands, snapshot the old king.
+-- Only the backend (service role) touches these tables. RLS on + no policies
+-- means the public anon key can read/write nothing: an ad can only change via
+-- the backend after a signature-verified payment webhook.
+alter table bids enable row level security;
+alter table reports enable row level security;
+alter table throne enable row level security;
+alter table boards enable row level security;
+alter table crown_rounds enable row level security;
+alter table throne_legends enable row level security;
+alter table hype_jobs enable row level security;
+
+-- Archive engine: whenever the throne changes hands (or empties because the
+-- king retired), snapshot the old king.
 create or replace function archive_deposed_king() returns trigger
 language plpgsql
 as $$
 begin
   if old.bid_id is not null and new.bid_id is distinct from old.bid_id then
     insert into throne_legends (
-      bid_id, name, tagline, image_url, target_url, amount_cents,
-      crowned_at, deposed_at, deposed_by, deposed_by_name, reign_seconds, survived_shield
+      bid_id, name, tagline, image_url, target_url, amount_cents, crowned_at, deposed_at,
+      deposed_by, deposed_by_name, retired, reign_seconds, survived_shield
     )
-    select d.id, d.name, d.tagline, d.image_url, d.target_url, d.amount_cents,
-           d.settled_at, now(), w.id, w.name,
+    select d.id, d.name, d.tagline, d.image_url, d.target_url, d.amount_cents, d.settled_at, now(),
+           w.id, w.name, new.bid_id is null,
            floor(extract(epoch from now() - d.settled_at))::integer,
            now() >= d.shield_ends_at
-      from bids d, bids w
-     where d.id = old.bid_id and w.id = new.bid_id;
+      from bids d
+      left join bids w on w.id = new.bid_id
+     where d.id = old.bid_id;
   end if;
   return new;
 end;
@@ -169,25 +184,37 @@ as $$
   );
 $$;
 
--- Closes the open round once its time is up, crowning whoever holds the
--- throne, and makes sure the next round exists. Called by the API every few
--- seconds and at the start of every settlement. Safe with many API instances:
--- the open round is row-locked, and base_ends_at is unique.
-create or replace function tick_crown(p_rules jsonb) returns json
+-- Time-based housekeeping, run by the API every few seconds and at the start
+-- of every throne settlement:
+--   1. close the King of the Day round once its clock hits zero;
+--   2. retire a king whose term is over (the throne reopens at the start price).
+-- Locks the throne first, then the round (same order as settle_bid), so it is
+-- safe with many API instances. A free-tier host may sleep through both
+-- deadlines: a king whose term ended before the round did is not crowned.
+create or replace function tick_throne(p_rules jsonb) returns json
 language plpgsql
 as $$
 declare
-  v_round    crown_rounds%rowtype;
-  v_open     boolean;
-  v_winner   uuid;
-  v_crowned  json := null;
-  v_base     timestamptz;
+  v_throne    throne%rowtype;
+  v_round     crown_rounds%rowtype;
+  v_open      boolean;
+  v_term_end  timestamptz;
+  v_winner    uuid;
+  v_crowned   json := null;
+  v_retired   json := null;
+  v_base      timestamptz;
 begin
+  select * into v_throne from throne where id = 1 for update;
+  if v_throne.bid_id is not null then
+    select settled_at + make_interval(secs => (p_rules->>'throneTermSeconds')::integer)
+      into v_term_end from bids where id = v_throne.bid_id;
+  end if;
+
   select * into v_round from crown_rounds where closed_at is null order by id desc limit 1 for update;
   v_open := found;
 
   if v_open and now() >= v_round.ends_at then
-    select bid_id into v_winner from throne where id = 1;
+    v_winner := case when v_term_end > v_round.ends_at then v_throne.bid_id end;
     update crown_rounds set closed_at = now(), winner_bid_id = v_winner where id = v_round.id;
     v_crowned := json_build_object('roundId', v_round.id, 'bidId', v_winner);
     v_open := false;
@@ -199,38 +226,45 @@ begin
     select * into v_round from crown_rounds where base_ends_at = v_base;
   end if;
 
+  if v_term_end is not null and now() >= v_term_end then
+    update throne set bid_id = null where id = 1;  -- the trigger archives him as retired
+    v_retired := json_build_object('bidId', v_throne.bid_id);
+  end if;
+
   return json_build_object(
     'round', json_build_object('id', v_round.id, 'baseEndsAt', v_round.base_ends_at, 'endsAt', v_round.ends_at, 'takeovers', v_round.takeovers),
-    'crowned', v_crowned
+    'crowned', v_crowned,
+    'retired', v_retired
   );
 end;
 $$;
 
--- Atomically settle a paid bid. Locks the throne row, so two payments that
--- clear at the same instant are serialized: the second one sees the first as
--- the new price and comes back 'outbid' (the backend then refunds its card
--- portion). Credit spending and the dethroned king's dividend happen in the
--- same transaction, so a retried webhook can never double-spend or double-pay.
--- p_rules is config.rules from the backend; the minimum-price logic mirrors
--- backend/src/rules.js.
+-- Atomically settle a paid ad. Idempotent: a retried webhook is a no-op.
+--
+-- Throne: locks the throne, so two payments that clear at once are serialized;
+--   the second sees the first as the new price and comes back 'outbid' (the
+--   backend refunds it). The minimum-price logic mirrors backend/src/rules.js.
+-- Bookings: locks the board row and appends the booking to the board's queue:
+--   it starts when the board is next free, so days can never be double-sold.
+--   A relegation booking is voided (and refunded) if that king already used it.
+-- p_rules is config.rules from the backend.
 create or replace function settle_bid(p_bid_id uuid, p_payment_ref text, p_rules jsonb) returns json
 language plpgsql
 as $$
 declare
-  v_throne   throne%rowtype;
   v_bid      bids%rowtype;
+  v_throne   throne%rowtype;
   v_king     bids%rowtype;
+  v_board    boards%rowtype;
   v_min      integer;
   v_step     integer;
-  v_dividend integer := 0;
   v_tick     json;
-  v_crowned  json;
   v_round    json;
   v_round_id bigint;
+  v_start    timestamptz;
+  v_end      timestamptz;
 begin
-  select * into v_throne from throne where id = 1 for update;
   select * into v_bid from bids where id = p_bid_id for update;
-
   if not found then
     return json_build_object('status', 'missing');
   end if;
@@ -238,11 +272,36 @@ begin
     return json_build_object('status', 'duplicate');
   end if;
 
-  -- Close an expired King of the Day round first, so a late payment can never
-  -- steal a crown that was already decided.
-  v_tick := tick_crown(p_rules);
-  v_crowned := v_tick->'crowned';
+  -- ---- Board booking ----
+  if v_bid.board <> 'throne' then
+    -- Lock the original throne ad first: two relegations of the same ad may
+    -- target different boards, so the board lock alone can't serialize them.
+    if v_bid.relegated_from is not null then
+      perform 1 from bids where id = v_bid.relegated_from for update;
+    end if;
+    select * into v_board from boards where id = v_bid.board for update;
+    if v_bid.relegated_from is not null
+       and exists (select 1 from bids where relegated_from = v_bid.relegated_from and status = 'won') then
+      update bids set status = 'void', payment_ref = p_payment_ref, settled_at = now() where id = p_bid_id;
+      return json_build_object('status', 'void');
+    end if;
+    v_start := greatest(now(), v_board.booked_until);
+    v_end := v_start + make_interval(days => v_bid.days);
+    update boards set booked_until = v_end where id = v_bid.board;
+    update bids
+       set status = 'won', payment_ref = p_payment_ref, settled_at = now(), starts_at = v_start, ends_at = v_end
+     where id = p_bid_id;
+    update throne set volume_cents = volume_cents + v_bid.amount_cents where id = 1;
+    return json_build_object('status', 'won', 'board', v_bid.board, 'startsAt', v_start, 'endsAt', v_end);
+  end if;
+
+  -- ---- Throne bid ----
+  perform 1 from throne where id = 1 for update;
+  -- Close an expired King of the Day round and retire an expired king first,
+  -- so a late payment can never steal a crown that was already decided.
+  v_tick := tick_throne(p_rules);
   v_round_id := (v_tick->'round'->>'id')::bigint;
+  select * into v_throne from throne where id = 1;
 
   if v_throne.bid_id is null then
     v_min := (p_rules->>'startingPriceCents')::integer;
@@ -258,16 +317,7 @@ begin
 
   if v_bid.amount_cents < v_min then
     update bids set status = 'outbid', payment_ref = p_payment_ref, settled_at = now() where id = p_bid_id;
-    return json_build_object('status', 'outbid', 'crowned', v_crowned);
-  end if;
-
-  if v_bid.credits_cents > 0 then
-    update wallets set balance_cents = balance_cents - v_bid.credits_cents
-     where id = v_bid.wallet_id and balance_cents >= v_bid.credits_cents;
-    if not found then
-      update bids set status = 'void', payment_ref = p_payment_ref, settled_at = now() where id = p_bid_id;
-      return json_build_object('status', 'void', 'crowned', v_crowned);
-    end if;
+    return json_build_object('status', 'outbid', 'crowned', v_tick->'crowned', 'retired', v_tick->'retired');
   end if;
 
   update bids
@@ -277,19 +327,8 @@ begin
          shield_ends_at = now() + make_interval(secs => shield_seconds)
    where id = p_bid_id;
 
-  -- Dividend: the dethroned king earns Throne Credits, not a card refund.
-  if v_throne.bid_id is not null and v_king.wallet_id is not null then
-    v_dividend := v_bid.amount_cents * (p_rules->>'dividendPct')::integer / 100;
-    update wallets
-       set balance_cents = balance_cents + v_dividend,
-           lifetime_earned_cents = lifetime_earned_cents + v_dividend
-     where id = v_king.wallet_id;
-    update bids set dividend_cents = dividend_cents + v_dividend where id = v_king.id;
-  end if;
-
   update throne
      set bid_id = p_bid_id,
-         creator_fund_cents = creator_fund_cents + (v_bid.amount_cents * (p_rules->>'creatorFundPct')::integer / 100),
          takeovers = takeovers + 1,
          volume_cents = volume_cents + v_bid.amount_cents
    where id = 1;
@@ -310,17 +349,18 @@ begin
 
   return json_build_object(
     'status', 'won',
+    'board', 'throne',
     'previous_bid_id', v_throne.bid_id,
-    'dividend_cents', v_dividend,
-    'crowned', v_crowned,
+    'crowned', v_tick->'crowned',
+    'retired', v_tick->'retired',
     'round', v_round
   );
 end;
 $$;
 
 -- Files a report (once per reporter per ad). If enough different people report
--- the same live ad, it is hidden at once ('auto') pending admin review; the
--- admin can restore it. p_threshold <= 0 disables auto-hiding.
+-- the same ad, it is hidden at once ('auto') pending admin review; the admin
+-- can restore it. p_threshold <= 0 disables auto-hiding.
 create or replace function report_bid(
   p_bid_id uuid,
   p_reason text,
@@ -358,6 +398,17 @@ begin
 end;
 $$;
 
+-- Distinct advertisers, and ads published on any board (not removed).
+-- Mirrors countAdvertisers() in backend/src/store/memoryStore.js.
+drop function if exists count_advertisers();
+create function count_advertisers() returns json
+language sql
+stable
+as $$
+  select json_build_object('advertisers', count(distinct lower(trim(name))), 'ads', count(*))
+    from bids where status = 'won' and removed_at is null;
+$$;
+
 create or replace function record_click(p_bid_id uuid) returns void
 language sql
 as $$
@@ -379,35 +430,35 @@ as $$
   returning *;
 $$;
 
--- Admin health snapshot: credit liability vs. card revenue. Fees are an
--- estimate (US card pricing: 30c + 2.9%); refunded charges keep their fee.
--- Mirrored by getFinancials() in backend/src/store/memoryStore.js.
+-- Admin revenue snapshot. Fees are an estimate (US card pricing: 30c + 2.9%);
+-- refunded charges keep their fee. Mirrored by getFinancials() in
+-- backend/src/store/memoryStore.js.
 create or replace function admin_financials() returns json
 language sql
 stable
 as $$
   select json_build_object(
-    'outstanding_credits_cents', (select coalesce(sum(balance_cents), 0) from wallets),
-    'credits_issued_cents',      (select coalesce(sum(lifetime_earned_cents), 0) from wallets),
-    'credits_spent_cents',       (select coalesce(sum(credits_cents), 0) from bids where status = 'won'),
-    'wallets_with_balance',      (select count(*) from wallets where balance_cents > 0),
-    'won_bids',                  (select count(*) from bids where status = 'won'),
-    'card_gross_cents',          (select coalesce(sum(charge_cents), 0) from bids where status = 'won'),
-    'est_fees_cents',            (select coalesce(sum(30 + ceil(charge_cents * 0.029)), 0)
-                                    from bids where charge_cents > 0 and status in ('won', 'refunded')),
-    'refunded_cents',            (select coalesce(sum(charge_cents), 0) from bids where status = 'refunded'),
-    'stale_pending',             (select count(*) from bids
-                                   where status = 'pending' and created_at < now() - interval '1 hour'),
-    'creator_fund_cents',        (select creator_fund_cents from throne where id = 1),
-    'hype',                      (select coalesce(json_object_agg(status, n), '{}'::json)
-                                    from (select status, count(*) n from hype_jobs group by status) s)
+    'won_bids',            (select count(*) from bids where status = 'won'),
+    'gross_cents',         (select coalesce(sum(amount_cents), 0) from bids where status = 'won'),
+    'throne_gross_cents',  (select coalesce(sum(amount_cents), 0) from bids where status = 'won' and board = 'throne'),
+    'boards_gross_cents',  (select coalesce(sum(amount_cents), 0) from bids where status = 'won' and board <> 'throne'),
+    'bookings',            (select count(*) from bids where status = 'won' and board <> 'throne'),
+    'relegations',         (select count(*) from bids where status = 'won' and relegated_from is not null),
+    'est_fees_cents',      (select coalesce(sum(30 + ceil(amount_cents * 0.029)), 0)
+                              from bids where status in ('won', 'refunded') and payment_ref not like 'demo_%'),
+    'refunded_cents',      (select coalesce(sum(amount_cents), 0) from bids where status = 'refunded'),
+    'stale_pending',       (select count(*) from bids
+                             where status = 'pending' and created_at < now() - interval '1 hour'),
+    'hype',                (select coalesce(json_object_agg(status, n), '{}'::json)
+                              from (select status, count(*) n from hype_jobs group by status) s)
   );
 $$;
 
-revoke execute on function admin_financials() from public, anon, authenticated;
 revoke execute on function settle_bid(uuid, text, jsonb) from public, anon, authenticated;
-revoke execute on function tick_crown(jsonb) from public, anon, authenticated;
-revoke execute on function record_click(uuid) from public, anon, authenticated;
+revoke execute on function tick_throne(jsonb) from public, anon, authenticated;
 revoke execute on function report_bid(uuid, text, text, text, integer) from public, anon, authenticated;
+revoke execute on function record_click(uuid) from public, anon, authenticated;
+revoke execute on function count_advertisers() from public, anon, authenticated;
 revoke execute on function claim_hype_job() from public, anon, authenticated;
+revoke execute on function admin_financials() from public, anon, authenticated;
 revoke execute on function archive_deposed_king() from public, anon, authenticated;

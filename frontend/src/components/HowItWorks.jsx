@@ -1,17 +1,22 @@
 import { formatMoney } from '../lib/api.js';
 import Shape from './Shape.jsx';
 
-export default function HowItWorks({ rules }) {
+export default function HowItWorks({ rules, boards = [] }) {
+  const termDays = Math.round(rules.throneTermSeconds / 86400);
+  const cheapestDay = Math.min(...boards.map((b) => b.prices[7] / 7));
   const steps = [
-    { title: 'Drop your ad', body: 'Upload or paste an image, add a tagline and a link. No account, no approval queue.' },
-    { title: 'Pay in one tap', body: 'Apple Pay or Google Pay. AI screens your ad first, so if it is blocked you are never charged.' },
+    { title: 'Drop your ad', body: 'Upload or paste an image, add a tagline and a link. No account, no approval queue. AI screens it before you pay.' },
     {
-      title: 'Raise your shield',
-      body: `Every bid buys a shield: ${rules.shieldBaseSeconds}s, plus more for every extra dollar. Shielded kings cost +${rules.shieldPremiumPct}% to topple.`,
+      title: 'Take the throne',
+      body: `Outbid the king for the big board. Every bid buys a shield, and shielded kings cost +${rules.shieldPremiumPct}% to topple. Hold it up to ${termDays} days.`,
+    },
+    {
+      title: 'Or book the Court',
+      body: `Prefer calm? Book a smaller board for 1, 3 or 7 days${Number.isFinite(cheapestDay) ? `, from ${formatMoney(Math.ceil(cheapestDay))}/day` : ''}. Guaranteed time: nobody can knock you off.`,
     },
     {
       title: 'Fall with honor',
-      body: `Knocked off? ${rules.dividendPct}% of the new bid lands in your Throne Credits for the comeback, and you are archived forever.`,
+      body: `Knocked off the throne? You get 24 free hours in "Recently dethroned", and you can move your ad to a smaller board at ${rules.relegationDiscountPct}% off.`,
     },
     {
       title: 'Rule the day',
@@ -35,7 +40,7 @@ export default function HowItWorks({ rules }) {
 
         <ol className="mt-12 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-8">
           {steps.map((step, i) => (
-            <li key={step.title}>
+            <li key={step.title} className="how-step">
               {/* Rotated square, counter-rotated number. */}
               <span className="flex h-14 w-14 rotate-45 items-center justify-center border-4 border-ink bg-white shadow-hard-sm">
                 <span className="-rotate-45 text-2xl font-black text-ink">{i + 1}</span>

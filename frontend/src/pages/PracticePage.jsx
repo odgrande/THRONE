@@ -5,7 +5,10 @@ import { minNextBidCents } from '../lib/rules.js';
 import { BOT_SPEEDS, usePracticeSim } from '../lib/practiceSim.js';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
-import Billboard from '../components/Billboard.jsx';
+import Billboard, { BillboardStats } from '../components/Billboard.jsx';
+import { ThroneRules } from '../components/BidForm.jsx';
+import SoundControls from '../components/SoundControls.jsx';
+import { sfx } from '../lib/sound.js';
 import StatsStrip from '../components/StatsStrip.jsx';
 import Shape, { CornerMark } from '../components/Shape.jsx';
 
@@ -18,8 +21,10 @@ const DEFAULT_RULES = {
   shieldSecondsPerDollar: 30,
   shieldMaxSeconds: 1800,
   shieldPremiumPct: 25,
-  dividendPct: 15,
-  creatorFundPct: 5,
+  throneTermSeconds: 7 * 86400,
+  crownOvertimeWindowSeconds: 60,
+  crownExtensionSeconds: 12,
+  relegationDiscountPct: 50,
 };
 
 const SPEED_LABELS = { off: 'Off', slow: 'Slow', fast: 'Fast' };
@@ -54,6 +59,15 @@ function Arena({ rules }) {
   const amountCents = Math.round(Number(amountText) * 100) || 0;
   const sliderMax = Math.ceil(Math.max(minNext * 4, minNext + 10000) / 100) * 100;
 
+  // Same sounds as the real throne (no-ops while sound is off).
+  const lastKing = sim.throne?.id;
+  useEffect(() => {
+    if (!lastKing) return;
+    if (sim.log[0]?.youLost) sfx.dethrone();
+    sfx.takeover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastKing]);
+
   // Keep the amount at or above the live minimum as rivals bid.
   useEffect(() => {
     setAmountText((cur) => (Math.round(Number(cur) * 100) < minNext ? (minNext / 100).toFixed(2) : cur));
@@ -66,7 +80,9 @@ function Arena({ rules }) {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <Header />
+      <Header>
+        <SoundControls />
+      </Header>
 
       {/* Unmissable: nothing on this page is real. */}
       <p className="border-b-4 border-ink bg-bh-yellow px-4 py-3 text-center text-sm font-black uppercase tracking-wider">
@@ -85,10 +101,17 @@ function Arena({ rules }) {
               <span className="text-bh-blue">arena.</span>
             </h1>
             <p className="mt-4 max-w-xl text-lg font-medium leading-relaxed">
-              Learn the shield, the minimum raise and the comeback credits against computer rivals before you spend real money.
+              Learn the shield and the minimum raise against computer rivals before you spend real money.
             </p>
             <div className="mt-10">
-              <Billboard throne={sim.throne} practice />
+              <Billboard throne={sim.throne} now={now} practice />
+              <BillboardStats
+                stats={{
+                  volumeCents: sim.stats.volumeCents,
+                  takeovers: sim.stats.takeovers,
+                  recordCents: Math.max(0, ...sim.log.map((e) => e.amountCents)),
+                }}
+              />
             </div>
           </div>
 
@@ -105,8 +128,8 @@ function Arena({ rules }) {
                   <p className="text-xl font-black tabular-nums">{formatMoney(sim.playMoneyCents)}</p>
                 </div>
                 <div className="bg-white p-3">
-                  <p className="label text-ink/70">Practice credits</p>
-                  <p className="text-xl font-black tabular-nums">{formatMoney(sim.creditsCents)}</p>
+                  <p className="label text-ink/70">Times you took it</p>
+                  <p className="text-xl font-black tabular-nums">{sim.timesCrowned}</p>
                 </div>
               </div>
 
@@ -121,7 +144,12 @@ function Arena({ rules }) {
                 </label>
                 <div>
                   <span className="label mb-1.5 flex justify-between">
-                    Your bid <span className="text-ink/50">Min {formatMoney(minNext)}</span>
+                    Your bid
+                    {amountCents < minNext ? (
+                      <span className="text-bh-red" role="status">Must be at least {formatMoney(minNext)}</span>
+                    ) : (
+                      <span className="text-ink/50">Min {formatMoney(minNext)}</span>
+                    )}
                   </span>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-black">$</span>
@@ -150,6 +178,7 @@ function Arena({ rules }) {
                 <button type="submit" disabled={amountCents < minNext} className="btn-red w-full text-lg">
                   Take it · {formatMoney(amountCents)} (practice)
                 </button>
+                <ThroneRules rules={rules} />
               </form>
 
               <div className="mt-6 border-t-2 border-ink pt-5">
@@ -176,7 +205,7 @@ function Arena({ rules }) {
         </div>
       </section>
 
-      <StatsStrip throne={sim.throne} minNextBidCents={minNext} creatorFundCents={sim.fundCents} stats={sim.stats} rules={rules} now={now} />
+      <StatsStrip throne={sim.throne} minNextBidCents={minNext} stats={sim.stats} rules={rules} now={now} />
 
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="card">
@@ -198,7 +227,7 @@ function Arena({ rules }) {
                   </span>
                   <span className="flex items-center gap-4 text-sm">
                     {entry.previousName && <span className="text-ink/70">took it from {entry.previousName}</span>}
-                    {entry.dividend > 0 && <span className="font-bold text-bh-blue">+{formatMoney(entry.dividend)} credits to you</span>}
+                    {entry.youLost && <span className="font-bold text-bh-red">you were dethroned</span>}
                     <span className="text-ink/50">{formatDuration(now - Date.parse(entry.startedAt))} ago</span>
                     <span className="text-lg font-black tabular-nums">{formatMoney(entry.amountCents)}</span>
                   </span>

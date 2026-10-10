@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Flag, Loader2, X } from 'lucide-react';
 import { api } from '../lib/api.js';
+import { useModal } from '../lib/useModal.js';
 
 export const REPORT_REASONS = [
   { key: 'scam', label: 'Scam, phishing or fraud' },
@@ -26,20 +27,12 @@ export default function ReportButton({ bidId, adName, className = '' }) {
 }
 
 function ReportDialog({ bidId, adName, onClose }) {
-  const dialog = useRef(null);
+  // Native <dialog>: focus trapping, Esc to close and a backdrop for free.
+  const dialog = useModal(onClose);
   const [reason, setReason] = useState('');
   const [details, setDetails] = useState('');
   const [state, setState] = useState('form'); // form | sending | done
   const [error, setError] = useState(null);
-
-  // Native <dialog>: focus trapping, Esc to close and a backdrop for free.
-  useEffect(() => {
-    const el = dialog.current;
-    el.showModal();
-    const close = () => onClose();
-    el.addEventListener('close', close);
-    return () => el.removeEventListener('close', close);
-  }, [onClose]);
 
   const submit = async (e) => {
     e.preventDefault();

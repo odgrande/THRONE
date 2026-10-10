@@ -23,7 +23,10 @@ export const api = {
   createBid: (bid) => request('/api/bids', { method: 'POST', body: JSON.stringify(bid) }),
   demoPay: (bidId) => request(`/api/bids/${bidId}/demo-pay`, { method: 'POST' }),
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
-  getWallet: (token) => request('/api/wallet', { headers: token ? { 'X-Wallet-Token': token } : {} }),
+  createBooking: (booking) => request('/api/bookings', { method: 'POST', body: JSON.stringify(booking) }),
+  relegationOffer: (bidId, ownerToken) => request(`/api/relegations/${bidId}`, { headers: { 'X-Owner-Token': ownerToken } }),
+  relegate: (fromBidId, ownerToken) =>
+    request('/api/relegations', { method: 'POST', body: JSON.stringify({ fromBidId, ownerToken }) }),
   getLink: (bidId) => request(`/api/go/${bidId}`),
   report: (bidId, reason, details) => request('/api/reports', { method: 'POST', body: JSON.stringify({ bidId, reason, details }) }),
   adminHealth: (token) => request('/api/admin/health', { headers: { Authorization: `Bearer ${token}` } }),

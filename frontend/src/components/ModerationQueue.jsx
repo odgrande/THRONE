@@ -6,6 +6,7 @@ import Shape from './Shape.jsx';
 
 const REASON_LABEL = Object.fromEntries(REPORT_REASONS.map((r) => [r.key, r.label]));
 const timeFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const BOARD_LABEL = { throne: 'The Throne', b2: 'Board 2', b3: 'Board 3' };
 
 // Admin sees the unmasked ad (that's the point of reviewing it), never reporter identities.
 function AdPreview({ bid }) {
@@ -27,7 +28,8 @@ function AdPreview({ bid }) {
           {bid.targetUrl} <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
         </a>
         <p className="text-sm text-ink/60">
-          Paid {formatMoney(bid.amountCents)} · {bid.settledAt ? timeFmt.format(new Date(bid.settledAt)) : '—'}
+          <span className="font-bold text-ink">{BOARD_LABEL[bid.board] ?? bid.board}</span> · Paid {formatMoney(bid.amountCents)} ·{' '}
+          {bid.settledAt ? timeFmt.format(new Date(bid.settledAt)) : '—'}
           {bid.paymentRef && <> · payment <span className="font-mono">{bid.paymentRef}</span></>}
         </p>
       </div>

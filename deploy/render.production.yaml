@@ -1,0 +1,80 @@
+# Render Blueprint: PRODUCTION (paid). Copy this file to the repo root as
+# render.yaml for the real launch (render.yaml there is the free staging setup).
+# The API and the video worker. The frontend deploys to Cloudflare Pages and
+# the database is Supabase (see DEPLOY.md).
+# Keys marked `sync: false` are secrets: Render asks for them when you create
+# the Blueprint, and they never live in this file.
+
+services:
+  # Public API. Must be an always-on service (not serverless): every viewer
+  # holds a live Server-Sent Events connection for the countdown and takeovers.
+  - type: web
+    name: throne-api
+    runtime: node
+    rootDir: backend
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Visitor -> Cloudflare -> Render load balancer -> app.
+      - key: TRUST_PROXY
+        value: "2"
+      - key: PUBLIC_URL
+        sync: false # https://api.yourdomain.com
+      - key: SITE_URL
+        sync: false # https://yourdomain.com
+      - key: CORS_ORIGIN
+        sync: false # https://yourdomain.com
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_3DS
+        value: automatic
+      # Only takeovers of $20+ get a hype video.
+      - key: HYPE_MIN_CENTS
+        value: "2000"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WEB_RISK_API_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true # Render generates a random secret; copy it from the dashboard
+      # Cloudflare adds this as the X-Origin-Secret header (Transform Rule).
+      # Copy the generated value into that rule, or the API answers 403.
+      - key: ORIGIN_SECRET
+        generateValue: true
+      # Salt for hashing reporter IPs (one report per person per ad).
+      - key: IP_HASH_SALT
+        generateValue: true
+
+  # Video renderer. Docker image (headless Chrome needs system libraries) and
+  # a 2 GB plan: Remotion is memory-hungry, and 512 MB plans crash mid-render.
+  - type: worker
+    name: throne-video-worker
+    runtime: docker
+    plan: standard
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile.worker
+    dockerContext: ./backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SITE_URL
+        sync: false # https://yourdomain.com (printed in the videos)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
