@@ -42,6 +42,30 @@
         display: inline-block;
         animation: preloader-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
       }
+      #preloader .wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 0 1rem;
+      }
+      #preloader .disclaimer {
+        max-width: 22rem;
+        margin: 0;
+        font-family: Outfit, system-ui, sans-serif;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.4;
+        letter-spacing: 0.04em;
+        text-align: center;
+        color: rgba(18, 18, 18, 0.7);
+        animation: preloader-fade 0.5s 0.5s both;
+      }
+      @keyframes preloader-fade {
+        from {
+          opacity: 0;
+        }
+      }
       #preloader .tag {
         position: absolute;
         right: -0.2em;
@@ -67,9 +91,12 @@
   </head>
   <body>
     <div id="preloader" role="status" aria-label="Loading">
+      <div class="wrap">
       <div class="mark" aria-hidden="true">
         <span style="animation-delay: 0ms">T</span><span style="animation-delay: 60ms">H</span><span style="animation-delay: 120ms">R</span><span style="animation-delay: 180ms">O</span><span style="animation-delay: 240ms">N</span><span style="animation-delay: 300ms">E</span>
         <span class="tag" style="animation-delay: 420ms">LIVE ADS</span>
+      </div>
+      <p class="disclaimer">Ads are paid for and placed by advertisers. Throne does not endorse any ad. Links are safety-checked before you leave.</p>
       </div>
     </div>
     <div id="root"></div>

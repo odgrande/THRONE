@@ -5,7 +5,7 @@ import { needsEmail as paymentNeedsEmail, regionInfo } from '../lib/region.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { CornerMark } from './Shape.jsx';
 import { t } from '../lib/i18n.js';
-import AdFields, { EMPTY_AD, EmailField, addonFor } from './AdFields.jsx';
+import AdFields, { EMPTY_AD, EmailField, addonFor, adPayload } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 
@@ -91,7 +91,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBid({ ...ad, amountCents, turnstileToken: botToken, ...(needsEmail ? { email } : {}) });
+      const res = await api.createBid({ ...(await adPayload(ad)), amountCents, turnstileToken: botToken, ...(needsEmail ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -112,6 +112,9 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     if (status === 'won') {
       setMessage({ ok: true, text: t('bid.won') });
       setAd(EMPTY_AD);
+    } else if (status === 'review') {
+      setMessage({ ok: true, title: t('media.reviewTitle'), text: t('media.reviewThrone') });
+      setAd(EMPTY_AD);
     } else if (status === 'refunded' || status === 'outbid') {
       setMessage({ ok: false, text: t('bid.refunded') });
     } else {
@@ -125,7 +128,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     body = (
       <div className="space-y-5">
         <div className={`border-2 border-ink p-4 ${message.ok ? 'bg-bh-yellow' : 'bg-muted'}`}>
-          <p className="text-xl font-black uppercase tracking-tight">{message.ok ? t('bid.wonTitle') : t('bid.lostTitle')}</p>
+          <p className="text-xl font-black uppercase tracking-tight">{message.title ?? (message.ok ? t('bid.wonTitle') : t('bid.lostTitle'))}</p>
           <p className="mt-1 font-medium leading-relaxed">{message.text}</p>
         </div>
         <button onClick={reset} className="btn-outline w-full">
@@ -138,7 +141,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
   } else {
     body = (
       <form onSubmit={submit} className="space-y-4">
-        <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix="throne" mapAddonCents={rules.mapAddonCents} />
+        <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix="throne" mapAddonCents={rules.mapAddonCents} videoAddonCents={rules.videoAddonCents} />
 
         <div>
           <span className="label mb-1.5 flex justify-between">
@@ -207,7 +210,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
               <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> {t('bid.checking')}
             </>
           ) : addonFor(ad, rules) > 0 ? (
-            t('bid.submitMap', { amount: formatMoney(amountCents), map: formatMoney(addonFor(ad, rules)) })
+            t('bid.submitExtras', { amount: formatMoney(amountCents), extras: formatMoney(addonFor(ad, rules)) })
           ) : (
             t('bid.submit', { amount: formatMoney(amountCents) })
           )}

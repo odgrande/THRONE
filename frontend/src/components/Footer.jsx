@@ -1,5 +1,6 @@
 import Logo from './Logo.jsx';
 import { OfficialSocials } from './Socials.jsx';
+import { t } from '../lib/i18n.js';
 
 export default function Footer() {
   return (
@@ -10,10 +11,12 @@ export default function Footer() {
           <OfficialSocials className="text-ink" />
           <a href="mailto:therone@gmail.com" className="text-sm font-bold text-white/80 hover:text-bh-yellow">therone@gmail.com</a>
         </div>
-        <p className="max-w-md text-sm leading-relaxed text-white/70">
-          Ads are bought by anyone and are not endorsed by Project Throne. Every ad is screened by AI before payment,
-          and every outbound click shows its destination first.
-        </p>
+        <div className="max-w-md space-y-2 text-sm leading-relaxed text-white/70">
+          <p>
+            <span className="font-bold text-white">{t('notice.title')}</span> {t('notice.body')}
+          </p>
+          <p>{t('footer.safety')}</p>
+        </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-3">
           <a href="/" className="label hover:text-bh-yellow">Advertise</a>
           <a href="/kings" className="label hover:text-bh-yellow">Kings</a>

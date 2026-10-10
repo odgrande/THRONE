@@ -13,7 +13,8 @@ export function createModeration(apiKey) {
   return {
     enabled: true,
     async check({ text, imageDataUrl }) {
-      const input = [{ type: 'text', text }];
+      // Video frames are checked one by one with no text.
+      const input = text ? [{ type: 'text', text }] : [];
       // omni-moderation looks at the actual pixels, not just the URL string.
       if (imageDataUrl) input.push({ type: 'image_url', image_url: { url: imageDataUrl } });
 

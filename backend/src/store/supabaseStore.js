@@ -32,6 +32,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       name: r.name,
       tagline: r.tagline,
       imageUrl: r.image_url,
+      videoUrl: r.video_url,
+      reviewSince: r.review_since,
       targetUrl: r.target_url,
       paymentRef: r.payment_ref,
       clicks: r.clicks,
@@ -77,7 +79,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     kind: 'supabase',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl }) {
       const row = check(
         await db
           .from('bids')
@@ -94,6 +96,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
             name,
             tagline,
             image_url: imageUrl,
+            video_url: videoUrl,
             target_url: targetUrl,
           })
           .select()
@@ -118,6 +121,30 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
         retired: result.retired ?? null,
         round: result.round ?? null,
       };
+    },
+
+    // Video ads: paid, waiting for a human. Not live, not counted anywhere.
+    async markReview(id, paymentRef) {
+      check(await db.from('bids').update({ status: 'review', payment_ref: paymentRef, review_since: new Date().toISOString() }).eq('id', id).eq('status', 'pending'));
+    },
+    async listReviews() {
+      return check(await db.from('bids').select('*').eq('status', 'review').order('review_since')).map(fromRow);
+    },
+    // Approved: back to pending so settle_bid (with its race checks) runs.
+    async reviewToPending(id) {
+      const rows = check(await db.from('bids').update({ status: 'pending' }).eq('id', id).eq('status', 'review').select('id'));
+      return rows.length > 0;
+    },
+    async rejectReview(id, reason) {
+      const rows = check(
+        await db
+          .from('bids')
+          .update({ status: 'refunded', removed_at: new Date().toISOString(), removed_reason: reason, removed_by: 'admin', video_url: null })
+          .eq('id', id)
+          .eq('status', 'review')
+          .select('id'),
+      );
+      return rows.length > 0;
     },
 
     async setStatus(id, status) {
@@ -305,7 +332,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     // After the file itself is deleted: drop every reference to it, including
     // the archive's snapshot copy.
     async clearImage(id) {
-      check(await db.from('bids').update({ image_url: null }).eq('id', id));
+      check(await db.from('bids').update({ image_url: null, video_url: null }).eq('id', id));
       check(await db.from('throne_legends').update({ image_url: null }).eq('bid_id', id));
     },
 

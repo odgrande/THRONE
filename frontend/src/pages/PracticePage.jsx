@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bot, RotateCcw } from 'lucide-react';
-import { amountToText, api, formatDuration, formatMoney, textToCents } from '../lib/api.js';
+import { amountToText, api, formatDuration, formatMoney, payableMinimum, textToCents } from '../lib/api.js';
 import { adoptRegion, regionInfo } from '../lib/region.js';
 import { minNextBidCents } from '../lib/rules.js';
 import { BOT_SPEEDS, usePracticeSim } from '../lib/practiceSim.js';
@@ -59,7 +59,7 @@ function Arena({ rules }) {
   const [speed, setSpeed] = useState('slow');
   const { sim, playerBid, reset } = usePracticeSim(rules, speed);
   const now = useNow();
-  const minNext = minNextBidCents(sim.throne, now, rules);
+  const minNext = payableMinimum(minNextBidCents(sim.throne, now, rules));
 
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');

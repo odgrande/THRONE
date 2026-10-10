@@ -3,6 +3,7 @@ import { formatMoney, formatMoneyShort } from '../lib/api.js';
 import CountUp from './CountUp.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
+import AdMedia from './AdMedia.jsx';
 import { t } from '../lib/i18n.js';
 
 // Every king gets a frame colour of their own, so a takeover is visible at a
@@ -80,9 +81,9 @@ function AdFace({ throne }) {
   if (throne.removed) return <RemovedFace />;
   return (
     <>
-      {throne.imageUrl ? (
+      {throne.imageUrl || throne.videoUrl ? (
         // Paid ads stay in full color; grayscale is reserved for the fallen in the archive.
-        <img src={throne.imageUrl} alt={throne.tagline || throne.name} className="h-full w-full object-contain" />
+        <AdMedia ad={throne} />
       ) : (
         <div className="relative flex h-full items-center justify-center overflow-hidden bg-bh-red p-8">
           {/* Solid primaries only: translucent shapes on red would mix into off-palette hues. */}

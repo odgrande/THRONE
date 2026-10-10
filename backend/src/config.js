@@ -58,6 +58,8 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
       // Map add-on: business address map on the ad. Charged on top of the bid
       // or booking price and never counted in throne price comparisons.
       mapAddonCents: p('MAP_ADDON_CENTS', defaults.mapAddonCents),
+      // Video add-on: video ads cost more and always wait for a human review.
+      videoAddonCents: p('VIDEO_ADDON_CENTS', defaults.videoAddonCents),
       crownCutoffHourUtc: p('CROWN_CUTOFF_HOUR_UTC', defaults.crownCutoffHourUtc),
       // Render a takeover video only for bids at or above this amount.
       hypeMinCents: p('HYPE_MIN_CENTS', defaults.hypeMinCents),
@@ -67,6 +69,10 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
       boards: {
         b2: { name: process.env.BOARD2_NAME || 'Prince Board', dayPriceCents: p('BOARD2_DAY_CENTS', defaults.board2DayCents) },
         b3: { name: process.env.BOARD3_NAME || 'Herald Board', dayPriceCents: p('BOARD3_DAY_CENTS', defaults.board3DayCents) },
+        // The Spotlight: ten featured spaces, between the Court and the Market.
+        ...Object.fromEntries(
+          Array.from({ length: 10 }, (_, i) => i + 1).map((n) => [`p${n}`, { name: `Spotlight ${n}`, tier: 'spotlight', dayPriceCents: p('SPOTLIGHT_DAY_CENTS', defaults.spotlightDayCents) }]),
+        ),
         // The Market: a wall of 12 small stalls at a price anyone can afford
         // (the Million Dollar Homepage idea, made live).
         ...Object.fromEntries(
@@ -113,6 +119,8 @@ export const config = {
       board2DayCents: 300,
       board3DayCents: 150,
       marketDayCents: 50,
+      videoAddonCents: 500,
+      spotlightDayCents: 100,
       mapAddonCents: 200,
       crownCutoffHourUtc: 0, // midnight UTC
       hypeMinCents: 2000,
@@ -127,6 +135,8 @@ export const config = {
       board2DayCents: 150000, // ₦1,500
       board3DayCents: 80000, // ₦800
       marketDayCents: 30000, // ₦300
+      videoAddonCents: 200000, // ₦2,000
+      spotlightDayCents: 50000, // ₦500
       mapAddonCents: 100000, // ₦1,000
       crownCutoffHourUtc: 23, // midnight in Lagos (WAT = UTC+1)
       hypeMinCents: 1000000, // ₦10,000
@@ -218,7 +228,7 @@ for (const { id, rules: r } of Object.values(config.regions)) {
     r.startingPriceCents,
     ...Object.values(r.boards).map((b) => b.dayPriceCents),
     // Relegation (half price) only ever goes to the Court boards.
-    ...Object.values(r.boards).filter((b) => b.tier !== 'market').map((b) => Math.round((b.dayPriceCents * (100 - r.relegationDiscountPct)) / 100)),
+    ...Object.values(r.boards).filter((b) => !b.tier).map((b) => Math.round((b.dayPriceCents * (100 - r.relegationDiscountPct)) / 100)),
   );
   if (cheapest < MIN_CHARGE[r.currency]) {
     throw new Error(`Region ${id}: every price must be at least ${MIN_CHARGE[r.currency]} minor units (processor minimum charge)`);

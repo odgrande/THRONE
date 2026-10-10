@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { api, formatMoney } from '../lib/api.js';
+import { api, formatMoney, payableMinimum } from '../lib/api.js';
 import { minNextBidCents } from '../lib/rules.js';
 import { t } from '../lib/i18n.js';
 import { hidePreloader } from '../lib/preloader.js';
@@ -14,7 +14,7 @@ import Shape from '../components/Shape.jsx';
 import Billboard, { BillboardStats } from '../components/Billboard.jsx';
 import BidForm from '../components/BidForm.jsx';
 import StatsStrip from '../components/StatsStrip.jsx';
-import Court, { Market } from '../components/Court.jsx';
+import Court, { Market, Spotlight } from '../components/Court.jsx';
 import MapCard from '../components/MapCard.jsx';
 import Showcase from '../components/Showcase.jsx';
 import Ticker from '../components/Ticker.jsx';
@@ -186,7 +186,7 @@ export default function ThronePage() {
     );
   }
 
-  const minNext = minNextBidCents(state.throne, now, state.rules);
+  const minNext = payableMinimum(minNextBidCents(state.throne, now, state.rules));
 
   return (
     <div ref={page} className="min-h-screen overflow-x-clip bg-canvas">
@@ -224,7 +224,21 @@ export default function ThronePage() {
             </h1>
             <LiveAudience online={viewers} visitsToday={audience.visitsToday} />
           </div>
-          <p className="max-w-2xl text-sm font-medium leading-snug text-ink/75 sm:text-base">{t('hero.sub')}</p>
+          <p className="max-w-2xl text-sm font-medium leading-snug text-ink/75 sm:text-base">
+            {(() => {
+              // "{book}" in the sentence becomes a link to the fixed-price boards.
+              const [before, after = ''] = t('hero.sub').split('{book}');
+              return (
+                <>
+                  {before}
+                  <a href="#court" className="font-bold text-ink underline decoration-2 underline-offset-2 hover:text-bh-red">
+                    {t('hero.bookLink')}
+                  </a>
+                  {after}
+                </>
+              );
+            })()}
+          </p>
         </div>
         <div className="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-12">
           {/* Desktop: the billboard column is sticky, so it stays on screen while
@@ -249,7 +263,9 @@ export default function ThronePage() {
 
       <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />
 
-      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
+      <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} />
+
+      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} />
 
       <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
 

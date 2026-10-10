@@ -91,7 +91,7 @@ export function createMemoryStore() {
     kind: 'memory',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl }) {
       stateOf(region);
       const bid = {
         id: randomUUID(),
@@ -111,6 +111,8 @@ export function createMemoryStore() {
         name,
         tagline,
         imageUrl,
+        videoUrl,
+        reviewSince: null,
         targetUrl,
         paymentRef: null,
         clicks: 0,
@@ -177,6 +179,29 @@ export function createMemoryStore() {
       round.takeovers += 1;
       round.endsAt = iso(extendedCrownEndMs(round, now, rules));
       return { status: 'won', bid: { ...bid }, previous: previous ? { ...previous } : null, crowned, retired, round: { ...round } };
+    },
+
+    // Video ads: paid, waiting for a human. Not live, not counted anywhere.
+    async markReview(id, paymentRef) {
+      const bid = bids.get(id);
+      if (!bid || bid.status !== 'pending') return;
+      Object.assign(bid, { status: 'review', paymentRef, reviewSince: new Date().toISOString() });
+    },
+    async listReviews() {
+      return [...bids.values()].filter((b) => b.status === 'review').sort((a, b) => a.reviewSince.localeCompare(b.reviewSince)).map((b) => ({ ...b }));
+    },
+    // Approved: back to pending so the normal settlement (with its race checks) runs.
+    async reviewToPending(id) {
+      const bid = bids.get(id);
+      if (!bid || bid.status !== 'review') return false;
+      bid.status = 'pending';
+      return true;
+    },
+    async rejectReview(id, reason) {
+      const bid = bids.get(id);
+      if (!bid || bid.status !== 'review') return false;
+      Object.assign(bid, { status: 'refunded', removedAt: new Date().toISOString(), removedReason: reason, removedBy: 'admin', videoUrl: null });
+      return true;
     },
 
     async setStatus(id, status) {
@@ -356,7 +381,7 @@ export function createMemoryStore() {
     // the archive's snapshot copy.
     async clearImage(id) {
       const bid = bids.get(id);
-      if (bid) bid.imageUrl = null;
+      if (bid) Object.assign(bid, { imageUrl: null, videoUrl: null });
       for (const l of legends) if (l.bidId === id) l.imageUrl = null;
     },
 

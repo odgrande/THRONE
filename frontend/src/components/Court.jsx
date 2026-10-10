@@ -6,7 +6,8 @@ import { api, formatMoney } from '../lib/api.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { useModal } from '../lib/useModal.js';
 import { needsEmail } from '../lib/region.js';
-import AdFields, { EMPTY_AD, EmailField } from './AdFields.jsx';
+import AdFields, { EMPTY_AD, EmailField, adPayload } from './AdFields.jsx';
+import AdMedia from './AdMedia.jsx';
 import PayStep from './PayStep.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
@@ -38,7 +39,7 @@ function BoardFace({ ad, look }) {
       </div>
     );
   }
-  if (ad.imageUrl) return <img src={ad.imageUrl} alt={ad.tagline || ad.name} className="h-full w-full object-contain" />;
+  if (ad.imageUrl || ad.videoUrl) return <AdMedia ad={ad} />;
   return (
     <div className={`flex h-full items-center justify-center p-5 text-center ${look.accent}`}>
       <p className="display text-2xl sm:text-3xl">{ad.tagline || ad.name}</p>
@@ -120,9 +121,9 @@ function MiniBoard({ board, now, onBook, onMap }) {
 
 const PACKAGE_COPY = { 1: '1 day', 3: '3 days', 7: '7 days' };
 
-function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
-  // Market stalls are too small to show a map: no add-on there.
-  const mapAddonCents = board.tier === 'market' ? 0 : boardMapCents;
+function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCents = 0, onClose }) {
+  // Spotlight and Market tiles are too small to show a map: no add-on there.
+  const mapAddonCents = board.tier && board.tier !== 'court' ? 0 : boardMapCents;
   const dialog = useModal(onClose);
   const [days, setDays] = useState(7);
   const [ad, setAd] = useState(EMPTY_AD);
@@ -141,7 +142,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBooking({ board: board.id, days, ...ad, turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
+      const res = await api.createBooking({ board: board.id, days, ...(await adPayload(ad)), turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -176,6 +177,11 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
                   Your ad runs on the {board.name} from <span className="font-bold">{when(result.startsAt, Date.now())}</span> to{' '}
                   <span className="font-bold">{dayFmt.format(new Date(result.endsAt))}</span>. Guaranteed: nobody can knock it off.
                 </p>
+              </div>
+            ) : result.status === 'review' ? (
+              <div className="border-2 border-ink bg-bh-yellow p-4">
+                <p className="text-xl font-black uppercase tracking-tight">{t('media.reviewTitle')}</p>
+                <p className="mt-1 font-medium leading-relaxed">{t('media.reviewBooking')}</p>
               </div>
             ) : (
               <p className="border-2 border-ink bg-muted p-4 font-medium">Payment received, still confirming. Your booking will appear in a moment.</p>
@@ -223,7 +229,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
               </p>
             </fieldset>
 
-            <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} mapAddonCents={mapAddonCents} />
+            <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} mapAddonCents={mapAddonCents} videoAddonCents={board.tier === 'market' ? 0 : videoAddonCents} />
             {needsEmail() && <EmailField value={email} onChange={setEmail} idPrefix={`book-${board.id}`} />}
 
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
@@ -237,7 +243,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
               ) : waitingForBotCheck ? (
                 'Checking you are human…'
               ) : (
-                `Book ${PACKAGE_COPY[days]} · ${formatMoney(board.prices[days] + (ad.withMap ? mapAddonCents : 0))}`
+                `Book ${PACKAGE_COPY[days]} · ${formatMoney(board.prices[days] + (ad.withMap ? mapAddonCents : 0) + (ad.withVideo && board.tier !== 'market' ? videoAddonCents : 0))}`
               )}
             </button>
             <LegalNote />
@@ -266,11 +272,11 @@ function MapDialog({ ad, addonCents, onClose }) {
   );
 }
 
-export default function Court({ boards, now, mapAddonCents }) {
+export default function Court({ boards, now, mapAddonCents, videoAddonCents }) {
   const [booking, setBooking] = useState(null);
   const [mapFor, setMapFor] = useState(null);
   return (
-    <section className="border-b-4 border-ink bg-canvas" aria-labelledby="court-title">
+    <section id="court" className="scroll-mt-4 border-b-4 border-ink bg-canvas" aria-labelledby="court-title">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -289,7 +295,7 @@ export default function Court({ boards, now, mapAddonCents }) {
           ))}
         </div>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} onClose={() => setBooking(null)} />}
       {mapFor && <MapDialog ad={mapFor} addonCents={mapAddonCents} onClose={() => setMapFor(null)} />}
     </section>
   );
@@ -298,8 +304,9 @@ export default function Court({ boards, now, mapAddonCents }) {
 // One stall on the Market wall: a small square ad with the same markings as
 // the billboard (paid-ad label, report, safety-checked visit link, frame
 // colour), or an open slot to book.
-function Stall({ board, index, onBook }) {
+function Stall({ board, index, onBook, big = false }) {
   const look = lookOf(board.id);
+  const shape = big ? 'aspect-[4/3]' : 'aspect-square';
   const ad = board.current;
   const dayPrice = formatMoney(board.prices[1]);
   const style = { '--i': index };
@@ -309,7 +316,7 @@ function Stall({ board, index, onBook }) {
         type="button"
         onClick={() => onBook(board)}
         style={style}
-        className="court-stall group flex aspect-square flex-col items-center justify-center gap-1 border-2 border-dashed border-ink bg-paper p-2 text-center transition duration-200 hover:-translate-y-0.5 hover:bg-bh-cream"
+        className={`court-stall group flex ${shape} flex-col items-center justify-center gap-1 border-2 border-dashed border-ink bg-paper p-2 text-center transition duration-200 hover:-translate-y-0.5 hover:bg-bh-cream`}
         aria-label={`${t('market.free')}: ${board.name}, ${dayPrice}/day`}
       >
         <Shape kind={look.shape} color={look.shapeColor} className="h-6 w-6 border-2 border-ink transition duration-200 group-hover:scale-110" />
@@ -320,7 +327,7 @@ function Stall({ board, index, onBook }) {
   }
   const accent = accentFor(ad.id);
   return (
-    <article style={style} className="court-stall flex aspect-square flex-col border-2 border-ink bg-paper shadow-hard-xs">
+    <article style={style} className={`court-stall flex ${shape} flex-col border-2 border-ink bg-paper shadow-hard-xs`}>
       <div className={`flex items-center justify-between gap-1 border-b-2 border-ink px-1.5 py-0.5 ${accent.bar}`}>
         <span className="truncate text-[9px] font-black uppercase tracking-wider opacity-90">{ad.removed ? 'Removed' : 'Paid ad'}</span>
         {!ad.removed && <ReportButton bidId={ad.id} adName={ad.name} compact className="shrink-0 opacity-80 hover:opacity-100" />}
@@ -335,8 +342,8 @@ function Stall({ board, index, onBook }) {
           aria-label={`Visit ${ad.name}'s ad (opens a safety check first)`}
           className="group relative block min-h-0 flex-1 overflow-hidden bg-onyx"
         >
-          {ad.imageUrl ? (
-            <img src={ad.imageUrl} alt={ad.tagline || ad.name} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
+          {ad.imageUrl || ad.videoUrl ? (
+            <AdMedia ad={ad} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
           ) : (
             <span className={`flex h-full items-center justify-center p-2 text-center text-xs font-black uppercase leading-tight sm:text-sm ${look.accent}`}>
               {ad.tagline || ad.name}
@@ -357,13 +364,11 @@ function Stall({ board, index, onBook }) {
   );
 }
 
-// The Market: a wall of small, cheap stalls for advertisers on a tight budget.
-// The Million Dollar Homepage idea (2005: a million pixels at $1 each), made
-// live: every stall is a fixed-price, guaranteed-time booking.
-export function Market({ boards, now, mapAddonCents }) {
+// A wall of booking tiles (the Spotlight and the Market share it).
+function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddonCents, videoAddonCents }) {
   const [booking, setBooking] = useState(null);
-  // Stalls pop in (CSS) the first time the wall scrolls into view. Plain CSS:
-  // if the animation never runs, the stalls are simply shown.
+  // Tiles pop in (CSS) the first time the wall scrolls into view. Plain CSS:
+  // if the animation never runs, the tiles are simply shown.
   const wall = useRef(null);
   const [seen, setSeen] = useState(false);
   useEffect(() => {
@@ -377,36 +382,48 @@ export function Market({ boards, now, mapAddonCents }) {
     io.observe(wall.current);
     return () => io.disconnect();
   }, []);
-  const stalls = boards.filter((b) => b.tier === 'market');
-  if (!stalls.length) return null;
-  const dayPrice = formatMoney(Math.min(...stalls.map((b) => b.prices[1])));
-  // "Book any free stall": the one that frees up first.
-  const soonest = [...stalls].sort((a, b) => Date.parse(a.nextFreeAt) - Date.parse(b.nextFreeAt))[0];
+  const tiles = boards.filter((b) => b.tier === tier);
+  if (!tiles.length) return null;
+  const dayPrice = formatMoney(Math.min(...tiles.map((b) => b.prices[1])));
+  // "Book one": the tile that frees up first.
+  const soonest = [...tiles].sort((a, b) => Date.parse(a.nextFreeAt) - Date.parse(b.nextFreeAt))[0];
   return (
-    <section className="border-b-4 border-ink bg-bh-cream" aria-labelledby="market-title">
+    <section className={`border-b-4 border-ink ${bg}`} aria-labelledby={`${id}-title`}>
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="label text-bh-blue">{t('market.kicker')}</p>
-            <h2 id="market-title" className="display mt-2 text-4xl sm:text-6xl">
-              {t('market.title')}
+            <p className="label text-bh-blue">{t(`${copy}.kicker`)}</p>
+            <h2 id={`${id}-title`} className="display mt-2 text-4xl sm:text-6xl">
+              {t(`${copy}.title`)}
             </h2>
           </div>
           <div className="max-w-md space-y-3">
-            <p className="font-medium leading-relaxed text-ink/80">{t('market.body', { price: dayPrice })}</p>
+            <p className="font-medium leading-relaxed text-ink/80">{t(`${copy}.body`, { price: dayPrice })}</p>
             <button type="button" onClick={() => setBooking(soonest)} className="btn-red btn-sm">
-              {t('market.book', { price: dayPrice })}
+              {t(`${copy}.book`, { price: dayPrice })}
             </button>
           </div>
         </div>
-        <div ref={wall} className={`stall-wall mt-10 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6 ${seen ? 'is-in' : ''}`}>
-          {stalls.map((b, i) => (
-            <Stall key={b.id} board={b} index={i} onBook={setBooking} />
+        <div ref={wall} className={`stall-wall mt-10 grid gap-3 ${grid} ${seen ? 'is-in' : ''}`}>
+          {tiles.map((b, i) => (
+            <Stall key={b.id} board={b} index={i} big={big} onBook={setBooking} />
           ))}
         </div>
-        <p className="mt-4 text-sm font-medium text-ink/70">{t('market.howto')}</p>
+        <p className="mt-4 text-sm font-medium text-ink/70">{t(`${copy}.howto`)}</p>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} onClose={() => setBooking(null)} />}
     </section>
   );
+}
+
+// The Spotlight: ten featured spaces, bigger than stalls, cheaper than the Court.
+export function Spotlight(props) {
+  return <TileWall {...props} tier="spotlight" id="spotlight" copy="spot" bg="bg-paper" grid="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" big />;
+}
+
+// The Market: a wall of small, cheap stalls for advertisers on a tight budget.
+// The Million Dollar Homepage idea (2005: a million pixels at $1 each), made
+// live: every stall is a fixed-price, guaranteed-time booking.
+export function Market(props) {
+  return <TileWall {...props} tier="market" id="market" copy="market" bg="bg-bh-cream" grid="grid-cols-3 sm:grid-cols-4 lg:grid-cols-6" />;
 }

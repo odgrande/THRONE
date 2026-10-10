@@ -2,11 +2,13 @@
 // (settle_bid) mirrors minNextBidCents; keep them in sync.
 // frontend/src/lib/rules.js is a copy for the live UI.
 
-// b2/b3: the Court (mid-price boards). m1-m12: the Market, small low-cost stalls
-// for advertisers on a tight budget. All are fixed-price, guaranteed-time bookings.
+// b2/b3: the Court (mid-price boards). p1-p10: the Spotlight, ten featured
+// spaces. m1-m12: the Market, small low-cost stalls for tight budgets.
+// All are fixed-price, guaranteed-time bookings.
 export const COURT_IDS = ['b2', 'b3'];
-export const MARKET_IDS = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'];
-export const BOARD_IDS = [...COURT_IDS, ...MARKET_IDS];
+export const SPOTLIGHT_IDS = Array.from({ length: 10 }, (_, i) => `p${i + 1}`);
+export const MARKET_IDS = Array.from({ length: 12 }, (_, i) => `m${i + 1}`);
+export const BOARD_IDS = [...COURT_IDS, ...SPOTLIGHT_IDS, ...MARKET_IDS];
 export const BOOKING_DAYS = [1, 3, 7];
 // Longer bookings are cheaper per day.
 const PACKAGE_FACTOR = { 1: 1, 3: 2.5, 7: 5 };

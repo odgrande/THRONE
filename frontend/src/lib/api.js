@@ -26,6 +26,9 @@ export const api = {
   getCrowns: () => request('/api/crowns?limit=30'),
   getGeo: () => request('/api/geo'),
   createBid: (bid) => request('/api/bids', { method: 'POST', body: JSON.stringify(bid) }),
+  // Raw MP4/MOV body; returns { videoToken, seconds }.
+  uploadVideo: (file) => request('/api/uploads/video', { method: 'POST', headers: { 'Content-Type': file.type }, body: file }),
+  adminReviews: (token) => request('/api/admin/reviews', { headers: { Authorization: `Bearer ${token}` } }),
   demoPay: (bidId) => request(`/api/bids/${bidId}/demo-pay`, { method: 'POST' }),
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
   createBooking: (booking) => request('/api/bookings', { method: 'POST', body: JSON.stringify(booking) }),
@@ -79,6 +82,13 @@ export const formatClock = (ms) => {
   const ss = String(s % 60).padStart(2, '0');
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
+
+// The smallest amount a visitor can actually pay. Naira is typed in whole
+// naira, so a minimum like ₦5,156.25 (10% of an odd price) becomes ₦5,157;
+// anything below it would be refused by the browser's input or the server.
+export function payableMinimum(cents, region) {
+  return regionInfo(region).currency === 'NGN' ? Math.ceil(cents / 100) * 100 : cents;
+}
 
 // Amount input helpers. Naira is typed in whole naira (rounded up, so a
 // prefilled minimum is never below the real one); dollars keep cents.

@@ -11,6 +11,7 @@ import { createLinkChecker, normalizeTargetUrl } from './services/linkSafety.js'
 import { createRealtime } from './services/realtime.js';
 import { createHypeQueue } from './services/hype.js';
 import { decodeImage, saveImage } from './services/images.js';
+import { createVideoUploads, MAX_VIDEO_BYTES } from './services/videos.js';
 import { createStorage, LOCAL_DIRS } from './services/storage.js';
 import { createTurnstile } from './services/turnstile.js';
 import { newOwnerToken } from './services/owners.js';
@@ -28,7 +29,8 @@ const links = createLinkChecker(config.webRiskApiKey);
 const turnstile = createTurnstile(config.turnstileSecret);
 const realtime = createRealtime();
 const hype = createHypeQueue({ store });
-const game = createGame({ store, payments, realtime, hype, regions: config.regions });
+const game = createGame({ store, payments, realtime, hype, regions: config.regions, storage });
+const videos = createVideoUploads({ storage, secret: config.reports.ipHashSalt });
 
 // Which region a request is about. An explicit choice (?region= or the
 // X-Region header) wins; otherwise visitors in Nigeria get the Naira throne,
@@ -145,6 +147,7 @@ if (storage.kind === 'local') {
     }),
   );
   app.use('/renders', express.static(LOCAL_DIRS.renders, { maxAge: '1d' }));
+  app.use('/videos', express.static(LOCAL_DIRS.videos, { immutable: true, maxAge: '365d' }));
 }
 
 app.get('/api/health', (_req, res) =>
@@ -233,8 +236,9 @@ if (config.adminToken) {
       if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
       await store.removeBid(bid.id, reason);
       let purged = false;
-      if (req.body?.purgeMedia === true && bid.imageUrl) {
-        purged = await storage.remove(bid.imageUrl);
+      if (req.body?.purgeMedia === true && (bid.imageUrl || bid.videoUrl)) {
+        if (bid.imageUrl) purged = await storage.remove(bid.imageUrl);
+        if (bid.videoUrl) purged = (await storage.remove(bid.videoUrl)) || purged;
         await store.clearImage(bid.id);
       }
       console.log(`[admin] removed ad ${bid.id} (${reason})${purged ? ' + media purged' : ''}`);
@@ -258,6 +262,51 @@ if (config.adminToken) {
     withBid(async (_req, res, bid) => {
       await store.dismissReports(bid.id);
       res.json({ ok: true });
+    }),
+  );
+
+  // --- Video review: paid video ads wait here until a person approves them ---
+  admin.get('/reviews', async (_req, res, next) => {
+    try {
+      const items = (await store.listReviews()).map((b) => ({
+        id: b.id,
+        region: b.region,
+        board: b.board,
+        boardName: b.board === 'throne' ? 'The Throne' : game.rulesOf(b.region).boards[b.board]?.name,
+        name: b.name,
+        tagline: b.tagline,
+        targetUrl: b.targetUrl,
+        imageUrl: b.imageUrl,
+        videoUrl: b.videoUrl,
+        amountCents: b.amountCents,
+        addonCents: b.addonCents,
+        currency: game.rulesOf(b.region).currency,
+        days: b.days,
+        reviewSince: b.reviewSince,
+      }));
+      res.json({ items });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  admin.post(
+    '/bids/:id/approve',
+    withBid(async (_req, res, bid) => {
+      const result = await game.approveVideo(bid.id);
+      console.log(`[admin] approved video ad ${bid.id}: ${result.status}`);
+      res.json({ status: result.status });
+    }),
+  );
+
+  admin.post(
+    '/bids/:id/reject',
+    withBid(async (req, res, bid) => {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
+      const result = await game.rejectVideo(bid.id, reason);
+      console.log(`[admin] rejected video ad ${bid.id} (${reason}): ${result.status}`);
+      res.json({ status: result.status });
     }),
   );
 
@@ -371,8 +420,12 @@ app.post('/api/reports', reportLimiter, async (req, res, next) => {
 const bidLimiter = limiter(config.bidsPerMinute, 'Too many bid attempts. Wait a minute and try again.');
 
 // Prices in the region's own currency, for error messages.
+// Naira is shown in whole naira, rounded UP: a ₦5,156.25 minimum reads ₦5,157,
+// the smallest amount a buyer can actually pay.
 const money = (cents, rules) =>
-  new Intl.NumberFormat(rules.locale, { style: 'currency', currency: rules.currency, maximumFractionDigits: rules.currency === 'NGN' ? 0 : 2 }).format(cents / 100);
+  new Intl.NumberFormat(rules.locale, { style: 'currency', currency: rules.currency, maximumFractionDigits: rules.currency === 'NGN' ? 0 : 2 }).format(
+    rules.currency === 'NGN' ? Math.ceil(cents / 100) : cents / 100,
+  );
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
@@ -404,8 +457,23 @@ function validateBid(body, rules) {
     if (address.length < 5 || address.length > 160) return { error: 'Business address must be 5-160 characters.' };
     addonCents = rules.mapAddonCents;
   }
-  return { name, tagline, targetUrl, amountCents, address, addonCents };
+
+  // Video add-on: the token must be one this server signed at upload.
+  let videoName = null;
+  if (body.withVideo === true) {
+    videoName = videos.nameFor(body.videoToken);
+    if (!videoName) return { error: 'Upload your video again.' };
+    if (!Array.isArray(body.videoFrames) || body.videoFrames.length < 1 || body.videoFrames.length > 4) {
+      return { error: 'Video preview frames are missing. Choose the video again.' };
+    }
+    addonCents += rules.videoAddonCents;
+  }
+  return { name, tagline, targetUrl, amountCents, address, addonCents, videoName };
 }
+
+// Boards that can carry a video: the Throne, the Court and the Spotlight
+// (Market stalls stay picture-only and cheap).
+const videoAllowed = (board, rules) => board === 'throne' || !rules.boards[board]?.tier || rules.boards[board].tier === 'spotlight';
 
 // Paystack needs the buyer's email to send a receipt. We hand it to Paystack
 // and never store it.
@@ -443,6 +511,16 @@ async function requireHuman(req) {
 // never charged.
 async function vetAd(req, input) {
   let image = null;
+  // Video ads: AI screens sampled frames now (blocked = never charged); a
+  // person still reviews the whole video after payment.
+  let frames = [];
+  if (input.videoName) {
+    try {
+      frames = req.body.videoFrames.map((f) => decodeImage(f));
+    } catch (err) {
+      throw new Reject(400, err.message);
+    }
+  }
   if (req.body.image) {
     try {
       image = decodeImage(req.body.image);
@@ -462,16 +540,25 @@ async function vetAd(req, input) {
 
   const verdict = await moderation.check({
     text: [input.name, input.tagline, input.targetUrl, input.address].filter(Boolean).join('\n'),
-    imageDataUrl: image?.dataUrl,
+    imageDataUrl: image?.dataUrl ?? frames[0]?.dataUrl,
   });
   if (!verdict.ok) throw new Reject(422, 'This ad breaks the content rules, so it was blocked. You have not been charged.');
+  for (const frame of frames.slice(1)) {
+    if (!(await moderation.check({ text: '', imageDataUrl: frame.dataUrl })).ok) {
+      throw new Reject(422, 'This video breaks the content rules, so it was blocked. You have not been charged.');
+    }
+  }
 
-  return image ? saveImage(image, storage) : null;
+  // A video's first frame doubles as its poster (shown while it loads).
+  const poster = image ?? frames[0];
+  return poster ? saveImage(poster, storage) : null;
 }
+
+const videoUrlOf = (input) => (input.videoName ? storage.urlFor('videos', input.videoName) : null);
 
 // Creates the ad row and its payment. The owner code is returned exactly
 // once; the browser keeps it to prove ownership later (e.g. relegation).
-async function createPaidAd(res, fields, description, email) {
+async function createPaidAd(res, { videoName: _videoName, ...fields }, description, email) {
   const owner = newOwnerToken();
   const bid = await store.createBid({ ...fields, ownerHash: owner.hash });
   // The charge is the ad price plus any add-on; amountCents alone is the bid.
@@ -488,6 +575,8 @@ async function createPaidAd(res, fields, description, email) {
     // Stripe: clientSecret. Paystack: accessCode (inline popup) + authorizationUrl (fallback redirect).
     ...checkout,
     ownerToken: owner.token,
+    // Video ads go to a person for review after payment, then live.
+    needsReview: Boolean(bid.videoUrl && !bid.relegatedFrom),
   });
 }
 
@@ -499,6 +588,24 @@ const handle = (fn) => async (req, res, next) => {
     next(err);
   }
 };
+
+// --- Video upload (before the ad is created) ---
+// Raw MP4/MOV body, capped in size and length; returns a signed token the bid
+// form sends back. Strictly rate-limited: uploads cost storage.
+const uploadLimiter = limiter(4, 'Too many uploads. Wait a minute and try again.');
+app.post(
+  '/api/uploads/video',
+  uploadLimiter,
+  express.raw({ type: ['video/mp4', 'video/quicktime'], limit: MAX_VIDEO_BYTES + 1024 }),
+  handle(async (req, res) => {
+    try {
+      const { token, seconds } = await videos.save(req.body);
+      res.status(201).json({ videoToken: token, seconds });
+    } catch (err) {
+      throw new Reject(400, err.message);
+    }
+  }),
+);
 
 // --- The Throne: auction ---
 app.post(
@@ -520,7 +627,7 @@ app.post(
     const imageUrl = await vetAd(req, input);
     await createPaidAd(
       res,
-      { ...input, region, board: 'throne', imageUrl, shieldSeconds: game.shieldSecondsFor(region, input.amountCents) },
+      { ...input, region, board: 'throne', imageUrl, videoUrl: videoUrlOf(input), shieldSeconds: game.shieldSecondsFor(region, input.amountCents) },
       `Throne bid by ${input.name}`,
       email,
     );
@@ -539,9 +646,10 @@ app.post(
     const region = regionOf(req);
     const rules = game.rulesOf(region);
     const amountCents = bookingPriceCents(board, days, rules);
-    // Market stalls are too small to show a map, so they never sell the add-on.
-    const isStall = rules.boards[board].tier === 'market';
-    if (isStall && req.body?.withMap) throw new Reject(400, 'Market stalls do not include a map.');
+    // Spotlight and Market tiles are too small to show a map, so they never sell the add-on.
+    const isStall = Boolean(rules.boards[board].tier);
+    if (isStall && req.body?.withMap) throw new Reject(400, 'Spotlight spaces and Market stalls do not include a map.');
+    if (req.body?.withVideo && !videoAllowed(board, rules)) throw new Reject(400, 'Market stalls take a picture, not a video.');
     const input = validateBid({ ...req.body, amountCents }, rules);
     if (input.error) throw new Reject(400, input.error);
     const email = paymentEmail(req, region);
@@ -551,7 +659,7 @@ app.post(
     if (tooFar) throw new Reject(409, `This ${isStall ? 'stall' : 'board'} is booked more than ${rules.maxBookingAheadDays} days ahead. Try another one.`);
 
     const imageUrl = await vetAd(req, input);
-    await createPaidAd(res, { ...input, region, board, days, imageUrl }, `${rules.boards[board].name}: ${days} day(s) for ${input.name}`, email);
+    await createPaidAd(res, { ...input, region, board, days, imageUrl, videoUrl: videoUrlOf(input) }, `${rules.boards[board].name}: ${days} day(s) for ${input.name}`, email);
   }),
 );
 
@@ -595,6 +703,7 @@ app.post(
         name: bid.name,
         tagline: bid.tagline,
         imageUrl: bid.imageUrl,
+        videoUrl: bid.videoUrl ?? null,
         targetUrl: bid.targetUrl,
         // The map was paid for with the original ad: it travels with it, free.
         address: bid.addonCents > 0 ? bid.address : null,
@@ -646,6 +755,7 @@ setInterval(async () => {
   tickRunning = true;
   try {
     await game.tick();
+    await game.expireReviews();
   } catch (err) {
     console.error('[throne] tick failed', err);
   } finally {

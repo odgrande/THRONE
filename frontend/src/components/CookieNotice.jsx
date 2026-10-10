@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Cookie, X } from 'lucide-react';
+import { ShieldAlert, X } from 'lucide-react';
 import { t } from '../lib/i18n.js';
 
-const KEY = 'throne.cookieNotice';
+// Bumped when the notice gains the advertiser disclaimer, so everyone sees it once.
+const KEY = 'throne.notice.v2';
 const seen = () => {
   try {
     return localStorage.getItem(KEY) === '1';
@@ -11,10 +12,11 @@ const seen = () => {
   }
 };
 
-// A small, honest notice. The site sets no tracking or advertising cookies;
-// it only keeps a few functional items in the browser. That needs a notice,
-// not a consent wall. If analytics or ad-tracking scripts are ever added, this
-// must become a real opt-in that blocks them until the visitor agrees.
+// One small notice, shown once per browser: who the ads come from (we are not
+// affiliated with any advertiser), and that we set no tracking cookies.
+// The site only keeps a few functional items in the browser. That needs a
+// notice, not a consent wall. If analytics or ad-tracking scripts are ever
+// added, this must become a real opt-in that blocks them until the visitor agrees.
 export default function CookieNotice() {
   const [open, setOpen] = useState(() => !seen());
   if (!open) return null;
@@ -30,18 +32,23 @@ export default function CookieNotice() {
 
   return (
     <aside
-      aria-label="Cookie notice"
+      aria-label={t('notice.label')}
       className="fixed bottom-4 left-4 right-4 z-40 border-2 border-ink bg-paper p-4 shadow-hard-sm sm:right-auto sm:max-w-sm"
     >
       <div className="flex items-start gap-3">
-        <Cookie className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />
-        <p className="text-sm font-medium leading-relaxed">
-          <span className="font-bold">{t('cookie.title')}</span> {t('cookie.body')}{' '}
-          <a href="/legal#privacy" className="font-bold underline hover:text-bh-red">
-            {t('cookie.details')}
-          </a>
-        </p>
-        <button type="button" onClick={dismiss} aria-label="Dismiss cookie notice" className="shrink-0 hover:text-bh-red">
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-bh-red" strokeWidth={2.5} />
+        <div className="space-y-2 text-sm font-medium leading-relaxed">
+          <p>
+            <span className="font-bold">{t('notice.title')}</span> {t('notice.body')}
+          </p>
+          <p className="text-ink/70">
+            <span className="font-bold text-ink">{t('cookie.title')}</span> {t('cookie.body')}{' '}
+            <a href="/legal#terms" className="font-bold text-ink underline hover:text-bh-red">
+              {t('cookie.details')}
+            </a>
+          </p>
+        </div>
+        <button type="button" onClick={dismiss} aria-label={t('notice.dismiss')} className="shrink-0 hover:text-bh-red">
           <X className="h-4 w-4" strokeWidth={3} />
         </button>
       </div>

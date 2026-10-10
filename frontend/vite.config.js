@@ -13,6 +13,8 @@ function buildCsp(apiOrigin, mediaOrigin) {
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob:${api}${media} https://*.paystack.co https://*.paystack.com`,
     `connect-src 'self'${api} https://api.stripe.com https://api.paystack.co`,
+    // Video ads stream from the API (dev) or the media bucket; blob: is the local preview.
+    `media-src 'self' blob:${api}${media}`,
     // Google Maps Embed (map add-on), loaded only when a visitor clicks "Show map".
     'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://www.google.com https://checkout.paystack.com',
     "object-src 'none'",

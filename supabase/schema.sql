@@ -7,7 +7,8 @@
 --
 -- Three boards per region:
 --   throne  The big billboard. Auction: outbid the king. Max term, then retire.
---   b2, b3  Smaller boards. Fixed-price bookings with guaranteed time (1/3/7 days),
+--   b2, b3  Smaller boards (the Court), p1-p10 (the Spotlight), m1-m12 (the
+--           Market). Fixed-price bookings with guaranteed time (1/3/7 days),
 --           queued one after another. Never knocked off.
 
 -- Every ad: throne bids and board bookings alike. Reports, takedowns, clicks
@@ -15,7 +16,7 @@
 create table if not exists bids (
   id             uuid primary key default gen_random_uuid(),
   region         text not null default 'global' check (region in ('global', 'ng')),
-  board          text not null default 'throne' check (board in ('throne', 'b2', 'b3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12')),
+  board          text not null default 'throne' check (board in ('throne', 'b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12')),
   status         text not null default 'pending'
                  check (status in ('pending', 'won', 'outbid', 'void', 'refunded')),
   amount_cents   integer not null check (amount_cents > 0),
@@ -80,19 +81,26 @@ insert into throne (region) values ('global'), ('ng') on conflict do nothing;
 -- while a booking is placed, so two payments can never get the same days.
 create table if not exists boards (
   region        text not null check (region in ('global', 'ng')),
-  id            text not null check (id in ('b2', 'b3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12')),
+  id            text not null check (id in ('b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12')),
   booked_until  timestamptz,
   primary key (region, id)
 );
+-- Video ads: stored file, and when the paid ad started waiting for review.
+alter table bids add column if not exists video_url text;
+alter table bids add column if not exists review_since timestamptz;
+-- 'review': paid video ad waiting for a human; never live until approved.
+alter table bids drop constraint if exists bids_status_check;
+alter table bids add constraint bids_status_check check (status in ('pending', 'review', 'won', 'outbid', 'void', 'refunded'));
+
 -- Upgrade path for databases created before the Market stalls existed.
 alter table bids drop constraint if exists bids_board_check;
-alter table bids add constraint bids_board_check check (board in ('throne', 'b2', 'b3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'));
+alter table bids add constraint bids_board_check check (board in ('throne', 'b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'));
 alter table boards drop constraint if exists boards_id_check;
-alter table boards add constraint boards_id_check check (id in ('b2', 'b3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'));
+alter table boards add constraint boards_id_check check (id in ('b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'));
 insert into boards (region, id)
 select r, b
   from unnest(array['global', 'ng']) as r,
-       unnest(array['b2', 'b3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12']) as b
+       unnest(array['b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12']) as b
 on conflict do nothing;
 
 -- King of the Day: one row per round. Whoever holds the throne when a round

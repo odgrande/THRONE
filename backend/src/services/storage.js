@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 export const LOCAL_DIRS = {
   uploads: path.resolve('uploads'),
   renders: path.resolve('renders'),
+  videos: path.resolve('videos'),
 };
 
 export function createStorage({ supabase, storageBucket, publicUrl }) {
@@ -24,6 +25,7 @@ export function createStorage({ supabase, storageBucket, publicUrl }) {
         if (error) throw new Error(`Storage upload failed: ${error.message}`);
         return bucket.getPublicUrl(key).data.publicUrl;
       },
+      urlFor: (folder, name) => bucket.getPublicUrl(`${folder}/${name}`).data.publicUrl,
       // Deletes a file by its public URL (…/object/public/<bucket>/<key>).
       async remove(url) {
         const marker = `/object/public/${storageBucket}/`;
@@ -45,8 +47,9 @@ export function createStorage({ supabase, storageBucket, publicUrl }) {
       await writeFile(path.join(dir, name), buffer);
       return `${publicUrl}/${folder}/${name}`;
     },
+    urlFor: (folder, name) => `${publicUrl}/${folder}/${name}`,
     async remove(url) {
-      const match = url && /\/(uploads|renders)\/([\w.-]+)$/.exec(url);
+      const match = url && /\/(uploads|renders|videos)\/([\w.-]+)$/.exec(url);
       if (!match) return false;
       await rm(path.join(LOCAL_DIRS[match[1]], match[2]), { force: true });
       return true;

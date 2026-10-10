@@ -21,7 +21,7 @@ export function maskRemoved(entry) {
 // Core rules: the throne auction, board bookings, relegation, King of the Day.
 // Every region (global $, ng ₦) is a separate game with its own rules; nothing
 // is ever compared across regions. `regions` is config.regions.
-export function createGame({ store, payments, realtime, hype, regions }) {
+export function createGame({ store, payments, realtime, hype, regions, storage = null }) {
   const REGION_IDS = Object.keys(regions);
   const rulesOf = (region) => {
     const r = regions[region];
@@ -40,6 +40,7 @@ export function createGame({ store, payments, realtime, hype, regions }) {
       name: b.name,
       tagline: b.tagline,
       imageUrl: b.imageUrl,
+      videoUrl: b.videoUrl ?? null,
       targetUrl: b.targetUrl,
       amountCents: b.amountCents,
       // Only ads that paid for the map add-on carry an address.
@@ -187,10 +188,19 @@ export function createGame({ store, payments, realtime, hype, regions }) {
   // --- Settlement ---
   // Called once a payment has cleared (processor webhook or demo button).
   // Idempotent: a retried webhook for an already-settled ad is a no-op.
-  async function settle(bidId, paymentRef) {
+  async function settle(bidId, paymentRef, { approved = false } = {}) {
     const pending = await store.getBid(bidId);
     if (!pending) return { status: 'missing' };
     const region = pending.region;
+
+    // Video ads never go live on payment alone: they wait for a person to
+    // approve them (approveVideo). A relegated ad was already approved.
+    const needsReview = pending.videoUrl && !pending.relegatedFrom && !approved;
+    if (needsReview && pending.status === 'pending') {
+      await store.markReview(bidId, paymentRef);
+      return { status: 'review' };
+    }
+    if (pending.status === 'review' && !approved) return { status: 'review' };
     const result = await store.settleBid(bidId, paymentRef, rulesOf(region));
     await announce(region, result);
     if (result.round) dueAt[region] = Date.parse(result.round.endsAt);
@@ -229,7 +239,48 @@ export function createGame({ store, payments, realtime, hype, regions }) {
     return result;
   }
 
+  // --- Video review (admin) ---
+  async function approveVideo(bidId) {
+    const bid = await store.getBid(bidId);
+    if (!bid || bid.status !== 'review') return { status: bid?.status ?? 'missing' };
+    if (!(await store.reviewToPending(bidId))) return { status: 'changed' };
+    // Normal settlement from here: a throne bid that has since been outbid is
+    // refunded in full, a booking takes the next free slot.
+    return settle(bidId, bid.paymentRef, { approved: true });
+  }
+
+  async function rejectVideo(bidId, reason) {
+    const bid = await store.getBid(bidId);
+    if (!bid || bid.status !== 'review') return { status: bid?.status ?? 'missing' };
+    if (!(await store.rejectReview(bidId, reason))) return { status: 'changed' };
+    try {
+      await payments.refund(bid.region, bid.paymentRef, bid.amountCents + (bid.addonCents ?? 0), `rejected-${bidId}`);
+    } catch (err) {
+      console.error(`[game] REFUND FAILED for rejected video ad ${bidId}; refund manually.`, err);
+    }
+    // The rejected file is deleted; the poster image stays for the record.
+    if (storage && bid.videoUrl) await storage.remove(bid.videoUrl).catch((err) => console.error('[game] video delete failed', err));
+    return { status: 'refunded' };
+  }
+
+  // Paid video ads nobody reviewed within the window are refunded, so a
+  // buyer's money is never stuck.
+  const REVIEW_WINDOW_MS = 24 * 3600_000;
+  let reviewsCheckedAt = 0;
+  async function expireReviews() {
+    if (Date.now() - reviewsCheckedAt < 60_000) return;
+    reviewsCheckedAt = Date.now();
+    for (const bid of await store.listReviews()) {
+      if (Date.now() - Date.parse(bid.reviewSince) > REVIEW_WINDOW_MS) {
+        await rejectVideo(bid.id, 'Not reviewed within 24 hours (automatic refund)');
+      }
+    }
+  }
+
   return {
+    approveVideo,
+    rejectVideo,
+    expireReviews,
     getState,
     getMinNextBidCents,
     bookingStartEstimate,
