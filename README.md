@@ -76,7 +76,7 @@ The throne never closes, but every day has a champion. Whoever holds the throne 
 - **Businesses we've helped:** live counts of businesses and ads, a **Top advertisers** leaderboard (total spent per business, grouped by name), and a logo wall that shows **labelled example brands** until real ones are added with permission (`frontend/src/data/showcase.js`).
 - **Sound:** synthesized effects (clicks, takeover stamp, dethrone crash, crowning, bookings), voice announcements and generative background music. Off by default, toggles on every page, remembered per browser.
 - **Motion:** GSAP (hero reveal, takeover stamp, count-ups, marquee, scroll entrances that never hide content). Respects "reduce motion".
-- **Light/dark mode:** follows the device on first visit, with a toggle in the header. Colours are CSS variables (`frontend/src/index.css`); yellow surfaces stay light in both themes.
+- **Light/dark mode:** light (white) by default for everyone; visitors can switch to dark with the header toggle, and the choice is remembered. Colours are CSS variables (`frontend/src/index.css`); yellow surfaces stay light in both themes.
 - **Cookie notice:** small and honest. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
 
 ## Reports, takedowns and legal pages

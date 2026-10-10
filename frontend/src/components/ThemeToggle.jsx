@@ -4,8 +4,8 @@ import { Moon, Sun } from 'lucide-react';
 const KEY = 'throne.theme';
 const isDark = () => document.documentElement.classList.contains('dark');
 
-// Light/dark switch. The first visit follows the device setting (public/theme.js);
-// a click saves an explicit choice.
+// Light/dark switch. The site is light by default (public/theme.js); a click
+// saves the visitor's choice.
 export default function ThemeToggle() {
   const [dark, setDark] = useState(isDark);
 
