@@ -5,7 +5,14 @@ import { loadFont } from '@remotion/google-fonts/Outfit';
 const C = { ink: '#121212', canvas: '#F0F0F0', red: '#D02020', blue: '#1040C0', yellow: '#F0C020', white: '#FFFFFF' };
 const { fontFamily } = loadFont('normal', { weights: ['700', '900'], subsets: ['latin'] });
 
-const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+// Prices in the ad's own currency ($ or ₦). Whole naira read better on video.
+let currentFormat = { currency: 'USD', locale: 'en-US' };
+const money = (cents) =>
+  new Intl.NumberFormat(currentFormat.locale, {
+    style: 'currency',
+    currency: currentFormat.currency,
+    maximumFractionDigits: currentFormat.currency === 'NGN' ? 0 : 2,
+  }).format(cents / 100);
 const display = { fontFamily, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.04em', lineHeight: 0.9 };
 const label = { fontFamily, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 34 };
 const box = (bg) => ({ background: bg, border: `10px solid ${C.ink}`, boxShadow: `20px 20px 0 0 ${C.ink}` });
@@ -110,6 +117,7 @@ function Price({ amountCents, previousAmountCents, siteLabel }) {
 }
 
 export function Takeover(props) {
+  currentFormat = { currency: props.currency ?? 'USD', locale: props.locale ?? 'en-US' };
   return (
     <AbsoluteFill style={{ background: C.canvas }}>
       <Sequence durationInFrames={60}>

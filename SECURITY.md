@@ -9,12 +9,13 @@ This maps each threat to where it is handled. **Code** items ship in this repo.
 | Defence | Where |
 |---|---|
 | The browser never writes ad state. Only `settle_bid()` changes the throne, and only the backend calls it | Code: `game.js`, `schema.sql` |
-| Production settlement only happens from a Stripe webhook whose signature passes `stripe.webhooks.constructEvent` | Code: `server.js` |
+| Production settlement only happens from a signed processor webhook: Stripe (`constructEvent`), or Paystack (HMAC-SHA512 of the raw body, compared in constant time, **then** `GET /transaction/verify` must say `success` with the exact amount and currency we charged) | Code: `server.js`, `payments.js` |
+| A signed webhook only settles an ad in **its own region**: `settle_bid()` refuses rules from another region, and every lock and update is scoped by region | Code: `schema.sql` |
+| The buyer email Paystack requires is passed through and never stored | Code: `server.js` |
 | The amount comes from our own `bids` row, never from the client or Stripe metadata | Code |
 | RLS on, with no policies, on every table, and SQL functions revoked from `anon`/`authenticated`. A leaked anon key can't read or write anything | Code: `schema.sql` |
-| `NODE_ENV=production` refuses to boot without Stripe, so the demo-pay route can't exist in prod | Code: `config.js` |
+| `NODE_ENV=production` refuses to boot if any edition is on demo payments (unless `DEPLOY_ENV=staging`), and the demo-pay route only works for ads whose region is on demo | Code: `config.js`, `server.js` |
 | Concurrent payments are serialized by a row lock. The loser is auto-refunded | Code: `schema.sql` |
-| Throne Credits: the wallet code is 256 random bits, and the DB stores only its SHA-256 hash. Spending happens inside `settle_bid()` with a `balance >= amount` check, so a double-spend is voided and refunded, never charged twice. The balance can't go negative (CHECK constraint) | Code: `wallets.js`, `schema.sql` |
 
 ## 2. Card testing and chargebacks
 
@@ -46,7 +47,7 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 | Every ad click goes through the `/go/:id` warning page showing the real destination host | Code: `GoPage.jsx` |
 | Outbound links use `rel="noopener noreferrer"`. React escapes all ad text, and no `dangerouslySetInnerHTML` is used | Code |
 | Images are re-hosted (can't be swapped after moderation), magic-byte checked, no SVG, served with `CSP: sandbox` + `nosniff` | Code: `images.js`, `server.js` |
-| Strict CSP: only our scripts + Stripe. `frame-ancestors 'none'` + `X-Frame-Options: DENY` block clickjacking | Code: `vite.config.js` emits `dist/_headers` |
+| Strict CSP: only our scripts, Stripe and Paystack (`js.paystack.co`, `checkout.paystack.com`). `frame-ancestors 'none'` + `X-Frame-Options: DENY` block clickjacking | Code: `vite.config.js` emits `dist/_headers` |
 | Helmet security headers on the API | Code: `server.js` |
 
 ## 4. DoS on the auction
@@ -59,7 +60,7 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 | Cloudflare proxy (orange cloud) on frontend and API. WAF managed rules on. Rate-limit rule on `POST /api/bids`. Bot Fight Mode on. "Under Attack" mode for emergencies | **Config: Cloudflare** |
 | Set `TRUST_PROXY` to the real hop count (Cloudflare → host = usually 2) so limits key on the visitor IP, not Cloudflare's | **Config: env** |
 | Origin lock: the API rejects (403) any request without the `X-Origin-Secret` header that only Cloudflare adds, so `*.onrender.com` can't be used to bypass the WAF or spoof client IPs. Required in production | Code: `server.js`. **Config: Cloudflare Transform Rule** (DEPLOY.md step 6) |
-| Exclude `/api/webhooks/stripe` from WAF challenges (Stripe can't solve them) | **Config: Cloudflare** |
+| Exclude `/api/webhooks/stripe` and `/api/webhooks/paystack` from WAF challenges (processors can't solve them) | **Config: Cloudflare** |
 
 ## 5. Admin access
 
@@ -84,7 +85,7 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 Write that procedure down before launch.
 
 ## Known gaps before launch
-- The legal pages (`/legal`) are **drafts**. Fill in the placeholders and have a lawyer review them.
+- The legal pages (`/legal`) are reviewed and live. A few fields (company name, address, governing law, political ads, global processor, data-rights clause) still need filling in `LegalPage.jsx`.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
 - The schema uses `create table if not exists`. Once a live database exists, later changes need real migrations (e.g. Supabase CLI migrations).
 - Click counts are best-effort and can be inflated. Label them as approximate to advertisers.

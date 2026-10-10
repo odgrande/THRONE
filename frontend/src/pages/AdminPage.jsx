@@ -213,28 +213,12 @@ function Dashboard({ health: h, error }) {
         {error && <p className="mt-4 text-sm font-bold">Last refresh failed: {error}</p>}
       </section>
 
-      <section className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Ad revenue" value={formatMoney(h.grossCents)} note={`${h.wonBids.toLocaleString()} paid ads`} />
-        <Metric label="Net after fees" value={formatMoney(h.netCents)} note="Minus estimated card fees" tone="bg-bh-yellow" />
-        <Metric label="The Throne" value={formatMoney(h.throneGrossCents)} note="Auction revenue" tone="bg-bh-blue text-white" />
-        <Metric label="The Court" value={formatMoney(h.boardsGrossCents)} note={`${h.bookings} bookings · ${h.relegations} relegations`} tone="bg-onyx text-white" />
-      </section>
+      {/* One block per region, each in its own currency: never add naira to dollars. */}
+      {Object.entries(h.regions).map(([id, r]) => (
+        <RegionFinancials key={id} id={id} r={r} />
+      ))}
 
       <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="card">
-          <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Payments</h2>
-          <dl className="divide-y-2 divide-ink">
-            <Row label="Map add-ons" hint="Included in ad revenue" value={formatMoney(h.addonCents ?? 0)} />
-            <Row label="Est. card fees" hint="30¢ + 2.9% per real charge, incl. refunded ones" value={`−${formatMoney(h.estFeesCents)}`} />
-            <Row label="Refunded" hint="Throne race losers and duplicate relegations; the fee is kept" value={formatMoney(h.refundedCents)} />
-            <Row
-              label="Processor balance"
-              hint={h.stripeBalance ? 'Available + pending; bank payouts reduce it' : 'Test site: payments are simulated'}
-              value={h.stripeBalance ? `${formatMoney(h.stripeBalance.availableCents)} + ${formatMoney(h.stripeBalance.pendingCents)}` : '—'}
-            />
-          </dl>
-        </div>
-
         <div className="card">
           <h2 className="border-b-2 border-ink px-5 py-4 text-xl font-black uppercase tracking-tight lg:border-b-4">Operations</h2>
           <dl className="divide-y-2 divide-ink">
@@ -249,5 +233,36 @@ function Dashboard({ health: h, error }) {
         dashboard is the source of truth.
       </p>
     </>
+  );
+}
+
+const FEE_HINT = { stripe: '30¢ + 2.9% per real charge', paystack: '1.5% + ₦100 (over ₦2,500), capped at ₦2,000', demo: 'Simulated payments' };
+
+function RegionFinancials({ id, r }) {
+  const money = (cents) => formatMoney(cents ?? 0, id);
+  return (
+    <section className="mt-10" aria-label={`${r.name} edition`}>
+      <h2 className="label mb-3">
+        {r.name} · {r.currency} · {r.processor}
+      </h2>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Ad revenue" value={money(r.grossCents)} note={`${(r.wonBids ?? 0).toLocaleString()} paid ads`} />
+        <Metric label="Net after fees" value={money(r.netCents)} note="Minus estimated processor fees" tone="bg-bh-yellow" />
+        <Metric label="The Throne" value={money(r.throneGrossCents)} note="Auction revenue" tone="bg-bh-blue text-white" />
+        <Metric label="The Court" value={money(r.boardsGrossCents)} note={`${r.bookings ?? 0} bookings · ${r.relegations ?? 0} relegations`} tone="bg-onyx text-white" />
+      </div>
+      <div className="card mt-6">
+        <dl className="divide-y-2 divide-ink">
+          <Row label="Map add-ons" hint="Included in ad revenue" value={money(r.addonCents)} />
+          <Row label="Est. processor fees" hint={`${FEE_HINT[r.processor] ?? ''}, incl. refunded charges`} value={`−${money(r.estFeesCents)}`} />
+          <Row label="Refunded" hint="Throne race losers and duplicate relegations; the fee is kept" value={money(r.refundedCents)} />
+          <Row
+            label="Processor balance"
+            hint={r.balance ? 'Available + pending; bank payouts reduce it' : r.processor === 'demo' ? 'Test site: payments are simulated' : 'Unavailable'}
+            value={r.balance ? `${money(r.balance.availableCents)} + ${money(r.balance.pendingCents)}` : '—'}
+          />
+        </dl>
+      </div>
+    </section>
   );
 }

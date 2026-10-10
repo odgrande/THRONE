@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { BOARD_IDS } from '../rules.js';
 import { extendedCrownEndMs, minNextBidCents, nextCrownCutoffMs } from '../rules.js';
 
 const LEGEND_SORTS = {
@@ -7,26 +8,37 @@ const LEGEND_SORTS = {
   priciest: (a, b) => b.amountCents - a.amountCents,
 };
 
+const REGIONS = ['global', 'ng'];
 const iso = (ms) => new Date(ms).toISOString();
+
+// Mirrors est_fee() in schema.sql: USD via Stripe, NGN via Paystack.
+const estFee = (region, charge) =>
+  region === 'ng' ? Math.min(200000, Math.ceil(charge * 0.015) + (charge >= 250000 ? 10000 : 0)) : 30 + Math.ceil(charge * 0.029);
 
 // In-process store for local development. Resets on restart.
 // Node runs each method synchronously up to its return, so settlement is
-// atomic without locks. Mirrors the SQL in supabase/schema.sql.
+// atomic without locks. Mirrors the SQL in supabase/schema.sql: two fully
+// separate regions (global in USD, ng in NGN) sharing one ads table.
 export function createMemoryStore() {
   const bids = new Map();
   const legends = [];
   const hypeJobs = [];
   const rounds = [];
   const reports = [];
-  const boardsBookedUntil = { b2: null, b3: null };
-  let throneBidId = null;
-  let takeovers = 0;
-  let volumeCents = 0;
+  const regionState = Object.fromEntries(
+    REGIONS.map((r) => [r, { throneBidId: null, takeovers: 0, volumeCents: 0, boardsBookedUntil: Object.fromEntries(BOARD_IDS.map((id) => [id, null])) }]),
+  );
+  const stateOf = (region) => {
+    const s = regionState[region];
+    if (!s) throw new Error(`unknown region ${region}`);
+    return s;
+  };
 
   // Mirrors the archive_deposed_king trigger. winner = null means retired.
   const archive = (deposed, winner, nowIso) => {
     legends.push({
       id: legends.length + 1,
+      region: deposed.region,
       bidId: deposed.id,
       name: deposed.name,
       tagline: deposed.tagline,
@@ -42,16 +54,17 @@ export function createMemoryStore() {
     });
   };
 
-  // Mirrors tick_throne(): close the King of the Day round when its clock hits
-  // zero, then retire a king whose term is over.
-  const tick = (rules, now) => {
-    const king = throneBidId ? bids.get(throneBidId) : null;
+  // Mirrors tick_throne(): close the region's King of the Day round when its
+  // clock hits zero, then retire a king whose term is over.
+  const tick = (region, rules, now) => {
+    const s = stateOf(region);
+    const king = s.throneBidId ? bids.get(s.throneBidId) : null;
     const termEnd = king ? Date.parse(king.settledAt) + rules.throneTermSeconds * 1000 : null;
 
-    let open = rounds.find((r) => !r.closedAt);
+    let open = rounds.find((r) => r.region === region && !r.closedAt);
     let crowned = null;
     if (open && now >= Date.parse(open.endsAt)) {
-      const winner = termEnd !== null && termEnd > Date.parse(open.endsAt) ? throneBidId : null;
+      const winner = termEnd !== null && termEnd > Date.parse(open.endsAt) ? s.throneBidId : null;
       open.closedAt = iso(now);
       open.winnerBidId = winner;
       crowned = { roundId: open.id, bidId: winner };
@@ -59,26 +72,30 @@ export function createMemoryStore() {
     }
     if (!open) {
       const base = iso(nextCrownCutoffMs(now, rules));
-      open = { id: rounds.length + 1, baseEndsAt: base, endsAt: base, closedAt: null, winnerBidId: null, takeovers: 0 };
+      open = { id: rounds.length + 1, region, baseEndsAt: base, endsAt: base, closedAt: null, winnerBidId: null, takeovers: 0 };
       rounds.push(open);
     }
 
     let retired = null;
     if (termEnd !== null && now >= termEnd) {
       archive(king, null, iso(now));
-      throneBidId = null;
+      s.throneBidId = null;
       retired = { bidId: king.id };
     }
     return { round: open, crowned, retired };
   };
 
+  const liveAds = (region) => [...bids.values()].filter((b) => b.region === region && b.status === 'won' && !b.removedAt);
+
   return {
     kind: 'memory',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+      stateOf(region);
       const bid = {
         id: randomUUID(),
+        region,
         board,
         status: 'pending',
         amountCents,
@@ -112,11 +129,14 @@ export function createMemoryStore() {
       return bid ? { ...bid } : null;
     },
 
+    // `rules` must be the rules of the bid's own region.
     async settleBid(id, paymentRef, rules) {
       const bid = bids.get(id);
       if (!bid) return { status: 'missing' };
       if (bid.status !== 'pending') return { status: 'duplicate', bid: { ...bid } };
+      if (rules.region !== bid.region) throw new Error(`rules for region ${rules.region} passed for a ${bid.region} ad`);
 
+      const s = stateOf(bid.region);
       const now = Date.now();
       bid.paymentRef = paymentRef;
       bid.settledAt = iso(now);
@@ -128,19 +148,20 @@ export function createMemoryStore() {
           bid.status = 'void';
           return { status: 'void', bid: { ...bid } };
         }
-        const start = Math.max(now, boardsBookedUntil[bid.board] ? Date.parse(boardsBookedUntil[bid.board]) : 0);
+        const bookedUntil = s.boardsBookedUntil[bid.board];
+        const start = Math.max(now, bookedUntil ? Date.parse(bookedUntil) : 0);
         const end = start + bid.days * 86400_000;
-        boardsBookedUntil[bid.board] = iso(end);
+        s.boardsBookedUntil[bid.board] = iso(end);
         Object.assign(bid, { status: 'won', startsAt: iso(start), endsAt: iso(end) });
-        volumeCents += bid.amountCents;
+        s.volumeCents += bid.amountCents;
         return { status: 'won', bid: { ...bid } };
       }
 
       // ---- Throne bid ----
       // Close an expired round and retire an expired king first, so a late
       // payment can never steal a crown that was already decided.
-      const { round, crowned, retired } = tick(rules, now);
-      const previous = throneBidId ? bids.get(throneBidId) : null;
+      const { round, crowned, retired } = tick(bid.region, rules, now);
+      const previous = s.throneBidId ? bids.get(s.throneBidId) : null;
 
       if (bid.amountCents < minNextBidCents(previous, now, rules)) {
         bid.status = 'outbid';
@@ -150,9 +171,9 @@ export function createMemoryStore() {
       bid.status = 'won';
       bid.shieldEndsAt = iso(now + bid.shieldSeconds * 1000);
       if (previous) archive(previous, bid, bid.settledAt);
-      throneBidId = bid.id;
-      takeovers += 1;
-      volumeCents += bid.amountCents;
+      s.throneBidId = bid.id;
+      s.takeovers += 1;
+      s.volumeCents += bid.amountCents;
       round.takeovers += 1;
       round.endsAt = iso(extendedCrownEndMs(round, now, rules));
       return { status: 'won', bid: { ...bid }, previous: previous ? { ...previous } : null, crowned, retired, round: { ...round } };
@@ -168,36 +189,41 @@ export function createMemoryStore() {
       if (bid) bid.clicks += 1;
     },
 
-    async getThrone() {
-      const bid = throneBidId ? bids.get(throneBidId) : null;
-      const recordCents = Math.max(0, ...[...bids.values()].filter((b) => b.board === 'throne' && b.status === 'won').map((b) => b.amountCents));
-      return { bid: bid ? { ...bid } : null, takeovers, volumeCents, recordCents };
+    async getThrone(region) {
+      const s = stateOf(region);
+      const bid = s.throneBidId ? bids.get(s.throneBidId) : null;
+      const recordCents = Math.max(
+        0,
+        ...[...bids.values()].filter((b) => b.region === region && b.board === 'throne' && b.status === 'won').map((b) => b.amountCents),
+      );
+      return { bid: bid ? { ...bid } : null, takeovers: s.takeovers, volumeCents: s.volumeCents, recordCents };
     },
 
-    // Live booking (if any) plus queue state for each small board.
-    async getBoards(nowMs) {
+    // Live booking (if any) plus queue state for each small board in a region.
+    async getBoards(region, nowMs) {
+      const s = stateOf(region);
       const nowIso = iso(nowMs);
       const out = {};
-      for (const board of Object.keys(boardsBookedUntil)) {
+      for (const board of Object.keys(s.boardsBookedUntil)) {
         const booked = [...bids.values()]
-          .filter((b) => b.board === board && b.status === 'won' && b.endsAt > nowIso)
+          .filter((b) => b.region === region && b.board === board && b.status === 'won' && b.endsAt > nowIso)
           .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
         const current = booked.find((b) => b.startsAt <= nowIso) ?? null;
         out[board] = {
           current: current ? { ...current } : null,
           nextStartsAt: booked.find((b) => b.startsAt > nowIso)?.startsAt ?? null,
           upcoming: booked.filter((b) => b.startsAt > nowIso).length,
-          bookedUntil: boardsBookedUntil[board],
+          bookedUntil: s.boardsBookedUntil[board],
         };
       }
       return out;
     },
 
-    // Throne bids dethroned recently (not retired, not removed): the free
-    // "Recently dethroned" strip, and the relegation offer window.
-    async getRecentlyDethroned(sinceIso) {
+    // Throne kings dethroned recently (not retired): the free "Recently
+    // dethroned" strip, and the relegation offer window.
+    async getRecentlyDethroned(region, sinceIso) {
       return legends
-        .filter((l) => !l.retired && l.deposedAt >= sinceIso)
+        .filter((l) => l.region === region && !l.retired && l.deposedAt >= sinceIso)
         .sort((a, b) => b.deposedAt.localeCompare(a.deposedAt))
         .map((l) => ({ ...l, removedAt: bids.get(l.bidId).removedAt }));
     },
@@ -213,10 +239,9 @@ export function createMemoryStore() {
 
     // Leaderboard: total spent per advertiser (grouped by ad name, case-insensitive),
     // across all boards, excluding removed ads. Mirrors top_advertisers() in schema.sql.
-    async getTopAdvertisers(limit) {
+    async getTopAdvertisers(region, limit) {
       const byName = new Map();
-      for (const b of bids.values()) {
-        if (b.status !== 'won' || b.removedAt) continue;
+      for (const b of liveAds(region)) {
         const key = b.name.trim().toLowerCase();
         const row = byName.get(key) ?? { name: b.name.trim(), totalCents: 0, ads: 0, lastAt: b.settledAt };
         row.totalCents += b.amountCents + b.addonCents;
@@ -228,21 +253,16 @@ export function createMemoryStore() {
     },
 
     // Distinct advertisers, and ads published on any board (not removed).
-    async countAdvertisers() {
-      const names = new Set();
-      let ads = 0;
-      for (const b of bids.values()) {
-        if (b.status !== 'won' || b.removedAt) continue;
-        names.add(b.name.trim().toLowerCase());
-        ads += 1;
-      }
-      return { advertisers: names.size, ads };
+    async countAdvertisers(region) {
+      const ads = liveAds(region);
+      return { advertisers: new Set(ads.map((b) => b.name.trim().toLowerCase())).size, ads: ads.length };
     },
 
-    async getLegends({ sort, limit, offset }) {
-      const sorted = [...legends].sort(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent);
+    async getLegends({ region, sort, limit, offset }) {
+      const mine = legends.filter((l) => l.region === region);
+      const sorted = [...mine].sort(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent);
       return {
-        total: legends.length,
+        total: mine.length,
         items: sorted.slice(offset, offset + limit).map((l) => {
           const bid = bids.get(l.bidId);
           return { ...l, clicks: bid.clicks, removedAt: bid.removedAt };
@@ -250,15 +270,15 @@ export function createMemoryStore() {
       };
     },
 
-    // --- King of the Day ---
-    async tickThrone(rules) {
-      const { round, crowned, retired } = tick(rules, Date.now());
+    // --- King of the Day (per region) ---
+    async tickThrone(region, rules) {
+      const { round, crowned, retired } = tick(region, rules, Date.now());
       return { round: { ...round }, crowned, retired };
     },
 
-    async getDayKings(limit) {
+    async getDayKings(region, limit) {
       return rounds
-        .filter((r) => r.closedAt && r.winnerBidId)
+        .filter((r) => r.region === region && r.closedAt && r.winnerBidId)
         .sort((a, b) => b.closedAt.localeCompare(a.closedAt))
         .slice(0, limit)
         .map((r) => {
@@ -361,28 +381,36 @@ export function createMemoryStore() {
       return hypeJobs.slice(-limit).reverse().map((j) => ({ ...j }));
     },
 
-    // --- Admin: mirrors admin_financials() in schema.sql ---
+    // --- Admin: mirrors admin_financials() in schema.sql (one entry per region,
+    // never summed across currencies) ---
     async getFinancials() {
       const all = [...bids.values()];
-      // Totals include the map add-on; the throne/board split counts ad prices only.
-      const sum = (list) => list.reduce((s, b) => s + b.amountCents + b.addonCents, 0);
-      const sumAds = (list) => list.reduce((s, b) => s + b.amountCents, 0);
-      const won = all.filter((b) => b.status === 'won');
-      const refunded = all.filter((b) => b.status === 'refunded');
-      const charged = [...won, ...refunded].filter((b) => b.paymentRef && !b.paymentRef.startsWith('demo_'));
       const hourAgo = iso(Date.now() - 3600_000);
       const hype = {};
       for (const j of hypeJobs) hype[j.status] = (hype[j.status] ?? 0) + 1;
+      const regions = {};
+      for (const region of REGIONS) {
+        const mine = all.filter((b) => b.region === region);
+        const won = mine.filter((b) => b.status === 'won');
+        const refunded = mine.filter((b) => b.status === 'refunded');
+        const total = (list) => list.reduce((s, b) => s + b.amountCents + b.addonCents, 0);
+        const ads = (list) => list.reduce((s, b) => s + b.amountCents, 0);
+        regions[region] = {
+          wonBids: won.length,
+          grossCents: total(won),
+          addonCents: won.reduce((s, b) => s + b.addonCents, 0),
+          throneGrossCents: ads(won.filter((b) => b.board === 'throne')),
+          boardsGrossCents: ads(won.filter((b) => b.board !== 'throne')),
+          bookings: won.filter((b) => b.board !== 'throne').length,
+          relegations: won.filter((b) => b.relegatedFrom).length,
+          estFeesCents: [...won, ...refunded]
+            .filter((b) => b.paymentRef && !b.paymentRef.startsWith('demo_'))
+            .reduce((s, b) => s + estFee(region, b.amountCents + b.addonCents), 0),
+          refundedCents: total(refunded),
+        };
+      }
       return {
-        wonBids: won.length,
-        grossCents: sum(won),
-        throneGrossCents: sumAds(won.filter((b) => b.board === 'throne')),
-        boardsGrossCents: sumAds(won.filter((b) => b.board !== 'throne')),
-        bookings: won.filter((b) => b.board !== 'throne').length,
-        relegations: won.filter((b) => b.relegatedFrom).length,
-        addonCents: won.reduce((s, b) => s + b.addonCents, 0),
-        estFeesCents: charged.reduce((s, b) => s + 30 + Math.ceil((b.amountCents + b.addonCents) * 0.029), 0),
-        refundedCents: sum(refunded),
+        regions,
         stalePending: all.filter((b) => b.status === 'pending' && b.createdAt < hourAgo).length,
         hype,
       };

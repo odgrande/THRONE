@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import { minNextBidCents } from '../lib/rules.js';
-import { gsap, reducedMotion, ScrollTrigger, useGSAP } from '../lib/motion.js';
+import { t } from '../lib/i18n.js';
+import { hidePreloader } from '../lib/preloader.js';
+import { activeRegion, adoptProcessor, adoptRegion } from '../lib/region.js';
+import { gsap, reducedMotion, useGSAP } from '../lib/motion.js';
 import { announceCrowned, announceTakeover, sfx } from '../lib/sound.js';
 import CrownBand from '../components/CrownBand.jsx';
 import Header from '../components/Header.jsx';
@@ -11,11 +14,12 @@ import Shape from '../components/Shape.jsx';
 import Billboard, { BillboardStats } from '../components/Billboard.jsx';
 import BidForm from '../components/BidForm.jsx';
 import StatsStrip from '../components/StatsStrip.jsx';
-import Court from '../components/Court.jsx';
+import Court, { Market } from '../components/Court.jsx';
 import MapCard from '../components/MapCard.jsx';
 import Showcase from '../components/Showcase.jsx';
 import Ticker from '../components/Ticker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
+import LiveAudience from '../components/LiveAudience.jsx';
 import { RecentlyDethroned, RelegationBanner, useRelegationOffer } from '../components/Relegation.jsx';
 
 // Ticks every 250 ms, corrected for clock skew against the server.
@@ -33,6 +37,7 @@ export default function ThronePage() {
   const [loadError, setLoadError] = useState(null);
   const [offsetMs, setOffsetMs] = useState(0);
   const [viewers, setViewers] = useState(0);
+  const [audience, setAudience] = useState({ visitsToday: 0, peakToday: 0 });
   const [banner, setBanner] = useState(null);
   const [dethronedBidId, setDethronedBidId] = useState(null);
   const [offer, dismissOffer] = useRelegationOffer(dethronedBidId);
@@ -43,19 +48,30 @@ export default function ThronePage() {
   const refresh = useCallback(async () => {
     try {
       const next = await api.getState();
+      // Later requests, prices and the live feed follow the region the server chose.
+      adoptRegion(next.region);
+      adoptProcessor(next.paymentsMode);
       setOffsetMs(Date.parse(next.serverTime) - Date.now());
       setState(next);
       setLoadError(null);
+      hidePreloader();
     } catch (err) {
       setLoadError(err.message);
+      hidePreloader();
     }
   }, []);
 
   useEffect(() => {
     refresh();
     const events = new EventSource(api.eventsUrl());
-    events.addEventListener('takeover', (e) => {
+    // One feed carries every region's events; act only on this edition's.
+    const ours = (e) => {
       const data = JSON.parse(e.data);
+      return !data.region || data.region === activeRegion() ? data : null;
+    };
+    events.addEventListener('takeover', (e) => {
+      const data = ours(e);
+      if (!data) return;
       refresh();
       // If this browser owned the dethroned ad, it gets the relegation offer.
       if (data.previousBidId) setDethronedBidId(data.previousBidId);
@@ -69,23 +85,31 @@ export default function ThronePage() {
       announceTakeover(data, price);
     });
     events.addEventListener('crowned', (e) => {
-      const data = JSON.parse(e.data);
+      const data = ours(e);
+      if (!data) return;
       refresh();
       setBanner(`👑 ${data.name} is King of the Day!`);
       announceCrowned(data.name);
     });
     events.addEventListener('retired', (e) => {
+      const data = ours(e);
+      if (!data) return;
       refresh();
       sfx.retired();
-      setBanner(`${JSON.parse(e.data).name} served the full term and retires. The throne is open!`);
+      setBanner(`${data.name} served the full term and retires. The throne is open!`);
     });
-    events.addEventListener('booked', () => {
+    events.addEventListener('booked', (e) => {
+      if (!ours(e)) return;
       refresh();
       sfx.booked();
     });
     // A takedown or a restore: refetch so every screen updates.
-    events.addEventListener('removed', refresh);
-    events.addEventListener('viewers', (e) => setViewers(JSON.parse(e.data).count));
+    events.addEventListener('removed', (e) => ours(e) && refresh());
+    events.addEventListener('viewers', (e) => {
+      const data = JSON.parse(e.data);
+      setViewers(data.count);
+      setAudience({ visitsToday: data.visitsToday ?? 0, peakToday: data.peakToday ?? 0 });
+    });
     // Resync after a dropped connection, in case events were missed.
     events.addEventListener('open', refresh);
     return () => events.close();
@@ -113,34 +137,32 @@ export default function ThronePage() {
     return () => clearTimeout(id);
   }, [banner]);
 
-  // --- Motion (GSAP). Reduced-motion visitors get the content without it. ---
+  // --- Motion. Entrances are CSS animations (index.css), which can never
+  // leave content hidden; GSAP is kept for the live takeover moments.
   const loaded = Boolean(state);
-  useGSAP(
-    () => {
-      if (!loaded || reducedMotion()) return;
-      const intro = gsap.timeline();
-      intro
-        .from('.hero-line', { yPercent: 110, opacity: 0, stagger: 0.12, duration: 0.7, ease: 'power4.out' })
-        .from('.hero-shape', { scale: 0, rotation: -90, stagger: 0.08, ease: 'back.out(2)' }, '-=0.4')
-        .from('.bid-panel', { x: 60, opacity: 0, duration: 0.6 }, '-=0.5');
-      // Sections slide up as they scroll into view (once). Elements stay
-      // visible until their trigger fires, so a missed trigger can never hide
-      // content.
-      ScrollTrigger.batch('.court-board, .how-step, .archive-teaser, .showcase-stat', {
-        start: 'top 92%',
-        once: true,
-        onEnter: (els) => gsap.from(els, { y: 50, opacity: 0, stagger: 0.12 }),
-      });
-    },
-    { scope: page, dependencies: [loaded] },
-  );
 
-  // Live data changes the page height; re-measure scroll positions after it settles.
+  // Sections slide up the first time they scroll into view. Done with a CSS
+  // class (index.css .reveal-in) rather than GSAP from-tweens: a from-tween
+  // that gets interrupted leaves its element invisible, a CSS reveal can't.
   useEffect(() => {
-    if (!state) return;
-    const id = setTimeout(() => ScrollTrigger.refresh(), 300);
-    return () => clearTimeout(id);
-  }, [state]);
+    if (!loaded || !page.current || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add('reveal-in');
+          io.unobserve(entry.target);
+        }
+      },
+      { rootMargin: '0px 0px -8% 0px' },
+    );
+    for (const el of page.current.querySelectorAll('.court-board, .how-step, .archive-teaser, .showcase-stat')) {
+      // Stagger siblings of the same kind.
+      el.style.setProperty('--i', [...el.parentElement.children].indexOf(el));
+      io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [loaded]);
 
   // The takeover banner drops in like a stamp.
   useGSAP(
@@ -167,7 +189,7 @@ export default function ThronePage() {
   const minNext = minNextBidCents(state.throne, now, state.rules);
 
   return (
-    <div ref={page} className="min-h-screen overflow-x-hidden bg-canvas">
+    <div ref={page} className="min-h-screen overflow-x-clip bg-canvas">
       <Header />
 
       <div aria-live="polite" className="overflow-hidden">
@@ -182,50 +204,54 @@ export default function ThronePage() {
 
       {state.paymentsMode === 'demo' && (
         <p className="border-b-2 border-ink bg-muted px-4 py-2 text-center text-xs font-bold uppercase tracking-wider">
-          Test site · payments are simulated · open two windows to watch the live sync
+          {t('hero.demo')}
         </p>
       )}
 
-      <CrownBand crown={state.crown} rules={state.rules} now={now} />
-
-      {/* Hero: poster headline + billboard on the left, blue bid panel on the right. */}
+      {/* Billboard first: the live ad is the first thing on screen, phones
+          included. Compact headline above it, bid panel alongside on desktop
+          (below on phones), King of the Day band after. */}
       <section className="border-b-4 border-ink">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-12">
-          <div className="px-4 py-10 sm:px-6 sm:py-12 lg:col-span-8 lg:px-8 lg:py-16">
-            <p className="label flex items-center gap-2">
-              <Shape kind="circle" color="red" className="h-2.5 w-2.5 animate-pulse" />
-              Live · {viewers} watching
-            </p>
-            <h1 className="display mt-4 text-5xl sm:text-7xl lg:text-8xl">
-              <span className="block overflow-hidden pb-1">
-                <span className="hero-line block">One billboard.</span>
-              </span>
-              <span className="block overflow-hidden pb-1">
-                <span className="hero-line block">
-                  <span className="text-bh-red">Outbid</span> the king.
+        {/* Headline row spans both columns, so the pinned billboard column below is short. */}
+        <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+          <div className="mb-1 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+            <h1 className="display text-2xl sm:text-4xl">
+              <span className="block overflow-hidden">
+                <span className="hero-line intro-rise block">
+                  {t('hero.one')} <span className="text-bh-red">{t('hero.outbid')}</span> {t('hero.king')}
                 </span>
               </span>
             </h1>
-            <div className="mt-10">
-              <Billboard throne={state.throne} now={now} />
-              <BillboardStats stats={state.stats} />
-              {state.throne && !state.throne.removed && <MapCard ad={state.throne} addonCents={state.rules.mapAddonCents} />}
-            </div>
+            <LiveAudience online={viewers} visitsToday={audience.visitsToday} />
+          </div>
+          <p className="max-w-2xl text-sm font-medium leading-snug text-ink/75 sm:text-base">{t('hero.sub')}</p>
+        </div>
+        <div className="mx-auto grid max-w-7xl grid-cols-1 lg:grid-cols-12">
+          {/* Desktop: the billboard column is sticky, so it stays on screen while
+              the page scrolls through the bid form beside it. */}
+          <div className="px-4 pb-8 pt-4 sm:px-6 lg:sticky lg:top-0 lg:col-span-8 lg:self-start lg:px-8 lg:pb-12 lg:pt-6">
+            <Billboard throne={state.throne} now={now} />
+            <BillboardStats stats={state.stats} />
+            {state.throne && !state.throne.removed && <MapCard ad={state.throne} addonCents={state.rules.mapAddonCents} />}
           </div>
 
-          <aside className="dot-grid relative overflow-hidden border-t-4 border-ink bg-bh-blue px-4 py-10 sm:px-6 lg:col-span-4 lg:border-l-4 lg:border-t-0 lg:px-8 lg:py-16">
-            <Shape kind="circle" color="yellow" className="hero-shape absolute -right-16 -top-16 h-48 w-48 border-4 border-ink" />
-            <Shape kind="square" color="red" className="hero-shape absolute -bottom-12 -left-12 h-32 w-32 rotate-45 border-4 border-ink" />
-            <div className="bid-panel relative lg:sticky lg:top-8">
+          <aside className="dot-grid relative overflow-clip border-t-4 border-ink bg-bh-blue px-4 py-10 sm:px-6 lg:col-span-4 lg:border-l-4 lg:border-t-4 lg:px-8 lg:py-12">
+            <Shape kind="circle" color="yellow" className="hero-shape intro-pop absolute -right-16 -top-16 h-48 w-48 border-4 border-ink" />
+            <Shape kind="square" color="red" className="hero-shape intro-pop absolute -bottom-12 -left-12 [animation-delay:120ms] h-32 w-32 rotate-45 border-4 border-ink" />
+            <div className="bid-panel intro-slide relative">
               <BidForm minNextBidCents={minNext} rules={state.rules} onPriceChange={refresh} />
             </div>
           </aside>
         </div>
       </section>
 
+      <CrownBand crown={state.crown} rules={state.rules} now={now} />
+
       <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />
 
       <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
+
+      <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
 
       <RecentlyDethroned legends={state.recentlyDethroned} now={now} />
 

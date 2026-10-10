@@ -1,6 +1,7 @@
 import { Crown, Timer } from 'lucide-react';
 import { formatClock, formatMoney } from '../lib/api.js';
 import Shape from './Shape.jsx';
+import { t } from '../lib/i18n.js';
 
 // King of the Day: whoever holds the throne when this clock hits zero is
 // crowned. Takeovers in the final window push the clock out (overtime).
@@ -24,11 +25,11 @@ export default function CrownBand({ crown, rules, now }) {
             <Crown className="h-6 w-6 -rotate-45" strokeWidth={2.5} />
           </span>
           <div>
-            <p className="label text-bh-yellow">{overtime ? 'Overtime!' : finalWindow ? 'Final seconds' : 'King of the Day'}</p>
+            <p className="label text-bh-yellow">{overtime ? t('crown.overtime') : finalWindow ? t('crown.final') : t('crown.title')}</p>
             <p className="text-lg font-bold leading-tight sm:text-xl">
               {urgent
-                ? `Every takeover now adds ${rules.crownExtensionSeconds}s. Hold on.`
-                : 'Hold the throne when the clock hits zero to be crowned.'}
+                ? t('crown.urgent', { s: rules.crownExtensionSeconds })
+                : t('crown.calm')}
             </p>
           </div>
         </div>
@@ -40,7 +41,7 @@ export default function CrownBand({ crown, rules, now }) {
           </p>
           {lastKing && (
             <p className="text-sm">
-              <span className="label block text-white/60">Last King of the Day</span>
+              <span className="label block text-white/60">{t('crown.last')}</span>
               <span className="font-bold">
                 {lastKing.name} · {formatMoney(lastKing.amountCents)}
               </span>

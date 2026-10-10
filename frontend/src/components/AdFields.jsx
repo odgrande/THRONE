@@ -1,5 +1,6 @@
 import { ImagePlus, MapPin, X } from 'lucide-react';
 import { formatMoney } from '../lib/api.js';
+import { t } from '../lib/i18n.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -53,17 +54,17 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad', mapAd
 
   return (
     <div className="space-y-4" onPaste={onPaste}>
-      <Field label="Name / brand">
+      <Field label={t('ad.name')}>
         <input className="field" value={ad.name} onChange={(e) => set({ name: e.target.value })} maxLength={40} required />
       </Field>
 
-      <Field label="Tagline" hint="Read aloud live">
+      <Field label={t('ad.tagline')} hint={t('ad.taglineHint')}>
         <input className="field" value={ad.tagline} onChange={(e) => set({ tagline: e.target.value })} maxLength={100} />
       </Field>
 
       <div>
         <span className="label mb-1.5 flex justify-between">
-          Image <span className="text-ink/50">Optional</span>
+          {t('ad.image')} <span className="text-ink/50">{t('ad.optional')}</span>
         </span>
         {ad.image ? (
           <div className="relative border-2 border-ink">
@@ -78,14 +79,14 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad', mapAd
             className="flex cursor-pointer flex-col items-center gap-2 border-2 border-dashed border-ink bg-canvas px-4 py-6 text-center transition duration-200 hover:bg-bh-cream focus-within:ring-2 focus-within:ring-ink focus-within:ring-offset-2"
           >
             <ImagePlus className="h-7 w-7" strokeWidth={2.5} />
-            <span className="text-sm font-bold uppercase tracking-wider">Upload or paste an image</span>
+            <span className="text-sm font-bold uppercase tracking-wider">{t('ad.upload')}</span>
             <span className="text-xs text-ink/60">PNG, JPEG, GIF, WebP · 2 MB max</span>
             <input id={`${idPrefix}-image`} type="file" accept={ACCEPTED.join(',')} onChange={(e) => takeFile(e.target.files[0])} className="sr-only" />
           </label>
         )}
       </div>
 
-      <Field label="Link" hint="Where clicks go">
+      <Field label={t('ad.link')} hint={t('ad.linkHint')}>
         <input className="field" type="url" placeholder="https://" value={ad.targetUrl} onChange={(e) => set({ targetUrl: e.target.value })} required />
       </Field>
 
@@ -100,14 +101,14 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad', mapAd
             />
             <span className="text-sm font-medium leading-snug">
               <span className="flex items-center gap-1.5 font-bold uppercase tracking-wide">
-                <MapPin className="h-4 w-4" strokeWidth={3} /> Add a business map · +{formatMoney(mapAddonCents)}
+                <MapPin className="h-4 w-4" strokeWidth={3} /> {t('ad.map', { amount: formatMoney(mapAddonCents) })}
               </span>
-              <span className="text-ink/70">Visitors see your address on a map with directions. Without it, your ad shows a faded map.</span>
+              <span className="text-ink/70">{t('ad.mapBody')}</span>
             </span>
           </label>
           {ad.withMap && (
             <div className="border-t-2 border-ink p-3">
-              <Field label="Business address">
+              <Field label={t('ad.address')}>
                 <input
                   className="field"
                   value={ad.address}
@@ -124,5 +125,25 @@ export default function AdFields({ ad, onChange, onError, idPrefix = 'ad', mapAd
         </div>
       )}
     </div>
+  );
+}
+
+// Paystack needs an email for the receipt. It goes straight to Paystack with
+// the payment and is not stored by us.
+export function EmailField({ value, onChange, idPrefix = 'ad' }) {
+  return (
+    <Field label={t('ad.email')} hint={t('ad.emailHint')}>
+      <input
+        id={`${idPrefix}-email`}
+        className="field"
+        type="email"
+        autoComplete="email"
+        inputMode="email"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={254}
+        required
+      />
+    </Field>
   );
 }

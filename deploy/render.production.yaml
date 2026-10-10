@@ -35,13 +35,24 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Nigeria edition: Paystack LIVE secret key (sk_live_...). It also verifies
+      # webhooks: Paystack -> Settings -> API Keys & Webhooks -> Webhook URL
+      # https://api.yourdomain.com/api/webhooks/paystack
+      - key: PAYMENTS_NG
+        value: paystack
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      # Global edition: "paystack" (USD, once Paystack enables USD on your
+      # account) or "stripe" (then fill the two Stripe keys; else leave them blank).
+      - key: PAYMENTS_GLOBAL
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_3DS
         value: automatic
-      # Only takeovers of $20+ get a hype video.
+      # Only takeovers of $20+ (global) / ₦10,000+ (NG) get a hype video.
       - key: HYPE_MIN_CENTS
         value: "2000"
       - key: OPENAI_API_KEY

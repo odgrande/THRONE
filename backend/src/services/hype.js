@@ -1,15 +1,19 @@
 // Twist #4: the short-form video hype machine.
 // Takeovers worth a video go into the hype_jobs queue; the render worker
 // (src/workers/videoWorker.js) picks them up in its own process, so heavy
-// rendering never slows down bidding. Only big takeovers are queued, or the
-// social accounts turn into spam and get rate-limited.
-export function createHypeQueue({ store, minCents }) {
+// rendering never slows down bidding. Only big takeovers are queued (each
+// region has its own threshold, in its own currency), or the social accounts
+// turn into spam and get rate-limited.
+export function createHypeQueue({ store }) {
   return {
-    async enqueue({ bid, previous }) {
-      if (bid.amountCents < minCents) return;
+    async enqueue({ bid, previous, rules }) {
+      if (bid.amountCents < rules.hypeMinCents) return;
       try {
         await store.enqueueHypeJob({
           bidId: bid.id,
+          region: bid.region,
+          currency: rules.currency,
+          locale: rules.locale,
           name: bid.name,
           tagline: bid.tagline,
           imageUrl: bid.imageUrl,

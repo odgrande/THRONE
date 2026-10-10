@@ -14,12 +14,19 @@ export const REPORT_REASONS = [
 ];
 
 // "Report" link + modal. Anonymous: no account, no email required.
-export default function ReportButton({ bidId, adName, className = '' }) {
+export default function ReportButton({ bidId, adName, className = '', compact = false }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`label inline-flex items-center gap-1.5 hover:text-bh-red ${className}`}>
-        <Flag className="h-3.5 w-3.5" strokeWidth={3} /> Report ad
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={compact ? `Report ${adName}'s ad` : undefined}
+        title={compact ? 'Report ad' : undefined}
+        className={`label inline-flex items-center gap-1.5 hover:text-bh-red ${className}`}
+      >
+        <Flag className="h-3.5 w-3.5" strokeWidth={3} />
+        {!compact && ' Report ad'}
       </button>
       {open && <ReportDialog bidId={bidId} adName={adName} onClose={() => setOpen(false)} />}
     </>

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { api, formatMoney } from '../lib/api.js';
+import { amountToText, api, formatMoney, textToCents } from '../lib/api.js';
+import { needsEmail as paymentNeedsEmail, regionInfo } from '../lib/region.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { CornerMark } from './Shape.jsx';
-import AdFields, { EMPTY_AD, addonFor } from './AdFields.jsx';
+import { t } from '../lib/i18n.js';
+import AdFields, { EMPTY_AD, EmailField, addonFor } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 
@@ -13,9 +15,9 @@ export const RANGE_CLASS =
 export function LegalNote() {
   return (
     <p className="text-center text-xs text-ink/60">
-      No account. Blocked ads are never charged. By paying you agree to the{' '}
-      <a href="/legal#terms" className="font-bold underline hover:text-bh-red">Terms</a> and{' '}
-      <a href="/legal#ad-policy" className="font-bold underline hover:text-bh-red">Ad Policy</a>.
+      {t('legal.agree')}{' '}
+      <a href="/legal#terms" className="font-bold underline hover:text-bh-red">{t('legal.terms')}</a> {t('legal.and')}{' '}
+      <a href="/legal#ad-policy" className="font-bold underline hover:text-bh-red">{t('legal.policy')}</a>.
     </p>
   );
 }
@@ -24,17 +26,17 @@ export function LegalNote() {
 // what the server actually enforces.
 export function ThroneRules({ rules }) {
   const items = [
-    'A higher bid replaces the ad on every screen instantly.',
-    `Beat the king by ${formatMoney(rules.minIncrementCents)} or ${rules.minRaisePct}%, whichever is more.`,
-    `Every bid buys a shield; while it's up, overthrowing costs at least +${rules.shieldPremiumPct}%.`,
-    `Takeovers in the final ${rules.crownOvertimeWindowSeconds}s of the day add ${rules.crownExtensionSeconds}s to the King of the Day clock.`,
-    `Unchallenged kings retire after ${Math.round(rules.throneTermSeconds / 86400)} days.`,
-    `Knocked off? 24h free in "Recently dethroned", plus ${rules.relegationDiscountPct}% off a smaller board.`,
+    t('rules.1'),
+    t('rules.2', { step: formatMoney(rules.minIncrementCents), pct: rules.minRaisePct }),
+    t('rules.3', { pct: rules.shieldPremiumPct }),
+    t('rules.4', { window: rules.crownOvertimeWindowSeconds, ext: rules.crownExtensionSeconds }),
+    t('rules.5', { days: Math.round(rules.throneTermSeconds / 86400) }),
+    t('rules.6', { pct: rules.relegationDiscountPct }),
   ];
   return (
     <details className="group border-2 border-ink bg-canvas">
       <summary className="label flex cursor-pointer list-none items-center justify-between px-3 py-2.5 hover:bg-bh-cream">
-        King of the Hill rules
+        {t('rules.title')}
         <span className="text-base transition duration-200 group-open:rotate-45" aria-hidden="true">
           +
         </span>
@@ -52,16 +54,20 @@ export function ThroneRules({ rules }) {
 }
 
 export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
+  const needsEmail = paymentNeedsEmail();
   const [ad, setAd] = useState(EMPTY_AD);
-  const [amountText, setAmountText] = useState((minNextBidCents / 100).toFixed(2));
-  const amountCents = Math.round(Number(amountText) * 100) || 0;
-  const setAmountCents = (cents) => setAmountText((cents / 100).toFixed(2));
+  const [email, setEmail] = useState('');
+  const [amountText, setAmountText] = useState(amountToText(minNextBidCents));
+  const amountCents = textToCents(amountText);
+  const setAmountCents = (cents) => setAmountText(amountToText(cents));
+  const { symbol, currency } = regionInfo();
+  const sliderStep = rules.sliderStepCents ?? 50;
   const [step, setStep] = useState('form'); // form | submitting | pay | result
   const [checkout, setCheckout] = useState(null);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
-  // Slider spans the minimum to 4x it (at least +$100), in whole dollars.
-  const sliderMax = Math.ceil(Math.max(minNextBidCents * 4, minNextBidCents + 10000) / 100) * 100;
+  // Slider spans the minimum to 4x it (at least +20 starting prices), in whole units.
+  const sliderMax = Math.ceil(Math.max(minNextBidCents * 4, minNextBidCents + rules.startingPriceCents * 20) / sliderStep) * sliderStep;
   const [botToken, setBotToken] = useState(null);
   const turnstileRef = useRef(null);
   const waitingForBotCheck = Boolean(TURNSTILE_SITE_KEY) && !botToken;
@@ -69,8 +75,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
   // When someone else bids, never leave the form below the new minimum.
   useEffect(() => {
     setAmountText((cur) => {
-      const cents = Math.round(Number(cur) * 100) || 0;
-      return cents < minNextBidCents ? (minNextBidCents / 100).toFixed(2) : cur;
+      return textToCents(cur) < minNextBidCents ? amountToText(minNextBidCents) : cur;
     });
   }, [minNextBidCents]);
 
@@ -86,7 +91,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBid({ ...ad, amountCents, turnstileToken: botToken });
+      const res = await api.createBid({ ...ad, amountCents, turnstileToken: botToken, ...(needsEmail ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -105,12 +110,12 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
 
   const finish = ({ status }) => {
     if (status === 'won') {
-      setMessage({ ok: true, text: 'The crown is yours. Share the link and dare them to beat you.' });
+      setMessage({ ok: true, text: t('bid.won') });
       setAd(EMPTY_AD);
     } else if (status === 'refunded' || status === 'outbid') {
-      setMessage({ ok: false, text: 'Someone paid a split second before you at that price. Your payment was refunded in full.' });
+      setMessage({ ok: false, text: t('bid.refunded') });
     } else {
-      setMessage({ ok: false, text: 'Payment received, still confirming. Your ad will appear in a moment.' });
+      setMessage({ ok: false, text: t('bid.pending') });
     }
     setStep('result');
   };
@@ -120,11 +125,11 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     body = (
       <div className="space-y-5">
         <div className={`border-2 border-ink p-4 ${message.ok ? 'bg-bh-yellow' : 'bg-muted'}`}>
-          <p className="text-xl font-black uppercase tracking-tight">{message.ok ? 'Long live the king' : 'Not this time'}</p>
+          <p className="text-xl font-black uppercase tracking-tight">{message.ok ? t('bid.wonTitle') : t('bid.lostTitle')}</p>
           <p className="mt-1 font-medium leading-relaxed">{message.text}</p>
         </div>
         <button onClick={reset} className="btn-outline w-full">
-          {message.ok ? 'Bid again' : 'Try again'}
+          {message.ok ? t('bid.again') : t('bid.tryAgain')}
         </button>
       </div>
     );
@@ -137,30 +142,30 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
 
         <div>
           <span className="label mb-1.5 flex justify-between">
-            Your bid
+            {t('bid.yourBid')}
             {amountCents < minNextBidCents ? (
-              <span className="text-bh-red" role="status">Must be at least {formatMoney(minNextBidCents)}</span>
+              <span className="text-bh-red" role="status">{t('bid.mustBe', { amount: formatMoney(minNextBidCents) })}</span>
             ) : (
-              <span className="text-ink/50">Min {formatMoney(minNextBidCents)}</span>
+              <span className="text-ink/50">{t('bid.min', { amount: formatMoney(minNextBidCents) })}</span>
             )}
           </span>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-black">$</span>
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-black">{symbol}</span>
               <input
                 className="field pl-7 text-lg font-black tabular-nums"
                 type="number"
                 inputMode="decimal"
-                aria-label="Bid amount in dollars"
+                aria-label={`Bid amount in ${currency === 'NGN' ? 'naira' : 'dollars'}`}
                 min={minNextBidCents / 100}
-                step="0.01"
+                step={currency === 'NGN' ? '1' : '0.01'}
                 value={amountText}
                 onChange={(e) => setAmountText(e.target.value)}
               />
             </div>
-            {[500, 2000].map((bump) => (
+            {(rules.bumpCents ?? [500, 2000]).map((bump) => (
               <button key={bump} type="button" onClick={() => setAmountCents(minNextBidCents + bump)} className="btn-outline btn-sm rounded-full px-3">
-                +{bump / 100}
+                +{(bump / 100).toLocaleString()}
               </button>
             ))}
           </div>
@@ -170,7 +175,7 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
             aria-label="Bid amount slider"
             min={minNextBidCents}
             max={sliderMax}
-            step={50}
+            step={sliderStep}
             value={Math.min(Math.max(amountCents, minNextBidCents), sliderMax)}
             onChange={(e) => setAmountCents(Number(e.target.value))}
             className={RANGE_CLASS}
@@ -180,10 +185,15 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
             <span>{formatMoney(sliderMax)}</span>
           </div>
           <p className="mt-1.5 text-xs text-ink/60">
-            Bigger bid, longer shield: +{rules.shieldSecondsPerDollar}s per extra dollar. Hold it up to{' '}
-            {Math.round(rules.throneTermSeconds / 86400)} days.
+            {t('bid.shield', {
+              seconds: rules.shieldSecondsPerStep,
+              step: formatMoney(rules.shieldStepCents),
+              days: Math.round(rules.throneTermSeconds / 86400),
+            })}
           </p>
         </div>
+
+        {needsEmail && <EmailField value={email} onChange={setEmail} idPrefix="throne" />}
 
         {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
 
@@ -191,15 +201,15 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
 
         <button type="submit" disabled={step === 'submitting' || amountCents < minNextBidCents || waitingForBotCheck} className="btn-red w-full text-lg">
           {waitingForBotCheck && step !== 'submitting' ? (
-            'Checking you are human…'
+            t('bid.human')
           ) : step === 'submitting' ? (
             <>
-              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> Checking your ad
+              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> {t('bid.checking')}
             </>
           ) : addonFor(ad, rules) > 0 ? (
-            `Take the throne · ${formatMoney(amountCents)} + ${formatMoney(addonFor(ad, rules))} map`
+            t('bid.submitMap', { amount: formatMoney(amountCents), map: formatMoney(addonFor(ad, rules)) })
           ) : (
-            `Take the throne · ${formatMoney(amountCents)}`
+            t('bid.submit', { amount: formatMoney(amountCents) })
           )}
         </button>
         <LegalNote />
@@ -211,8 +221,8 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
   return (
     <div className="card p-5 sm:p-6">
       <CornerMark index={0} />
-      <p className="label text-bh-blue">Overthrow the monarch</p>
-      <h2 className="display mb-6 mt-1 text-3xl sm:text-4xl">Take the throne</h2>
+      <p className="label text-bh-blue">{t('bid.kicker')}</p>
+      <h2 className="display mb-6 mt-1 text-3xl sm:text-4xl">{t('bid.title')}</h2>
       {body}
     </div>
   );

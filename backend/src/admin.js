@@ -15,18 +15,33 @@ export function requireAdmin(token) {
   };
 }
 
-// Revenue view plus operational alerts. Pure ad sales: no balances are owed
-// to anyone, so there is no liability to track.
-export function assessHealth(f, stripeBalance) {
-  const netCents = f.grossCents - f.estFeesCents;
+// Revenue view per region (each in its own currency, never summed together)
+// plus operational alerts. Pure ad sales: no balances are owed to anyone.
+export function assessHealth(financials, balances, regions, modeFor) {
   const alerts = [];
-  if (f.stalePending > 0) alerts.push({ level: 'amber', message: `${f.stalePending} unpaid ad(s) older than 1 hour. Schedule a cleanup job.` });
-  if (f.hype.failed > 0) alerts.push({ level: 'amber', message: `${f.hype.failed} hype video render(s) failed.` });
+  if (financials.stalePending > 0) {
+    alerts.push({ level: 'amber', message: `${financials.stalePending} unpaid ad(s) older than 1 hour. Schedule a cleanup job.` });
+  }
+  if (financials.hype.failed > 0) alerts.push({ level: 'amber', message: `${financials.hype.failed} hype video render(s) failed.` });
+
+  const perRegion = {};
+  for (const [id, region] of Object.entries(regions)) {
+    const f = financials.regions[id];
+    perRegion[id] = {
+      ...f,
+      name: region.name,
+      currency: region.currency,
+      locale: region.locale,
+      processor: modeFor(id),
+      netCents: f.grossCents - f.estFeesCents,
+      balance: balances[id] ?? null,
+    };
+  }
 
   return {
-    ...f,
-    netCents,
-    stripeBalance,
+    regions: perRegion,
+    stalePending: financials.stalePending,
+    hype: financials.hype,
     status: alerts.length ? 'amber' : 'green',
     alerts,
     generatedAt: new Date().toISOString(),

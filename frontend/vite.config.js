@@ -1,20 +1,20 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Strict Content Security Policy: only our own scripts and Stripe's may run.
+// Strict Content Security Policy: only our own scripts, Stripe's and Paystack's may run.
 // Applied at build time only, because Vite's dev server injects inline scripts.
 function buildCsp(apiOrigin, mediaOrigin) {
   const api = apiOrigin ? ` ${apiOrigin}` : '';
   const media = mediaOrigin ? ` ${mediaOrigin}` : '';
   return [
     "default-src 'self'",
-    "script-src 'self' https://js.stripe.com https://*.js.stripe.com https://challenges.cloudflare.com",
+    "script-src 'self' https://js.stripe.com https://*.js.stripe.com https://challenges.cloudflare.com https://js.paystack.co",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `img-src 'self' data: blob:${api}${media}`,
-    `connect-src 'self'${api} https://api.stripe.com`,
+    `img-src 'self' data: blob:${api}${media} https://*.paystack.co https://*.paystack.com`,
+    `connect-src 'self'${api} https://api.stripe.com https://api.paystack.co`,
     // Google Maps Embed (map add-on), loaded only when a visitor clicks "Show map".
-    'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://www.google.com',
+    'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://www.google.com https://checkout.paystack.com',
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

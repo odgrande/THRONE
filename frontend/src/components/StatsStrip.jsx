@@ -1,6 +1,7 @@
 import { CalendarClock, Crown, Shield, Swords } from 'lucide-react';
 import { formatClock, formatDuration, formatMoney } from '../lib/api.js';
 import { openSeasonPriceCents } from '../lib/rules.js';
+import { t } from '../lib/i18n.js';
 
 // Numbers live inside geometric badges, cycling circle / square / rotated square.
 const BADGES = [
@@ -43,21 +44,21 @@ export default function StatsStrip({ throne, minNextBidCents, stats, rules, now 
     // Yellow runs edge to edge; the grid itself is framed in ink on wide screens.
     <section className="border-b-4 border-ink bg-bh-yellow" aria-label="Throne status">
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-1 bg-ink sm:grid-cols-2 lg:grid-cols-4 xl:border-x-4 xl:border-ink">
-        <Stat index={0} icon={Crown} label="Reigning for" value={throne ? formatDuration(now - start) : '—'}>
-          <p className="mt-1 text-sm font-medium">{throne ? `Since ${throne.name} took it` : 'Nobody yet'}</p>
+        <Stat index={0} icon={Crown} label={t('stats.reigning')} value={throne ? formatDuration(now - start) : '—'}>
+          <p className="mt-1 text-sm font-medium">{throne ? t('stats.since', { name: throne.name }) : t('stats.nobody')}</p>
         </Stat>
 
-        <Stat index={1} icon={Swords} label="To overthrow" value={formatMoney(minNextBidCents)}>
+        <Stat index={1} icon={Swords} label={t('stats.overthrow')} value={formatMoney(minNextBidCents)}>
           <p className="mt-1 text-sm font-medium">
             {shielded && premium
-              ? `Includes the +${rules.shieldPremiumPct}% shield premium`
+              ? t('stats.premium', { pct: rules.shieldPremiumPct })
               : throne
-                ? `Beat it by ${formatMoney(rules.minIncrementCents)} or ${rules.minRaisePct}%, whichever is more`
-                : 'Starting price'}
+                ? t('stats.beat', { step: formatMoney(rules.minIncrementCents), pct: rules.minRaisePct })
+                : t('stats.start')}
           </p>
         </Stat>
 
-        <Stat index={2} icon={Shield} label="Shield" value={shielded ? formatClock(remaining) : throne ? 'Broken' : '—'}>
+        <Stat index={2} icon={Shield} label={t('stats.shield')} value={shielded ? formatClock(remaining) : throne ? t('stats.broken') : '—'}>
           {shielded ? (
             <>
               <div
@@ -75,21 +76,21 @@ export default function StatsStrip({ throne, minNextBidCents, stats, rules, now 
               </div>
               <p className="mt-1 text-sm font-medium">
                 {premium
-                  ? `Then the price drops to ${formatMoney(openSeasonPriceCents(throne, rules))}`
-                  : 'When it breaks, the king is crowned'}
+                  ? t('stats.drops', { amount: formatMoney(openSeasonPriceCents(throne, rules)) })
+                  : t('stats.crowned')}
               </p>
             </>
           ) : (
-            <p className="mt-1 text-sm font-medium">{throne ? 'Cheapest it gets. Strike now.' : 'Bigger bids buy longer shields'}</p>
+            <p className="mt-1 text-sm font-medium">{throne ? t('stats.strike') : t('stats.bigger')}</p>
           )}
         </Stat>
 
         {/* Term limit: an unchallenged king retires and the throne reopens. */}
-        <Stat index={3} icon={CalendarClock} label="Term ends in" value={termLeft !== null ? formatDuration(termLeft) : '—'}>
+        <Stat index={3} icon={CalendarClock} label={t('stats.term')} value={termLeft !== null ? formatDuration(termLeft) : '—'}>
           <p className="mt-1 text-sm font-medium">
             {throne
-              ? `Unchallenged kings retire after ${Math.round(rules.throneTermSeconds / 86400)} days`
-              : `Kings serve up to ${Math.round(rules.throneTermSeconds / 86400)} days`}
+              ? t('stats.retire', { days: Math.round(rules.throneTermSeconds / 86400) })
+              : t('stats.serve', { days: Math.round(rules.throneTermSeconds / 86400) })}
           </p>
         </Stat>
       </div>

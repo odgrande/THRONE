@@ -2,14 +2,20 @@
 // (settle_bid) mirrors minNextBidCents; keep them in sync.
 // frontend/src/lib/rules.js is a copy for the live UI.
 
-export const BOARD_IDS = ['b2', 'b3'];
+// b2/b3: the Court (mid-price boards). m1-m12: the Market, small low-cost stalls
+// for advertisers on a tight budget. All are fixed-price, guaranteed-time bookings.
+export const COURT_IDS = ['b2', 'b3'];
+export const MARKET_IDS = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'];
+export const BOARD_IDS = [...COURT_IDS, ...MARKET_IDS];
 export const BOOKING_DAYS = [1, 3, 7];
 // Longer bookings are cheaper per day.
 const PACKAGE_FACTOR = { 1: 1, 3: 2.5, 7: 5 };
 
+// The shield grows by shieldSecondsPerStep for every shieldStepCents bid above
+// the starting price (e.g. 30 s per extra $1, or per extra ₦100).
 export function shieldSecondsFor(amountCents, rules) {
-  const extraDollars = Math.max(0, amountCents - rules.startingPriceCents) / 100;
-  const seconds = rules.shieldBaseSeconds + Math.floor(extraDollars * rules.shieldSecondsPerDollar);
+  const extraSteps = Math.max(0, amountCents - rules.startingPriceCents) / rules.shieldStepCents;
+  const seconds = rules.shieldBaseSeconds + Math.floor(extraSteps * rules.shieldSecondsPerStep);
   return Math.min(rules.shieldMaxSeconds, seconds);
 }
 
@@ -43,11 +49,11 @@ export function relegationPriceCents(board, rules) {
   return Math.round((bookingPriceCents(board, 1, rules) * (100 - rules.relegationDiscountPct)) / 100);
 }
 
-// Relegation should keep the ad visible now, so it goes to whichever board is
-// free first (the bigger board on a tie).
+// Relegation should keep the ad visible now, so it goes to whichever Court
+// board is free first (the bigger board on a tie). Never to a Market stall.
 export function pickRelegationBoard(boardsState, nowMs) {
   const startOf = (id) => Math.max(nowMs, boardsState[id].bookedUntil ? Date.parse(boardsState[id].bookedUntil) : 0);
-  return BOARD_IDS.reduce((best, id) => (startOf(id) < startOf(best) ? id : best), BOARD_IDS[0]);
+  return COURT_IDS.reduce((best, id) => (startOf(id) < startOf(best) ? id : best), COURT_IDS[0]);
 }
 
 // King of the Day rounds are aligned to a fixed grid: they end every

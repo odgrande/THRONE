@@ -3,11 +3,14 @@ import { Menu, X } from 'lucide-react';
 import Logo from './Logo.jsx';
 import SoundControls from './SoundControls.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import RegionSwitch from './RegionSwitch.jsx';
+import LanguagePicker from './LanguagePicker.jsx';
+import { t } from '../lib/i18n.js';
 
 const NAV = [
-  { href: '/', label: 'The Throne' },
-  { href: '/kings', label: 'History of Kings' },
-  { href: '/practice', label: 'Practice' },
+  { href: '/', key: 'nav.throne' },
+  { href: '/kings', key: 'nav.kings' },
+  { href: '/practice', key: 'nav.practice' },
 ];
 
 export default function Header({ children }) {
@@ -21,7 +24,7 @@ export default function Header({ children }) {
       aria-current={path === item.href ? 'page' : undefined}
       className={`label transition duration-200 hover:text-bh-red ${path === item.href ? 'text-bh-red' : ''}`}
     >
-      {item.label}
+      {t(item.key)}
     </a>
   );
 
@@ -32,11 +35,20 @@ export default function Header({ children }) {
           <Logo />
           <nav className="hidden items-center gap-8 md:flex">{NAV.map(navLink)}</nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {children}
-          {/* On every page, so music and effects follow the visitor around the site. */}
-          <SoundControls />
-          <ThemeToggle />
+          <div className="hidden md:block">
+            <LanguagePicker />
+          </div>
+          <RegionSwitch />
+          {/* On every page, so music and effects follow the visitor around the site.
+              Phones get them in the menu, to keep the header on one line. */}
+          <div className="hidden md:block">
+            <SoundControls />
+          </div>
+          <div className="hidden md:block">
+            <ThemeToggle />
+          </div>
           <button
             className="btn-outline btn-sm md:hidden"
             aria-label={open ? 'Close menu' : 'Open menu'}
@@ -48,7 +60,14 @@ export default function Header({ children }) {
         </div>
       </div>
       {open && (
-        <nav className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 md:hidden">{NAV.map(navLink)}</nav>
+        <div className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 md:hidden">
+          <nav className="flex flex-col gap-4">{NAV.map(navLink)}</nav>
+          <div className="flex flex-wrap items-center gap-3">
+            <LanguagePicker />
+            <SoundControls />
+            <ThemeToggle />
+          </div>
+        </div>
       )}
     </header>
   );

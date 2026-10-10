@@ -2,8 +2,8 @@
 // without waiting for a round trip. The server re-checks every bid anyway.
 
 export function shieldSecondsFor(amountCents, rules) {
-  const extraDollars = Math.max(0, amountCents - rules.startingPriceCents) / 100;
-  const seconds = rules.shieldBaseSeconds + Math.floor(extraDollars * rules.shieldSecondsPerDollar);
+  const extraSteps = Math.max(0, amountCents - rules.startingPriceCents) / rules.shieldStepCents;
+  const seconds = rules.shieldBaseSeconds + Math.floor(extraSteps * rules.shieldSecondsPerStep);
   return Math.min(rules.shieldMaxSeconds, seconds);
 }
 

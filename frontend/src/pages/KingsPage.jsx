@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Crown, Loader2 } from 'lucide-react';
 import { api, formatDuration, formatMoney } from '../lib/api.js';
+import { adoptRegion } from '../lib/region.js';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
 import Shape, { CornerMark } from '../components/Shape.jsx';
@@ -141,6 +142,7 @@ export default function KingsPage() {
     setLoading(true);
     try {
       const page = await api.getLegends({ sort: nextSort, offset });
+      adoptRegion(page.region);
       setItems((cur) => (offset === 0 ? page.items : [...cur, ...page.items]));
       setTotal(page.total);
       setError(null);

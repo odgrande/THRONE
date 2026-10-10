@@ -7,14 +7,16 @@ const LEGEND_SORTS = {
 };
 
 // Postgres-backed store. Settlement runs inside the settle_bid() SQL function
-// (see supabase/schema.sql), which row-locks the throne or the board so
+// (see supabase/schema.sql), which row-locks the region's throne or board so
 // concurrent payments are serialized. Deposed kings are archived by a trigger.
+// Every query that reads game state is scoped to one region.
 export function createSupabaseStore({ url, serviceRoleKey }) {
   const db = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
 
   const fromRow = (r) =>
     r && {
       id: r.id,
+      region: r.region,
       board: r.board,
       status: r.status,
       amountCents: r.amount_cents,
@@ -42,6 +44,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
 
   const legendFromRow = (r) => ({
     id: r.id,
+    region: r.region,
     bidId: r.bid_id,
     name: r.name,
     tagline: r.tagline,
@@ -74,11 +77,12 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     kind: 'supabase',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, targetUrl }) {
       const row = check(
         await db
           .from('bids')
           .insert({
+            region,
             board,
             amount_cents: amountCents,
             addon_cents: addonCents,
@@ -100,6 +104,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
 
     getBid,
 
+    // `rules` must be the rules of the bid's own region (settle_bid checks).
     async settleBid(id, paymentRef, rules) {
       const result = check(await db.rpc('settle_bid', { p_bid_id: id, p_payment_ref: paymentRef, p_rules: rules }));
       if (result.status === 'missing') return result;
@@ -123,11 +128,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       check(await db.rpc('record_click', { p_bid_id: id }));
     },
 
-    async getThrone() {
+    async getThrone(region) {
       const [throneRes, recordRes] = await Promise.all([
-        db.from('throne').select('bid_id, takeovers, volume_cents').eq('id', 1).single(),
-        // Highest price ever paid for the throne (index-friendly: one row).
-        db.from('bids').select('amount_cents').eq('board', 'throne').eq('status', 'won').order('amount_cents', { ascending: false }).limit(1),
+        db.from('throne').select('bid_id, takeovers, volume_cents').eq('region', region).single(),
+        // Highest price ever paid for this region's throne (index-friendly: one row).
+        db.from('bids').select('amount_cents').eq('region', region).eq('board', 'throne').eq('status', 'won').order('amount_cents', { ascending: false }).limit(1),
       ]);
       const row = check(throneRes);
       const record = check(recordRes);
@@ -139,11 +144,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       };
     },
 
-    async getBoards(nowMs) {
+    async getBoards(region, nowMs) {
       const nowIso = new Date(nowMs).toISOString();
       const [rows, boards] = await Promise.all([
-        db.from('bids').select('*').eq('status', 'won').neq('board', 'throne').gt('ends_at', nowIso).order('starts_at'),
-        db.from('boards').select('id, booked_until'),
+        db.from('bids').select('*').eq('region', region).eq('status', 'won').neq('board', 'throne').gt('ends_at', nowIso).order('starts_at'),
+        db.from('boards').select('id, booked_until').eq('region', region),
       ]);
       const booked = check(rows).map(fromRow);
       const out = {};
@@ -156,9 +161,16 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return out;
     },
 
-    async getRecentlyDethroned(sinceIso) {
+    async getRecentlyDethroned(region, sinceIso) {
       const rows = check(
-        await db.from('throne_legends').select(LEGEND_SELECT).eq('retired', false).gte('deposed_at', sinceIso).order('deposed_at', { ascending: false }).limit(50),
+        await db
+          .from('throne_legends')
+          .select(LEGEND_SELECT)
+          .eq('region', region)
+          .eq('retired', false)
+          .gte('deposed_at', sinceIso)
+          .order('deposed_at', { ascending: false })
+          .limit(50),
       );
       return rows.map(legendFromRow);
     },
@@ -173,37 +185,39 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return rows.length > 0;
     },
 
-    async getTopAdvertisers(limit) {
-      const rows = check(await db.rpc('top_advertisers', { p_limit: limit }));
+    async getTopAdvertisers(region, limit) {
+      const rows = check(await db.rpc('top_advertisers', { p_region: region, p_limit: limit }));
       return rows.map((r) => ({ name: r.name, totalCents: Number(r.total_cents), ads: Number(r.ads), lastAt: r.last_at }));
     },
 
-    async countAdvertisers() {
-      const r = check(await db.rpc('count_advertisers'));
+    async countAdvertisers(region) {
+      const r = check(await db.rpc('count_advertisers', { p_region: region }));
       return { advertisers: Number(r.advertisers), ads: Number(r.ads) };
     },
 
-    async getLegends({ sort, limit, offset }) {
+    async getLegends({ region, sort, limit, offset }) {
       const { data, count } = check(
         await db
           .from('throne_legends')
           .select(LEGEND_SELECT, { count: 'exact' })
+          .eq('region', region)
           .order(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent, { ascending: false })
           .range(offset, offset + limit - 1),
       );
       return { total: count, items: data.map(legendFromRow) };
     },
 
-    // --- King of the Day ---
-    async tickThrone(rules) {
-      return check(await db.rpc('tick_throne', { p_rules: rules }));
+    // --- King of the Day (per region) ---
+    async tickThrone(region, rules) {
+      return check(await db.rpc('tick_throne', { p_region: region, p_rules: rules }));
     },
 
-    async getDayKings(limit) {
+    async getDayKings(region, limit) {
       const rows = check(
         await db
           .from('crown_rounds')
           .select('id, closed_at, takeovers, bid:bids!crown_rounds_winner_bid_id_fkey(id, name, tagline, image_url, amount_cents, removed_at)')
+          .eq('region', region)
           .not('winner_bid_id', 'is', null)
           .order('closed_at', { ascending: false })
           .limit(limit),
@@ -221,7 +235,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       }));
     },
 
-    // --- Reports & takedowns ---
+    // --- Reports & takedowns (all regions; ads carry their region) ---
     async reportBid({ bidId, reason, details, reporterHash, threshold }) {
       return check(
         await db.rpc('report_bid', {
@@ -319,22 +333,24 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return rows.map(jobFromRow);
     },
 
-    // --- Admin ---
+    // --- Admin: one entry per region, never summed across currencies ---
     async getFinancials() {
       const f = check(await db.rpc('admin_financials'));
-      return {
-        wonBids: Number(f.won_bids),
-        grossCents: Number(f.gross_cents),
-        addonCents: Number(f.addon_cents),
-        throneGrossCents: Number(f.throne_gross_cents),
-        boardsGrossCents: Number(f.boards_gross_cents),
-        bookings: Number(f.bookings),
-        relegations: Number(f.relegations),
-        estFeesCents: Number(f.est_fees_cents),
-        refundedCents: Number(f.refunded_cents),
-        stalePending: Number(f.stale_pending),
-        hype: f.hype ?? {},
-      };
+      const regions = {};
+      for (const [region, r] of Object.entries(f.regions ?? {})) {
+        regions[region] = {
+          wonBids: Number(r.won_bids),
+          grossCents: Number(r.gross_cents),
+          addonCents: Number(r.addon_cents),
+          throneGrossCents: Number(r.throne_gross_cents),
+          boardsGrossCents: Number(r.boards_gross_cents),
+          bookings: Number(r.bookings),
+          relegations: Number(r.relegations),
+          estFeesCents: Number(r.est_fees_cents),
+          refundedCents: Number(r.refunded_cents),
+        };
+      }
+      return { regions, stalePending: Number(f.stale_pending), hype: f.hype ?? {} };
     },
   };
 }

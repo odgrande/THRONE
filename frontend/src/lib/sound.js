@@ -158,21 +158,228 @@ export function announceCrowned(name) {
   speak(`All hail ${name}, King of the Day!`);
 }
 
-// --- Background music: a calm generative loop, never the same twice ---
-// 96 bpm; a bass note per bar and sparse pentatonic plucks above it.
-const BASS = [130.81, 98.0, 110.0, 87.31]; // C3 G2 A2 F2
-const PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5]; // C major pentatonic
-const STEP = 60 / 96 / 2; // eighth notes
+// --- Background music: Lagos grooves, synthesized live ---
+// A 16-step sequencer that rotates three Nigerian-flavoured grooves every 16
+// bars: amapiano (log drum), afrobeats (syncopated kick + talking drum) and
+// highlife (plucked guitar). One minor progression throughout, so the changes
+// feel like one DJ set. Nothing is downloaded and there's nothing to license.
+const A3 = 220;
+const hz = (semi) => A3 * 2 ** (semi / 12);
+// Am9 - Dm9 - Fmaj7 - E7sus (semitones from A3).
+const CHORDS = [
+  [0, 3, 7, 10, 14],
+  [5, 8, 12, 15, 19],
+  [-4, 0, 3, 7, 12],
+  [-5, 0, 2, 5, 10],
+];
+const ROOTS = [-24, -19, -28, -29];
+
+let noiseBuf = null;
+function noiseBuffer() {
+  if (!noiseBuf) {
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+
+let driveCurve = null;
+function drive() {
+  if (!driveCurve) {
+    driveCurve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) driveCurve[i] = Math.tanh((i / 128 - 1) * 2.2);
+  }
+  return driveCurve;
+}
+
+function env(gain, t, peak, attack, release) {
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(peak, t + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + attack + release);
+}
+
+const inst = {
+  kick(t, vol = 0.9) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.frequency.setValueAtTime(125, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    env(g, t, vol, 0.004, 0.28);
+    o.connect(g).connect(musicGain);
+    o.start(t);
+    o.stop(t + 0.35);
+  },
+  // The amapiano log drum: a pitched, gliding, slightly overdriven bass hit.
+  logDrum(t, semi, len = 0.35) {
+    const o = ctx.createOscillator();
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = drive();
+    const g = ctx.createGain();
+    const f = hz(semi);
+    o.frequency.setValueAtTime(f * 1.6, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+    env(g, t, 0.55, 0.006, len);
+    o.connect(shaper).connect(g).connect(musicGain);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  },
+  bass(t, semi, len) {
+    const o = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = hz(semi);
+    lp.type = 'lowpass';
+    lp.frequency.value = 500;
+    env(g, t, 0.5, 0.01, len);
+    o.connect(lp).connect(g).connect(musicGain);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  },
+  noiseHit(t, { vol, type, freq, q = 1, len }) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer();
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const g = ctx.createGain();
+    env(g, t, vol, 0.002, len);
+    src.connect(f).connect(g).connect(musicGain);
+    src.start(t);
+    src.stop(t + len + 0.02);
+  },
+  shaker(t, vol = 0.05) {
+    inst.noiseHit(t, { vol, type: 'highpass', freq: 7000, len: 0.045 });
+  },
+  clap(t) {
+    [0, 0.012, 0.024].forEach((d) => inst.noiseHit(t + d, { vol: 0.22, type: 'bandpass', freq: 1600, q: 1.2, len: 0.09 }));
+  },
+  // Electric-piano chord: sine carriers with a bell-like FM modulator.
+  keys(t, chord, len, vol = 0.035) {
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2400;
+    const g = ctx.createGain();
+    env(g, t, vol, 0.02, len);
+    lp.connect(g).connect(musicGain);
+    for (const semi of chord) {
+      const carrier = ctx.createOscillator();
+      const mod = ctx.createOscillator();
+      const depth = ctx.createGain();
+      carrier.frequency.value = hz(semi);
+      mod.frequency.value = hz(semi) * 2;
+      depth.gain.setValueAtTime(hz(semi) * 0.8, t);
+      depth.gain.exponentialRampToValueAtTime(1, t + len);
+      mod.connect(depth).connect(carrier.frequency);
+      carrier.connect(lp);
+      carrier.start(t);
+      mod.start(t);
+      carrier.stop(t + len + 0.05);
+      mod.stop(t + len + 0.05);
+    }
+  },
+  pluck(t, semi, vol = 0.06) {
+    const o = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.value = hz(semi);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3200, t);
+    lp.frequency.exponentialRampToValueAtTime(400, t + 0.25);
+    env(g, t, vol, 0.003, 0.3);
+    o.connect(lp).connect(g).connect(musicGain);
+    o.start(t);
+    o.stop(t + 0.35);
+  },
+  // Talking drum: a hit whose pitch bends like speech.
+  talkingDrum(t, up) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(up ? 180 : 260, t);
+    o.frequency.exponentialRampToValueAtTime(up ? 270 : 170, t + 0.14);
+    env(g, t, 0.18, 0.004, 0.18);
+    o.connect(g).connect(musicGain);
+    o.start(t);
+    o.stop(t + 0.25);
+  },
+};
+
+const LOG_A = { 3: 0, 6: 0, 10: 7, 11: 0, 14: 12 };
+const LOG_B = { 3: 0, 6: 0, 9: 7, 12: 0, 14: 10 };
+const AFRO_BASS = { 0: [0, 3], 3: [0, 2], 6: [7, 2], 8: [12, 2], 11: [10, 2], 14: [7, 2] };
+const HIGHLIFE_PICKS = [3, null, 2, 1, null, 2, 3, null, 1, null, 2, 3, null, 1, 2, null];
+const HIGHLIFE_BASS = { 0: [0, 4], 4: [4, 2], 6: [7, 2], 8: [12, 3], 12: [7, 2], 14: [4, 2] };
+
+const GROOVES = [
+  {
+    name: 'amapiano',
+    bpm: 112,
+    play(t, s, bar, step) {
+      const chord = CHORDS[bar % 4];
+      const root = ROOTS[bar % 4];
+      if (s % 4 === 0) inst.kick(t, 0.75);
+      if (s === 4 || s === 12) inst.clap(t);
+      inst.shaker(t, s % 2 ? 0.03 : 0.055);
+      // The off-beat log-drum bounce that defines the style.
+      const log = (bar % 2 ? LOG_B : LOG_A)[s];
+      if (log !== undefined) inst.logDrum(t, root + 12 + log, step * 2.5);
+      if (s === 0) inst.keys(t, chord, step * 7);
+      if (s === 10) inst.keys(t, chord.map((n) => n + 12), step * 3, 0.025);
+    },
+  },
+  {
+    name: 'afrobeats',
+    bpm: 104,
+    play(t, s, bar, step) {
+      const chord = CHORDS[bar % 4];
+      const root = ROOTS[bar % 4];
+      if (s === 0 || s === 7 || s === 10 || (s === 14 && bar % 2)) inst.kick(t);
+      if (s === 4 || s === 12) inst.clap(t);
+      inst.shaker(t, s % 4 === 2 ? 0.08 : s % 2 ? 0.03 : 0.05);
+      const bass = AFRO_BASS[s];
+      if (bass) inst.bass(t, root + bass[0], step * bass[1]);
+      if (s === 0) inst.keys(t, chord, step * 8, 0.03);
+      if (s === 2 || s === 5 || s === 9 || s === 13) inst.pluck(t, chord[(s >> 1) % chord.length] + 12, 0.035);
+      // Talking-drum fill on the last bar of every four.
+      if (bar % 4 === 3 && s >= 10 && s % 2 === 0) inst.talkingDrum(t, s % 4 === 2);
+    },
+  },
+  {
+    name: 'highlife',
+    bpm: 120,
+    play(t, s, bar, step) {
+      const chord = CHORDS[bar % 4];
+      const root = ROOTS[bar % 4];
+      if (s === 0 || s === 8) inst.kick(t, 0.7);
+      inst.shaker(t, s % 4 === 2 ? 0.09 : 0.03);
+      // Bell / clave pattern.
+      if (s === 0 || s === 3 || s === 6 || s === 10 || s === 12) inst.noiseHit(t, { vol: 0.08, type: 'bandpass', freq: 3800, q: 6, len: 0.03 });
+      // Highlife guitar: a rolling arpeggio over the chord.
+      const pick = HIGHLIFE_PICKS[s];
+      if (pick !== null) inst.pluck(t, chord[pick] + 12);
+      const bass = HIGHLIFE_BASS[s];
+      if (bass) inst.bass(t, root + bass[0], step * bass[1]);
+      if (s === 4 || s === 12) inst.keys(t, chord, step * 2, 0.02);
+    },
+  },
+];
+const BARS_PER_GROOVE = 16;
+
 let musicTimer = null;
 let nextStepAt = 0;
 let step = 0;
 
 function scheduleMusic() {
   while (nextStepAt < ctx.currentTime + 0.25) {
-    const at = nextStepAt - ctx.currentTime;
-    if (step % 8 === 0) tone({ freq: BASS[(step / 8) % BASS.length], type: 'sine', at, dur: STEP * 7, vol: 0.5, out: musicGain });
-    if (Math.random() < 0.35) tone({ freq: PENTA[Math.floor(Math.random() * PENTA.length)], type: 'triangle', at, dur: STEP * 1.5, vol: 0.18, out: musicGain });
-    nextStepAt += STEP;
+    const bar = Math.floor(step / 16);
+    const groove = GROOVES[Math.floor(bar / BARS_PER_GROOVE) % GROOVES.length];
+    const stepLen = 60 / groove.bpm / 4; // sixteenth notes
+    groove.play(nextStepAt, step % 16, bar, stepLen);
+    nextStepAt += stepLen;
     step += 1;
   }
 }
@@ -181,8 +388,8 @@ function startMusic() {
   if (musicTimer || !ctx || ctx.state === 'closed') return;
   nextStepAt = ctx.currentTime + 0.1;
   musicGain.gain.cancelScheduledValues(ctx.currentTime);
-  musicGain.gain.setTargetAtTime(0.09, ctx.currentTime, 1.2); // fade in
-  musicTimer = setInterval(scheduleMusic, 100);
+  musicGain.gain.setTargetAtTime(0.16, ctx.currentTime, 1.2); // fade in, under the effects
+  musicTimer = setInterval(scheduleMusic, 50);
 }
 
 function stopMusic() {

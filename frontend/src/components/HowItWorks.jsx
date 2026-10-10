@@ -1,27 +1,20 @@
 import { formatMoney } from '../lib/api.js';
 import Shape from './Shape.jsx';
+import { t } from '../lib/i18n.js';
 
 export default function HowItWorks({ rules, boards = [] }) {
   const termDays = Math.round(rules.throneTermSeconds / 86400);
-  const cheapestDay = Math.min(...boards.map((b) => b.prices[7] / 7));
+  // The Court boards only; the Market stalls have their own section.
+  const cheapestDay = Math.min(...boards.filter((b) => b.tier !== 'market').map((b) => b.prices[7] / 7));
   const steps = [
-    { title: 'Drop your ad', body: 'Upload or paste an image, add a tagline and a link. No account, no approval queue. AI screens it before you pay.' },
+    { title: t('how.1t'), body: t('how.1b') },
+    { title: t('how.2t'), body: t('how.2b', { pct: rules.shieldPremiumPct, days: termDays }) },
     {
-      title: 'Take the throne',
-      body: `Outbid the king for the big board. Every bid buys a shield, and shielded kings cost +${rules.shieldPremiumPct}% to topple. Hold it up to ${termDays} days.`,
+      title: t('how.3t'),
+      body: t('how.3b', { from: Number.isFinite(cheapestDay) ? t('how.3from', { amount: formatMoney(Math.ceil(cheapestDay)) }) : '' }),
     },
-    {
-      title: 'Or book the Court',
-      body: `Prefer calm? Book a smaller board for 1, 3 or 7 days${Number.isFinite(cheapestDay) ? `, from ${formatMoney(Math.ceil(cheapestDay))}/day` : ''}. Guaranteed time: nobody can knock you off.`,
-    },
-    {
-      title: 'Fall with honor',
-      body: `Knocked off the throne? You get 24 free hours in "Recently dethroned", and you can move your ad to a smaller board at ${rules.relegationDiscountPct}% off.`,
-    },
-    {
-      title: 'Rule the day',
-      body: `Hold the throne when the daily clock hits zero to be crowned King of the Day. Late takeovers add ${rules.crownExtensionSeconds}s of overtime.`,
-    },
+    { title: t('how.4t'), body: t('how.4b', { pct: rules.relegationDiscountPct }) },
+    { title: t('how.5t'), body: t('how.5b', { s: rules.crownExtensionSeconds }) },
   ];
 
   return (
@@ -30,13 +23,13 @@ export default function HowItWorks({ rules, boards = [] }) {
       <Shape kind="square" color="blue" className="absolute -bottom-20 -right-12 hidden h-40 w-40 rotate-45 border-4 border-ink md:block" />
 
       <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-24">
-        <p className="label">How it works</p>
+        <p className="label">{t('how.kicker')}</p>
         <h2 className="display mt-3 text-4xl sm:text-6xl lg:text-7xl">
-          Five moves.
+          {t('how.title1')}
           <br />
-          One crown.
+          {t('how.title2')}
         </h2>
-        <p className="mt-4 text-lg font-medium text-white/85">The throne starts at {formatMoney(rules.startingPriceCents)}.</p>
+        <p className="mt-4 text-lg font-medium text-white/85">{t('how.start', { amount: formatMoney(rules.startingPriceCents) })}</p>
 
         <ol className="mt-12 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-8">
           {steps.map((step, i) => (

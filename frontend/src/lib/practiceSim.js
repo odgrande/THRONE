@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { minNextBidCents, shieldSecondsFor } from './rules.js';
+import { formatMoney } from './api.js';
 
 // Practice mode: a private, in-browser simulation of the throne. Play money,
 // computer rivals, nothing sent to the server. Bots are clearly labelled and
 // exist ONLY here: never let simulated bidders touch the real throne (that
 // would be shill bidding).
 
-export const START_PLAY_MONEY_CENTS = 50_000;
+// Tuned for the $5 global throne; other currencies scale by their starting
+// price ($500 of play money ~ ₦200,000 on the ₦2,000 Naira throne).
+const scaleOf = (rules) => rules.startingPriceCents / 500;
+export const playMoneyFor = (rules) => 50_000 * scaleOf(rules);
 
 const BOTS = [
   { name: 'PixelPirate', tagline: 'Follow me for alpha strategies' },
@@ -43,7 +47,7 @@ export function usePracticeSim(rules, speed) {
     throne: null,
     log: [],
     stats: { takeovers: 0, volumeCents: 0 },
-    playMoneyCents: START_PLAY_MONEY_CENTS,
+    playMoneyCents: playMoneyFor(rules),
     timesCrowned: 0,
   }));
   const simRef = useRef(sim);
@@ -68,7 +72,7 @@ export function usePracticeSim(rules, speed) {
     ({ name, tagline, amountCents }) => {
       const s = simRef.current;
       const min = minNextBidCents(s.throne, Date.now(), rules);
-      if (amountCents < min) return `Bid at least $${(min / 100).toFixed(2)}.`;
+      if (amountCents < min) return `Bid at least ${formatMoney(min)}.`;
       if (amountCents > s.playMoneyCents) return 'Not enough play money. Reset to start over.';
       setSim((cur) => ({ ...cur, playMoneyCents: cur.playMoneyCents - amountCents }));
       crown({ name: name || 'You', tagline, amountCents, you: true });
@@ -89,9 +93,11 @@ export function usePracticeSim(rules, speed) {
         const min = minNextBidCents(s.throne, Date.now(), rules);
         const rivals = BOTS.filter((b) => b.name !== s.throne?.name);
         const bot = rivals[Math.floor(Math.random() * rivals.length)];
-        const ceiling = random(1500, 12000) + s.stats.takeovers * 150;
+        const scale = scaleOf(rules);
+        const ceiling = (random(1500, 12000) + s.stats.takeovers * 150) * scale;
         if (min <= ceiling) {
-          const jump = Math.random() < 0.3 ? Math.round(random(100, 500) / 50) * 50 : 0;
+          const step = rules.sliderStepCents ?? 50;
+          const jump = Math.random() < 0.3 ? Math.round((random(100, 500) * scale) / step) * step : 0;
           crown({ ...bot, amountCents: min + jump, you: false });
         }
         schedule();
@@ -107,10 +113,10 @@ export function usePracticeSim(rules, speed) {
         throne: null,
         log: [],
         stats: { takeovers: 0, volumeCents: 0 },
-        playMoneyCents: START_PLAY_MONEY_CENTS,
+        playMoneyCents: playMoneyFor(rules),
         timesCrowned: 0,
       }),
-    [],
+    [rules],
   );
 
   return { sim, playerBid, reset };

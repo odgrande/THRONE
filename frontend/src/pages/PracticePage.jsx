@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bot, RotateCcw } from 'lucide-react';
-import { api, formatDuration, formatMoney } from '../lib/api.js';
+import { amountToText, api, formatDuration, formatMoney, textToCents } from '../lib/api.js';
+import { adoptRegion, regionInfo } from '../lib/region.js';
 import { minNextBidCents } from '../lib/rules.js';
 import { BOT_SPEEDS, usePracticeSim } from '../lib/practiceSim.js';
 import Header from '../components/Header.jsx';
@@ -17,7 +18,10 @@ const DEFAULT_RULES = {
   minIncrementCents: 200,
   minRaisePct: 10,
   shieldBaseSeconds: 60,
-  shieldSecondsPerDollar: 30,
+  shieldStepCents: 100,
+  shieldSecondsPerStep: 30,
+  sliderStepCents: 50,
+  bumpCents: [500, 2000],
   shieldMaxSeconds: 1800,
   shieldPremiumPct: 25,
   throneTermSeconds: 7 * 86400,
@@ -40,7 +44,13 @@ function useNow() {
 export default function PracticePage() {
   const [rules, setRules] = useState(DEFAULT_RULES);
   useEffect(() => {
-    api.getState().then((s) => setRules(s.rules), () => {});
+    api.getState().then(
+      (s) => {
+        adoptRegion(s.region);
+        setRules(s.rules);
+      },
+      () => {},
+    );
   }, []);
   return <Arena key={JSON.stringify(rules)} rules={rules} />;
 }
@@ -53,10 +63,12 @@ function Arena({ rules }) {
 
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
-  const [amountText, setAmountText] = useState((minNext / 100).toFixed(2));
+  const [amountText, setAmountText] = useState(amountToText(minNext));
   const [error, setError] = useState(null);
-  const amountCents = Math.round(Number(amountText) * 100) || 0;
-  const sliderMax = Math.ceil(Math.max(minNext * 4, minNext + 10000) / 100) * 100;
+  const amountCents = textToCents(amountText);
+  const sliderStep = rules.sliderStepCents ?? 50;
+  const sliderMax = Math.ceil(Math.max(minNext * 4, minNext + rules.startingPriceCents * 20) / sliderStep) * sliderStep;
+  const { symbol, currency } = regionInfo();
 
   // Same sounds as the real throne (no-ops while sound is off).
   const lastKing = sim.throne?.id;
@@ -69,7 +81,7 @@ function Arena({ rules }) {
 
   // Keep the amount at or above the live minimum as rivals bid.
   useEffect(() => {
-    setAmountText((cur) => (Math.round(Number(cur) * 100) < minNext ? (minNext / 100).toFixed(2) : cur));
+    setAmountText((cur) => (textToCents(cur) < minNext ? amountToText(minNext) : cur));
   }, [minNext]);
 
   const submit = (e) => {
@@ -149,13 +161,13 @@ function Arena({ rules }) {
                     )}
                   </span>
                   <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-black">$</span>
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-black">{symbol}</span>
                     <input
                       className="field pl-7 text-lg font-black tabular-nums"
                       type="number"
                       inputMode="decimal"
-                      aria-label="Practice bid amount in dollars"
-                      step="0.01"
+                      aria-label={`Practice bid amount in ${currency === 'NGN' ? 'naira' : 'dollars'}`}
+                      step={currency === 'NGN' ? '1' : '0.01'}
                       value={amountText}
                       onChange={(e) => setAmountText(e.target.value)}
                     />
@@ -165,9 +177,9 @@ function Arena({ rules }) {
                     aria-label="Practice bid slider"
                     min={minNext}
                     max={sliderMax}
-                    step={50}
+                    step={sliderStep}
                     value={Math.min(Math.max(amountCents, minNext), sliderMax)}
-                    onChange={(e) => setAmountText((Number(e.target.value) / 100).toFixed(2))}
+                    onChange={(e) => setAmountText(amountToText(Number(e.target.value)))}
                     className="mt-3 h-3 w-full cursor-pointer appearance-none border-2 border-ink bg-paper accent-bh-red [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ink [&::-moz-range-thumb]:bg-bh-red [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ink [&::-webkit-slider-thumb]:bg-bh-red"
                   />
                 </div>

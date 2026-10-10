@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import StripeCheckout from './StripeCheckout.jsx';
+import { t } from '../lib/i18n.js';
+import PaystackCheckout from './PaystackCheckout.jsx';
 
 // Polls until the payment webhook has settled the ad (usually under a second).
 async function waitForSettlement(bidId) {
-  for (let i = 0; i < 30; i++) {
+  // Bank transfers and USSD can take a little longer than cards.
+  for (let i = 0; i < 60; i++) {
     const result = await api.bidStatus(bidId);
     if (result.status !== 'pending') return result;
     await new Promise((r) => setTimeout(r, 500));
@@ -19,7 +22,7 @@ async function waitForSettlement(bidId) {
 export default function PayStep({ checkout, intro, onDone, onCancel }) {
   const [settling, setSettling] = useState(false);
   const [error, setError] = useState(null);
-  const price = formatMoney(checkout.amountCents);
+  const price = formatMoney(checkout.amountCents, checkout.region);
 
   const finish = async (getResult) => {
     setSettling(true);
@@ -34,10 +37,10 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
 
   return (
     <div className="space-y-5">
-      <p className="font-medium leading-relaxed">{intro ?? <>Your ad passed the safety check. Pay <span className="font-black">{price}</span> to go live.</>}</p>
+      <p className="font-medium leading-relaxed">{intro ?? t('pay.intro', { amount: price })}</p>
       {settling ? (
         <p className="label flex items-center justify-center gap-2 py-4">
-          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={3} /> Putting your ad up
+          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={3} /> {t('pay.putting')}
         </p>
       ) : checkout.paymentsMode === 'demo' ? (
         <>
@@ -46,13 +49,20 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
           </button>
           <p className="text-sm text-ink/60">Test site: payments are simulated. No money moves.</p>
         </>
+      ) : checkout.paymentsMode === 'paystack' ? (
+        <PaystackCheckout
+          accessCode={checkout.accessCode}
+          authorizationUrl={checkout.authorizationUrl}
+          label={t('pay.button', { amount: price })}
+          onPaid={() => finish(() => waitForSettlement(checkout.bidId))}
+        />
       ) : (
         <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
       )}
       {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
       {!settling && (
         <button onClick={onCancel} className="label w-full py-2 text-ink/60 hover:text-bh-red">
-          Cancel
+          {t('pay.cancel')}
         </button>
       )}
     </div>

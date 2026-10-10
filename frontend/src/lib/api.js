@@ -1,10 +1,14 @@
+import { regionInfo, requestRegion } from './region.js';
+
 // Empty in dev (Vite proxies /api). Set VITE_API_URL when the API lives on another origin.
 export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 async function request(path, options = {}) {
   const res = await fetch(API_URL + path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    // Every call names the region once it is known; before that the server
+    // picks one from the visitor's country.
+    headers: { 'Content-Type': 'application/json', ...(requestRegion() ? { 'X-Region': requestRegion() } : {}), ...options.headers },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -20,13 +24,14 @@ export const api = {
   getState: () => request('/api/state'),
   getLegends: ({ sort, offset }) => request(`/api/legends?sort=${sort}&offset=${offset}&limit=24`),
   getCrowns: () => request('/api/crowns?limit=30'),
+  getGeo: () => request('/api/geo'),
   createBid: (bid) => request('/api/bids', { method: 'POST', body: JSON.stringify(bid) }),
   demoPay: (bidId) => request(`/api/bids/${bidId}/demo-pay`, { method: 'POST' }),
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
   createBooking: (booking) => request('/api/bookings', { method: 'POST', body: JSON.stringify(booking) }),
   relegationOffer: (bidId, ownerToken) => request(`/api/relegations/${bidId}`, { headers: { 'X-Owner-Token': ownerToken } }),
-  relegate: (fromBidId, ownerToken) =>
-    request('/api/relegations', { method: 'POST', body: JSON.stringify({ fromBidId, ownerToken }) }),
+  relegate: (fromBidId, ownerToken, email) =>
+    request('/api/relegations', { method: 'POST', body: JSON.stringify({ fromBidId, ownerToken, email }) }),
   getLink: (bidId) => request(`/api/go/${bidId}`),
   report: (bidId, reason, details) => request('/api/reports', { method: 'POST', body: JSON.stringify({ bidId, reason, details }) }),
   adminHealth: (token) => request('/api/admin/health', { headers: { Authorization: `Bearer ${token}` } }),
@@ -41,7 +46,19 @@ export const api = {
   eventsUrl: () => `${API_URL}/api/events`,
 };
 
-export const formatMoney = (cents) => `$${(cents / 100).toFixed(2)}`;
+// Money is in minor units (cents / kobo). Naira shows whole amounts (₦2,500);
+// dollars keep cents ($5.00).
+export function formatMoney(cents, region) {
+  const { currency, locale } = regionInfo(region);
+  const whole = currency === 'NGN';
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(cents / 100);
+}
 
 export function formatDuration(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -63,10 +80,19 @@ export const formatClock = (ms) => {
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
-// Compact money for big totals: $1,240 / $12.4k / $1.2M.
-export function formatMoneyShort(cents) {
-  const dollars = cents / 100;
-  if (dollars >= 1e6) return `$${(dollars / 1e6).toFixed(1)}M`;
-  if (dollars >= 1e4) return `$${(dollars / 1e3).toFixed(1)}k`;
-  return `$${dollars.toLocaleString(undefined, { maximumFractionDigits: dollars < 100 ? 2 : 0 })}`;
+// Amount input helpers. Naira is typed in whole naira (rounded up, so a
+// prefilled minimum is never below the real one); dollars keep cents.
+export function amountToText(cents, region) {
+  return regionInfo(region).currency === 'NGN' ? String(Math.ceil(cents / 100)) : (cents / 100).toFixed(2);
+}
+export const textToCents = (text) => Math.round(Number(text) * 100) || 0;
+
+// Compact money for big totals: $1,240 / $12.4k / ₦1.2M.
+export function formatMoneyShort(cents, region) {
+  const { symbol, currency } = regionInfo(region);
+  const units = cents / 100;
+  if (units >= 1e6) return `${symbol}${(units / 1e6).toFixed(1)}M`;
+  if (units >= 1e4) return `${symbol}${(units / 1e3).toFixed(1)}k`;
+  const decimals = currency === 'NGN' || units >= 100 ? 0 : 2;
+  return `${symbol}${units.toLocaleString(undefined, { maximumFractionDigits: decimals })}`;
 }

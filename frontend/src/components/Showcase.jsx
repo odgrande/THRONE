@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { SHOWCASE } from '../data/showcase.js';
 import { formatMoney } from '../lib/api.js';
 import { gsap, reducedMotion, useGSAP } from '../lib/motion.js';
-// Section entrance animation is handled by the page (ScrollTrigger.batch).
+// Section entrance animation is handled by the page (CSS .reveal-in).
 import CountUp from './CountUp.jsx';
 import Shape from './Shape.jsx';
 

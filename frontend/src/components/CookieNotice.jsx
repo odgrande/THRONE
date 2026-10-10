@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Cookie, X } from 'lucide-react';
+import { t } from '../lib/i18n.js';
 
 const KEY = 'throne.cookieNotice';
 const seen = () => {
@@ -35,10 +36,9 @@ export default function CookieNotice() {
       <div className="flex items-start gap-3">
         <Cookie className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.5} />
         <p className="text-sm font-medium leading-relaxed">
-          <span className="font-bold">No tracking cookies.</span> We only keep a few small items in your browser: codes for ads you buy and
-          your sound settings.{' '}
+          <span className="font-bold">{t('cookie.title')}</span> {t('cookie.body')}{' '}
           <a href="/legal#privacy" className="font-bold underline hover:text-bh-red">
-            Details
+            {t('cookie.details')}
           </a>
         </p>
         <button type="button" onClick={dismiss} aria-label="Dismiss cookie notice" className="shrink-0 hover:text-bh-red">
@@ -46,7 +46,7 @@ export default function CookieNotice() {
         </button>
       </div>
       <button type="button" onClick={dismiss} className="btn-yellow btn-sm mt-3 w-full">
-        Got it
+        {t('cookie.ok')}
       </button>
     </aside>
   );

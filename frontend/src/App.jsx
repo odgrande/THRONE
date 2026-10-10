@@ -4,7 +4,11 @@ import GoPage from './pages/GoPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import PracticePage from './pages/PracticePage.jsx';
 import LegalPage from './pages/LegalPage.jsx';
+import { useEffect } from 'react';
 import CookieNotice from './components/CookieNotice.jsx';
+import { api } from './lib/api.js';
+import { adoptRegion, chosenRegion } from './lib/region.js';
+import { hidePreloader } from './lib/preloader.js';
 
 // A handful of pages, so plain path matching instead of a router dependency.
 function Page() {
@@ -19,6 +23,14 @@ function Page() {
 }
 
 export default function App() {
+  // First visit with no saved edition: ask the server which one this
+  // visitor's country gets (pages that load state learn it from there too).
+  useEffect(() => {
+    if (!chosenRegion()) api.getGeo().then((g) => adoptRegion(g.suggestedRegion), () => {});
+    // The home page hides the preloader once the live billboard has loaded;
+    // every other page as soon as it renders.
+    if (window.location.pathname !== '/') hidePreloader();
+  }, []);
   return (
     <>
       <Page />

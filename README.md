@@ -1,7 +1,17 @@
 # Project Throne
 
-One global billboard. Anyone can take it by paying more than the current holder.
-No signup: upload, link, pay, and you're live on every screen instantly.
+A live ad billboard. Anyone can take the big board by paying more than the current ad, or book a smaller board for a fixed time.
+No signup: upload, link, pay, and you're live on every screen instantly. This is an **ads product**: there are no wallets, credits, dividends or payouts.
+
+Two editions run side by side from one codebase and one database:
+
+| Edition | Currency | Payments | Who lands on it |
+|---|---|---|---|
+| **Global** (`global`) | USD | Stripe (or demo) | Everyone outside Nigeria |
+| **Nigeria** (`ng`) | NGN | **Paystack**: card, bank transfer, USSD | Visitors from Nigeria (Cloudflare's `CF-IPCountry`) |
+
+Each edition has its own throne, boards, King of the Day, archive, leaderboard and revenue. Amounts are never compared across currencies.
+Visitors can switch with the 🌍 $ / 🇳🇬 ₦ toggle in the header, and the choice is remembered.
 
 ## Run it locally (no API keys needed)
 
@@ -10,160 +20,106 @@ npm install && npm run install:all
 npm run dev
 ```
 
-Open http://localhost:5173 in **two browser windows** and bid in one; the other updates live.
+Open http://localhost:5173 in **two browser windows** and bid in one; the other updates live. Add `?region=ng` to see the Naira edition.
 With no keys set, the backend runs in demo mode: in-memory store, simulated payments, moderation off.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18 + Vite + Tailwind |
+| Frontend | React 18 + Vite + Tailwind, Bauhaus design system, GSAP |
 | Backend | Node 20+ / Express |
-| Realtime | Server-Sent Events from the backend (`/api/events`) |
+| Realtime | Server-Sent Events (`/api/events`), filtered per edition in the browser |
 | Database | Supabase Postgres (`supabase/schema.sql`), in-memory fallback for dev |
-| Payments | Stripe Payment Element (Apple Pay / Google Pay / Link / card) |
+| Payments | Paystack inline checkout (NG), Stripe Payment Element (global), chosen per region by `PAYMENTS_NG` / `PAYMENTS_GLOBAL` |
 | Moderation | OpenAI `omni-moderation-latest` (text and image pixels) + Google Web Risk for links |
 | Video | Remotion 4 (React → MP4), separate worker process |
 
-## How a bid flows
+## The boards
 
-1. `POST /api/bids` validates the input and checks the price is at least the current minimum.
-2. The image is decoded (magic-byte check, 2 MB cap), then **moderated together with the text before any charge exists**.
-3. The image is stored on our side (never hot-linked, so it can't be swapped after approval) and a `bids` row is created as `pending`.
-4. If the bidder applies Throne Credits, the bid is split into credits plus a card charge (any card charge is at least $0.50, Stripe's minimum).
-   A bid paid entirely in credits settles immediately. Otherwise a Stripe PaymentIntent is created for the card portion.
-5. The Stripe webhook `payment_intent.succeeded` calls `settle_bid()`, which **row-locks the throne** and, in one transaction:
-   - checks the price is still high enough, otherwise marks the bid outbid and **refunds the card portion in full**;
-   - spends the credits, or marks the bid void and refunds it if they were already spent on another bid;
-   - credits the dethroned king's dividend and moves the throne.
-6. The takeover is broadcast to every viewer over SSE and, if big enough, queued for a hype video.
+- **The Throne (auction).** Pay at least the minimum and your ad replaces the king instantly. Unchallenged kings retire after **7 days**.
+- **The Court: Prince Board (b2) and Herald Board (b3).** Fixed-price bookings for 1, 3 or 7 days (3 days = 2.5×, 7 days = 5× a day). Guaranteed time: nobody can knock you off.
+- **Relegation.** A dethroned king can move the same ad to whichever small board frees up first, for 1 day at **50% off**, within 24 hours.
+- **Recently dethroned.** Every fallen king gets 24 hours in a free strip on the home page.
+- **King of the Day.** Whoever holds the throne when the daily clock hits zero is crowned (midnight UTC for global, **midnight Lagos time** for Nigeria). A takeover in the final 60 s adds 12 s of overtime, up to 10 min. The title is honour only, with no prize.
 
-Webhooks are idempotent: a retried event for a settled bid is a no-op, so credits can never be double-spent or double-paid.
+## Pricing (defaults, all env-tunable)
 
-## Pricing
-
-| Rule | Default | Env |
-|---|---|---|
-| Starting price (empty throne) | **$5.00** | `STARTING_PRICE_CENTS` |
-| Minimum raise | **$2.00 or 10%, whichever is more** | `MIN_INCREMENT_CENTS`, `MIN_RAISE_PCT` |
-| Shield | 60 s + 30 s per dollar above $5, capped at 30 min | `SHIELD_*` |
-| Shield premium | While shielded, the raise is at least 25% | `SHIELD_PREMIUM_PCT` |
-| Dividend | 15% of the new bid, as **Throne Credits** | `DIVIDEND_PCT` |
-| Creator Fund | 5% of every bid, tracked for marketing | `CREATOR_FUND_PCT` |
-
-| Holder paid | Shield | Overthrow while shielded | Overthrow after (open season) |
+| Rule | Global | Nigeria | Env (NG uses the `NG_` prefix) |
 |---|---|---|---|
-| $5 | 1 min | $7.00 | $7.00 |
-| $20 | 8.5 min | $25.00 | $22.00 |
-| $100 | 30 min (cap) | $125.00 | $110.00 |
+| Throne starting price | $5 | ₦2,000 | `STARTING_PRICE_CENTS` |
+| Minimum raise | $2 or 10%, whichever is more | ₦500 or 10% | `MIN_INCREMENT_CENTS`, `MIN_RAISE_PCT` |
+| Shield | 60 s + 30 s per $1 above start, max 30 min | 60 s + 30 s per ₦100 | `SHIELD_*` |
+| Shield premium | While shielded, the raise is at least 25% | same | `SHIELD_PREMIUM_PCT` |
+| Prince Board / day | $3 | ₦1,500 | `BOARD2_DAY_CENTS` |
+| Herald Board / day | $1.50 | ₦800 | `BOARD3_DAY_CENTS` |
+| Map add-on | $2 | ₦1,000 | `MAP_ADDON_CENTS` |
 
-A countdown and a draining bar show the shield live; the last 10 seconds flash red. Survive your shield and you're "Crowned" in the archive.
-The ad never expires: it stays up until someone outbids it. The pricing rule lives in `backend/src/rules.js` and is mirrored in `settle_bid()`.
+Amounts are integers in minor units (cents / kobo). The rules live in `backend/src/rules.js` and `backend/src/config.js`, and `settle_bid()` re-checks them in SQL.
 
-## King of the Day
-The throne never closes, but every day has a champion. Whoever holds the throne when the daily clock hits zero
-(midnight UTC by default) is crowned **King of the Day**: announced live, read aloud, and listed in the Kings of the Day hall on `/kings`.
-- **Overtime (anti-sniping):** a takeover in the final 60 s adds 12 s to the clock, up to 10 min of overtime.
-  The countdown band turns red and says "Overtime!".
-- The crown is honor only. There's no prize money, which keeps it clear of lottery rules.
-- A round is closed by the API every second (or by the next settlement, whichever comes first), inside a locked
-  transaction (`tick_crown()`). A payment that clears after the clock hit zero can't steal the crown.
-- All timings are env-tunable (`CROWN_*`).
+## How a payment flows
+
+1. `POST /api/bids` (or `/api/bookings`, `/api/relegations`) validates the ad and price for the visitor's edition.
+2. The image is decoded (magic-byte check, 2 MB cap) and **moderated together with the text before any charge exists**. Links are checked with Web Risk.
+3. The image is re-hosted on our side, and a `pending` row is created with its `region`.
+4. The edition's processor is asked for a checkout:
+   - **Paystack:** `transaction/initialize` with the amount in kobo, our ad id as the `reference`, and the buyer's email (Paystack needs it for the receipt; **we don't store it**). The browser opens Paystack's popup, with a link to Paystack's own page if popups are blocked.
+   - **Stripe:** a PaymentIntent with the ad id in metadata.
+5. The webhook settles it:
+   - **Paystack:** HMAC-SHA512 signature check, then `GET /transaction/verify/:ref`; the amount and currency must match what we charged.
+   - **Stripe:** signature check.
+6. `settle_bid()` **row-locks that region's throne or board**. If another payment won the race, the loser is **refunded in full** (bid + map fee).
+7. The change is broadcast over SSE, and big takeovers are queued for a hype video.
+
+Webhooks are idempotent: a retried event for a settled ad is a no-op.
+
+## Languages
+The Nigeria edition has a language picker: English, **Nigerian Pidgin, Yorùbá, Hausa, Igbo**. The interface strings are in `frontend/src/lib/i18n.js`. Missing keys fall back to English, and `<html lang>` is set.
+- ⚠️ The four translations are **drafts written without a native speaker**. Have each one checked before you promote it.
+- Ads appear exactly as the advertiser wrote them. The legal pages stay in English.
 
 ## Add-ons and site experience
-- **Map add-on (+$2, `MAP_ADDON_CENTS`):** the advertiser adds a business address. Their ad shows a map card with **Directions**; ads without it show a faded, locked map (the upsell). Maps use the free Google Maps Embed API (`VITE_GOOGLE_MAPS_EMBED_KEY`, restrict it to your domain) and only load when a visitor clicks "Show map". The fee is charged on top of the ad price and **never counts toward throne bids**; refunds return it too.
-- **Billboard:** the frame colour changes with every new king, a ring counts down the shield, and a bar under it shows Total pool / Highest bid / Takeovers.
-- **Businesses we've helped:** live counts of businesses and ads, a **Top advertisers** leaderboard (total spent per business, grouped by name), and a logo wall that shows **labelled example brands** until real ones are added with permission (`frontend/src/data/showcase.js`).
-- **Sound:** synthesized effects (clicks, takeover stamp, dethrone crash, crowning, bookings), voice announcements and generative background music. Off by default, toggles on every page, remembered per browser.
-- **Motion:** GSAP (hero reveal, takeover stamp, count-ups, marquee, scroll entrances that never hide content). Respects "reduce motion".
-- **Light/dark mode:** light (white) by default for everyone; visitors can switch to dark with the header toggle, and the choice is remembered. Colours are CSS variables (`frontend/src/index.css`); yellow surfaces stay light in both themes.
-- **Cookie notice:** small and honest. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
-
-## Reports, takedowns and legal pages
-- Visitors can **report** any ad, anonymously. Five reports from different people hide a live ad pending review.
-- **Admin → Moderation** (`/admin`) shows the report queue. You can take an ad down (optionally deleting its image for good), dismiss the reports, or restore it. Taken-down ads are masked everywhere.
-- **`/legal`** has *draft* Terms, Ad Policy, Throne Credits terms, Privacy Policy and Copyright/takedown process. They're written to match how the system actually works. Fill the `[PLACEHOLDERS]` and get a lawyer's review before launch.
-
-## Roadmap: Nigeria edition (decided, not built)
-- **A separate Naira throne** (`ng`) alongside the global one. Same database and codebase, with a region tag on throne data.
-  Bids can't be fairly compared across currencies (exchange-rate swings), and Naira pricing can start at a locally sensible level.
-- Visitors from Nigeria land on the NG throne automatically (from Cloudflare's country header), with a manual switch.
-- Paystack and/or Flutterwave payments; Pidgin, Yoruba, Hausa and Igbo translations (reviewed by native speakers);
-  light/dark mode; legal review under Nigeria's data protection law (NDPA 2023).
+- **Map add-on:** the advertiser adds a business address, and the ad shows a map card with **Directions** (Google Maps). Ads without it show a faded, locked map. The Embed key (`VITE_GOOGLE_MAPS_EMBED_KEY`) should be restricted to your domain. The map only loads on click. The fee never counts toward throne bids, and refunds return it.
+- **Billboard first:** the live ad is the first thing on screen (phones too). On desktop the bid form scrolls inside its own panel, so the billboard stays visible while someone fills it in.
+- **Billboard:** the frame colour changes with each king, a ring counts down the shield, and a bar shows Total pool / Highest bid / Takeovers.
+- **Businesses we've helped:** live counts, a **Top advertisers** leaderboard (spend per business, per edition), and a logo wall of **labelled example brands**. Add real logos only with written permission (`frontend/src/data/showcase.js`).
+- **Sound:** synthesized effects, voice announcements and background music. Off by default, remembered per browser.
+- **Light/dark:** light by default; dark only when the visitor picks it.
+- **Cookie notice:** small. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
 
 ## Practice mode (`/practice`)
-A private, in-browser simulation with $500 of play money and computer rivals (off / slow / fast). It uses the real
-pricing rules, shields and comeback credits, and sends nothing to the server.
-Bots exist **only** here and are labelled as bots. Never add simulated bidders to the real throne: that's shill bidding.
+A private in-browser simulation with play money ($500 or ₦200,000) and computer rivals. It sends nothing to the server.
+Bots exist **only** here and are labelled. Never add simulated bidders to the real throne: that's shill bidding.
 
-## The four twists
+## History of Kings (`/kings`)
+A Postgres trigger (`archive_deposed_king`) snapshots every deposed ad into `throne_legends` per edition: price, reign, who toppled them, and whether they survived the shield.
 
-| Twist | Status |
-|---|---|
-| 1. AI blind moderation | Done: `backend/src/services/moderation.js` |
-| 2. Dividend | Done: dethroned kings earn **Throne Credits** (see below), not card refunds |
-| 3. Live audio blast | Done: fanfare plus text-to-speech of the moderated tagline, opt-in "Sound on" (browsers block autoplay). Uploaded audio clips are deliberately left out until audio moderation exists |
-| 4. Hype video machine | Done: Remotion renders a 6 s vertical MP4 per big takeover. **Auto-posting to TikTok/Reels/Shorts/X is not built yet** |
+## Admin (`/admin`)
+Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign in at `/admin`.
+- **Treasury:** one block per edition, in its own currency: revenue (throne / boards / map add-ons), estimated processor fees (Paystack: 1.5% + ₦100 over ₦2,500, capped at ₦2,000; Stripe: 30¢ + 2.9%), refunds, and the live processor balance.
+- Also shows stale unpaid ads and failed video renders.
+- **Moderation:** the report queue, with takedown (optionally deleting the image), dismiss and restore. Five distinct reporters auto-hide a live ad pending review.
+- The data comes from `GET /api/admin/health` (Bearer token), which you can also point an uptime monitor at.
 
-### Throne Credits
-- No account: the browser keeps a random 256-bit wallet code, and the server stores only its SHA-256 hash.
-  The bid form has "Back up code" and "Use code from another device" for moving credits between devices.
-- Credits are spent on the next bid (fully or partly). Unspent credits are a liability on your books.
-- **Cash-out is off** (`CASHOUT_ENABLED=false`). The UI says "from $20, coming soon". See the legal notes before turning it on.
+## Legal (`/legal`)
+Terms, Ad Policy, Privacy Policy and Copyright & Takedowns. They have been reviewed by counsel and are live (last updated 10 October 2026). Contact: **therone@gmail.com**.
+Remaining fields to fill in `frontend/src/pages/LegalPage.jsx`: `OPERATOR` (company name), `ADDRESS`, `LAW`, the political-ads decision, the global processor's name, and the jurisdiction-specific rights clause (NDPA 2023 / GDPR).
+If a feature changes, update the matching section and `LAST_UPDATED`.
 
-### Hype videos
-- Template: `backend/src/video/Takeover.jsx`. Three Bauhaus scenes: "The throne has fallen" (old king struck out), the new king and their ad, then the price slam and "Who's next?".
-- Worker: `backend/src/workers/videoWorker.js` claims jobs from `hype_jobs`, bundles the template **once**, and renders H.264 MP4s into `backend/renders/` (served at `/renders`).
-- Only takeovers of at least `HYPE_MIN_CENTS` (default $20) are rendered.
-- Dev: `HYPE_WORKER=inline` renders inside the API process. Prod: run `npm run worker --prefix backend` as a separate process (it needs Supabase).
-- Measured on a dev laptop: about **28 s per video**. The first run takes about 2.5 min extra (it bundles and downloads a headless Chrome).
-- **Remotion license:** free for individuals and companies of up to 3 people. Larger teams need a company license (remotion.pro).
-- Next step: upload renders to Storage/S3, then post through the official TikTok, YouTube, Instagram and X APIs (all need app review, so apply early).
-
-### History of Kings (`/kings`)
-Every time the throne changes hands, a Postgres trigger (`archive_deposed_king`) snapshots the deposed
-ad into `throne_legends`: price, reign length, who overthrew them, and whether they survived their shield.
-The page sorts by most recent, longest reign, or highest price, and shows live click counts.
-
-## Admin treasury (`/admin`)
-A private health view of credit liability vs. cash. Set `ADMIN_TOKEN` on the backend (32+ chars, e.g. `openssl rand -hex 32`),
-then sign in at `/admin`. The token is kept for the browser tab only. With no token set, the endpoint doesn't exist.
-
-| Metric | Meaning |
-|---|---|
-| Net card cash | Card revenue from won bids minus estimated Stripe fees (30¢ + 2.9%, refunded charges included) |
-| Unspent credits | Total Throne Credits held across wallets: what you owe in kind |
-| Coverage | Net cash − unspent credits − Creator Fund pledge |
-| Credit ratio | Unspent credits ÷ net cash. **Watch at 15%, alert at 30%** (`backend/src/admin.js`) |
-| Bid volume paid in credits | Credit-funded bids bring no cash but still mint dividends; this is the leak to watch |
-
-It also shows the live Stripe balance (available + pending), stale unpaid bids and failed video renders, and refreshes every 30 s.
-The data comes from `GET /api/admin/health` (Bearer token). That's the same endpoint to wire into an uptime monitor or Slack alert.
-
-Simulated: in a 10-bid war where both rivals spend every credit on the next bid, 11% of bid volume was paid in credits, but unspent credits stayed at 4% of net cash. The rising minimum raise keeps new card money ahead of the credits.
+## Hype videos
+Remotion renders a 6 s vertical MP4 per big takeover (≥ `HYPE_MIN_CENTS`, per edition, in its currency): `backend/src/video/Takeover.jsx` and `backend/src/workers/videoWorker.js`.
+- Dev: `HYPE_WORKER=inline`. Prod: run the separate worker.
+- Remotion is free for companies of up to 3 people.
+- Auto-posting to TikTok/Reels/Shorts/X is not built yet.
 
 ## Security
-See [SECURITY.md](SECURITY.md) for the full threat model, the Stripe Radar rules and the Cloudflare setup.
+See [SECURITY.md](SECURITY.md).
 
-## Going to production
+## Deploying
+- Free staging: [DEPLOY-STAGING.md](DEPLOY-STAGING.md).
+- Production: [DEPLOY.md](DEPLOY.md).
+- `NODE_ENV=production` refuses to boot with demo payments in any edition, unless `DEPLOY_ENV=staging`.
 
-**Full step-by-step: [DEPLOY.md](DEPLOY.md)** (Cloudflare Pages + Render + Supabase, account order, every env var, Cloudflare rules, launch checklist). Summary:
-
-1. Supabase: create a project, run `supabase/schema.sql`, and set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
-2. Stripe: set `STRIPE_SECRET_KEY`, add a webhook to `https://<api>/api/webhooks/stripe` for `payment_intent.succeeded`, set `STRIPE_WEBHOOK_SECRET`, and put the publishable key in `frontend/.env`.
-   Register your domain for Apple Pay in the Stripe dashboard or the Apple Pay button won't show.
-3. OpenAI: set `OPENAI_API_KEY`. Google Cloud: enable the Web Risk API and set `WEB_RISK_API_KEY`.
-4. `NODE_ENV=production` refuses to boot if any of the above is missing.
-   Then do the **Config** items in SECURITY.md (Cloudflare, Radar, `TRUST_PROXY`).
-5. Host the backend on a long-running Node host (Render, Railway, Fly). SSE does not work on serverless functions.
-   Move uploads to Supabase Storage or S3 + CDN. For more than one instance, relay broadcasts through Redis pub/sub or Supabase Realtime.
-
-## Open business and legal decisions (resolve before launch)
-
-- **Fees.** At a $5 start Stripe takes about $0.45 (9%). At $50 it's about $1.75 (3.5%). Refunds (only for race-condition losers now) don't return the fee.
-- **Credits are a real liability.** Every dethroned king earns 15% of the next bid in credits, so heavy bidding wars shift part of your revenue into credits that get spent instead of paid by card. Watch the outstanding credits total.
-- **Cash-out of credits = stored value.** Letting people withdraw credits as money can make you a money transmitter or e-money issuer, and unclaimed balances can fall under unclaimed-property laws. It's off by default. Get a lawyer's sign-off and use Stripe Connect payouts (Connect handles the identity checks) before enabling it.
-- **Creator Fund promises.** It's a marketing tracker, never paid to bidders, which removes the lottery problem. But if the site says the 5% "sponsors creators", you must actually spend it that way (consumer-protection rules), and the language should stay vague about amounts and recipients until you do.
-- **No SEO backlinks.** Google requires paid links to be marked `sponsored`/`nofollow`. Selling followed links can get the whole site penalized. Every ad also routes through the `/go/` warning page. So the archive sells permanent *visibility* and bragging rights, not link juice. Don't market it as SEO.
-- **Remotion license** (see Hype videos) if your company is more than 3 people.
-- **Ad liability.** Add a report button and an admin takedown for legal notices (DMCA, trademark).
+## Business notes
+- **Fees.** Paystack takes ₦30 on a ₦2,000 throne bid (1.5%), ₦137.50 on ₦2,500 (5.5%, the ₦100 flat fee starts there) and ₦1,600 on ₦100,000 (1.6%). Refunds to race losers don't return the fee.
+- **No SEO backlinks.** Every ad routes through the `/go/` warning page. Sell visibility, not link juice.

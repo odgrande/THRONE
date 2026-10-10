@@ -12,6 +12,13 @@
   --field-focus: 255 249 196;
   color-scheme: light;
 }
+/* One page scroll everywhere (no scroll boxes inside panels); smooth for
+   in-page links, unless the visitor asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
 .dark {
   --ink: 240 240 240;
   --canvas: 18 18 18;
@@ -125,5 +132,78 @@
   .dot-grid-ink {
     background-image: radial-gradient(rgb(var(--ink) / 0.12) 2px, transparent 2px);
     background-size: 20px 20px;
+  }
+}
+
+/* Market wall: stalls pop up like tiles once the wall is in view. "backwards"
+   fill only hides a stall during its own short delay; it ends fully visible. */
+@keyframes stall-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stall-wall.is-in .court-stall {
+    animation: stall-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 35ms);
+  }
+}
+
+/* Section reveal on scroll (added by ThronePage). Only the animation's own
+   delay can hide an element, never a missed trigger. */
+@keyframes reveal-rise {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-in {
+    animation: reveal-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 120ms);
+  }
+}
+
+/* Home page entrance: headline rises, shapes pop, bid panel slides in. */
+@keyframes intro-rise {
+  from {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+}
+@keyframes intro-pop {
+  from {
+    transform: scale(0) rotate(-90deg);
+  }
+}
+@keyframes intro-slide {
+  from {
+    transform: translateX(60px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .intro-rise {
+    animation: intro-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .intro-pop {
+    animation: intro-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s backwards;
+  }
+  .intro-slide {
+    animation: intro-slide 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards;
+  }
+}
+
+/* A new king lands on the billboard like a stamp. */
+@keyframes billboard-drop {
+  from {
+    transform: translateY(-48px) rotate(-2.5deg);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .billboard-drop {
+    animation: billboard-drop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
   }
 }

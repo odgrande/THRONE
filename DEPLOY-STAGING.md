@@ -7,7 +7,7 @@ A public test copy of Project Throne at **$0**:
 | Website | Cloudflare Pages → `https://<name>.pages.dev` | none |
 | API | Render (free web service) → `https://<name>.onrender.com` | sleeps after 15 min idle; first visit after that takes ~1 min |
 | Database + images | Supabase (free) | pauses after 7 days without activity; "Restore" in the dashboard wakes it |
-| Payments | **demo mode** (fake pay button) | no money moves. Real payments come with Paystack |
+| Payments | **demo mode** (fake pay button), or **Paystack test mode** for the Nigeria edition (step 7b) | no real money moves either way |
 | Hype videos | **off** | the video worker needs a paid plan |
 
 Staging runs with `DEPLOY_ENV=staging`, which allows demo payments and missing optional keys.
@@ -70,6 +70,19 @@ In Render → Environment, add one at a time (each Save redeploys):
 - `OPENAI_API_KEY`: AI screening of ads. The moderation endpoint is free to use.
 - `WEB_RISK_API_KEY`: Google malware/phishing link checks. Google requires billing to be enabled on the project, even within the free quota.
 
+## Step 7b: Paystack in test mode (Nigeria edition, you, 5 min)
+Paystack test mode takes test cards and fake bank transfers; no real money moves.
+1. Paystack dashboard → switch to **Test Mode** (top bar) → **Settings → API Keys & Webhooks**.
+2. Copy the **Test Secret Key** (`sk_test_...`). **SECRET**: it goes only into Render → `throne-api-staging` → Environment:
+   - `PAYSTACK_SECRET_KEY` = the test secret key
+   - `PAYMENTS_NG` = `paystack`
+   Save (it redeploys).
+3. On the same Paystack page, set **Test Webhook URL** to `https://<your-api>.onrender.com/api/webhooks/paystack` → Save.
+4. Open your site with `?region=ng`, bid ₦2,000, and pay with Paystack's test card (shown on the Paystack checkout, e.g. `4084 0840 8408 4081`, any future date, CVV `408`, OTP `123456`).
+   The ad should go live on two open browsers within a few seconds.
+
+The Global edition stays on the demo button in staging. The public key isn't needed: the server starts each payment, and the browser only receives a one-time access code.
+
 ## Step 8: Check it works
 Send the two URLs to your developer, who checks: health, CORS, live updates across two browsers, an image upload to Supabase Storage, the archive, the admin page, reports and takedowns. Things to expect:
 - The first load after idle takes ~1 minute (Render free tier waking up).
@@ -77,5 +90,5 @@ Send the two URLs to your developer, who checks: health, CORS, live updates acro
 
 ## Moving to production later
 1. A real domain on Cloudflare (enables the origin lock and `api.yourdomain.com`).
-2. Real payments: Paystack (next build step).
+2. Real payments: Paystack **live** secret key + live webhook URL (DEPLOY.md, step 7). Pick the Global edition's processor (`PAYMENTS_GLOBAL`): Paystack in USD if Paystack enables it for your business, or Stripe.
 3. Copy `deploy/render.production.yaml` over `render.yaml` (paid always-on API + video worker), then follow `DEPLOY.md`.

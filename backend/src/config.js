@@ -9,6 +9,74 @@ const int = (name, fallback) => {
   return n;
 };
 
+// Game mechanics shared by every region (times and percentages, no money).
+const SHARED_RULES = {
+  // An overthrow must beat the holder by the larger of minIncrement and this %.
+  minRaisePct: int('MIN_RAISE_PCT', 10),
+  // Time multiplier: every bid buys a shield. Bigger bid, longer shield.
+  shieldBaseSeconds: int('SHIELD_BASE_SECONDS', 60),
+  shieldMaxSeconds: int('SHIELD_MAX_SECONDS', 1800),
+  // While shielded, overthrowing costs at least this % on top of the holder's price.
+  shieldPremiumPct: int('SHIELD_PREMIUM_PCT', 25),
+  // Term limit: a king unchallenged this long retires and the throne reopens
+  // at the starting price, so it never goes stale.
+  throneTermSeconds: int('THRONE_TERM_SECONDS', 7 * 86400),
+  // How far ahead the booking queue may run.
+  maxBookingAheadDays: int('MAX_BOOKING_AHEAD_DAYS', 60),
+  // Relegation: a dethroned king may move the same ad to a smaller board for
+  // one day at this discount, within this window.
+  relegationDiscountPct: int('RELEGATION_DISCOUNT_PCT', 50),
+  relegationWindowHours: int('RELEGATION_WINDOW_HOURS', 24),
+  // Dethroned ads also show free in the "Recently dethroned" strip this long.
+  recentlyDethronedHours: int('RECENTLY_DETHRONED_HOURS', 24),
+  // King of the Day: whoever holds the throne at the daily cutoff is crowned.
+  crownRoundSeconds: int('CROWN_ROUND_SECONDS', 86400),
+  // Overtime (anti-sniping): a takeover in the final window adds time.
+  crownOvertimeWindowSeconds: int('CROWN_OVERTIME_WINDOW_SECONDS', 60),
+  crownExtensionSeconds: int('CROWN_EXTENSION_SECONDS', 12),
+  crownMaxOvertimeSeconds: int('CROWN_MAX_OVERTIME_SECONDS', 600),
+};
+
+// A region's full rule set: shared mechanics + its own prices, each price
+// overridable by env (e.g. NG_STARTING_PRICE_CENTS, NG_BOARD2_DAY_CENTS).
+function region(id, { name, currency, locale, envPrefix, defaults }) {
+  const p = (key, fallback) => int(`${envPrefix}${key}`, fallback);
+  return {
+    id,
+    name,
+    currency,
+    locale,
+    rules: {
+      ...SHARED_RULES,
+      region: id,
+      currency,
+      locale,
+      startingPriceCents: p('STARTING_PRICE_CENTS', defaults.startingPriceCents),
+      minIncrementCents: p('MIN_INCREMENT_CENTS', defaults.minIncrementCents),
+      shieldStepCents: p('SHIELD_STEP_CENTS', defaults.shieldStepCents),
+      shieldSecondsPerStep: p('SHIELD_SECONDS_PER_STEP', defaults.shieldSecondsPerStep),
+      // Map add-on: business address map on the ad. Charged on top of the bid
+      // or booking price and never counted in throne price comparisons.
+      mapAddonCents: p('MAP_ADDON_CENTS', defaults.mapAddonCents),
+      crownCutoffHourUtc: p('CROWN_CUTOFF_HOUR_UTC', defaults.crownCutoffHourUtc),
+      // Render a takeover video only for bids at or above this amount.
+      hypeMinCents: p('HYPE_MIN_CENTS', defaults.hypeMinCents),
+      bumpCents: defaults.bumpCents,
+      sliderStepCents: defaults.sliderStepCents,
+      // The smaller boards: fixed-price bookings with guaranteed time.
+      boards: {
+        b2: { name: process.env.BOARD2_NAME || 'Prince Board', dayPriceCents: p('BOARD2_DAY_CENTS', defaults.board2DayCents) },
+        b3: { name: process.env.BOARD3_NAME || 'Herald Board', dayPriceCents: p('BOARD3_DAY_CENTS', defaults.board3DayCents) },
+        // The Market: a wall of 12 small stalls at a price anyone can afford
+        // (the Million Dollar Homepage idea, made live).
+        ...Object.fromEntries(
+          Array.from({ length: 12 }, (_, i) => i + 1).map((n) => [`m${n}`, { name: `Market Stall ${n}`, tier: 'market', dayPriceCents: p('MARKET_DAY_CENTS', defaults.marketDayCents) }]),
+        ),
+      },
+    },
+  };
+}
+
 const production = process.env.NODE_ENV === 'production';
 // 'staging' = a public test deploy: real database and storage, but demo
 // payments and optional safety keys are allowed. Never use it with real money.
@@ -33,51 +101,41 @@ export const config = {
   // Per-IP bid submissions per minute (each one can cost a moderation call).
   bidsPerMinute: int('BIDS_PER_MINUTE', 6),
 
-  rules: {
-    startingPriceCents: int('STARTING_PRICE_CENTS', 500),
-    // An overthrow must beat the holder by the larger of these two.
-    minIncrementCents: int('MIN_INCREMENT_CENTS', 200),
-    minRaisePct: int('MIN_RAISE_PCT', 10),
-    // Time multiplier: every bid buys a shield. Bigger bid, longer shield.
-    shieldBaseSeconds: int('SHIELD_BASE_SECONDS', 60),
-    shieldSecondsPerDollar: int('SHIELD_SECONDS_PER_DOLLAR', 30),
-    shieldMaxSeconds: int('SHIELD_MAX_SECONDS', 1800),
-    // While shielded, overthrowing costs at least this % on top of the holder's price.
-    shieldPremiumPct: int('SHIELD_PREMIUM_PCT', 25),
-    // Term limit: a king unchallenged this long retires and the throne reopens
-    // at the starting price, so it never goes stale.
-    throneTermSeconds: int('THRONE_TERM_SECONDS', 7 * 86400),
-
-    // The smaller boards: fixed-price bookings with guaranteed time.
-    boards: {
-      b2: { name: process.env.BOARD2_NAME || 'Prince Board', dayPriceCents: int('BOARD2_DAY_CENTS', 300) },
-      b3: { name: process.env.BOARD3_NAME || 'Herald Board', dayPriceCents: int('BOARD3_DAY_CENTS', 150) },
-    },
-    // How far ahead the booking queue may run.
-    maxBookingAheadDays: int('MAX_BOOKING_AHEAD_DAYS', 60),
-    // Relegation: a dethroned king may move the same ad to the Prince Board
-    // for one day at this discount, within this window.
-    relegationDiscountPct: int('RELEGATION_DISCOUNT_PCT', 50),
-    relegationWindowHours: int('RELEGATION_WINDOW_HOURS', 24),
-    // Dethroned ads also show free in the "Recently dethroned" strip this long.
-    recentlyDethronedHours: int('RECENTLY_DETHRONED_HOURS', 24),
-    // Map add-on: business address map on the ad. Charged on top of the bid or
-    // booking price and never counted in throne price comparisons.
-    mapAddonCents: int('MAP_ADDON_CENTS', 200),
-
-    // King of the Day: whoever holds the throne at the daily cutoff is crowned.
-    // Rounds are crownRoundSeconds long, ending at crownCutoffHourUtc.
-    crownRoundSeconds: int('CROWN_ROUND_SECONDS', 86400),
-    crownCutoffHourUtc: int('CROWN_CUTOFF_HOUR_UTC', 0),
-    // Overtime (anti-sniping): a takeover in the final window adds time.
-    crownOvertimeWindowSeconds: int('CROWN_OVERTIME_WINDOW_SECONDS', 60),
-    crownExtensionSeconds: int('CROWN_EXTENSION_SECONDS', 12),
-    crownMaxOvertimeSeconds: int('CROWN_MAX_OVERTIME_SECONDS', 600),
+  // Two separate thrones in one database: Global (USD) and Nigeria (NGN).
+  // Each has its own currency, prices and daily cutoff; the game mechanics are
+  // shared. All money is in minor units (cents / kobo).
+  regions: {
+    global: region('global', { name: 'Global', currency: 'USD', locale: 'en-US', envPrefix: '', defaults: {
+      startingPriceCents: 500, // $5
+      minIncrementCents: 200, // $2
+      shieldStepCents: 100, // shield grows per extra $1 ...
+      shieldSecondsPerStep: 30, // ... by 30 s
+      board2DayCents: 300,
+      board3DayCents: 150,
+      marketDayCents: 50,
+      mapAddonCents: 200,
+      crownCutoffHourUtc: 0, // midnight UTC
+      hypeMinCents: 2000,
+      bumpCents: [500, 2000], // quick "+5 / +20" buttons
+      sliderStepCents: 50,
+    } }),
+    ng: region('ng', { name: 'Nigeria', currency: 'NGN', locale: 'en-NG', envPrefix: 'NG_', defaults: {
+      startingPriceCents: 200000, // ₦2,000
+      minIncrementCents: 50000, // ₦500
+      shieldStepCents: 10000, // shield grows per extra ₦100 ...
+      shieldSecondsPerStep: 30, // ... by 30 s
+      board2DayCents: 150000, // ₦1,500
+      board3DayCents: 80000, // ₦800
+      marketDayCents: 30000, // ₦300
+      mapAddonCents: 100000, // ₦1,000
+      crownCutoffHourUtc: 23, // midnight in Lagos (WAT = UTC+1)
+      hypeMinCents: 1000000, // ₦10,000
+      bumpCents: [100000, 500000], // "+₦1,000 / +₦5,000"
+      sliderStepCents: 5000,
+    } }),
   },
 
   hype: {
-    // Render a takeover video only for bids at or above this amount.
-    minCents: int('HYPE_MIN_CENTS', 2000),
     // Run the video worker inside the API process (dev / single box).
     // In production run `npm run worker` as its own process instead.
     inlineWorker: process.env.HYPE_WORKER === 'inline',
@@ -88,6 +146,13 @@ export const config = {
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
     // 'automatic' = 3DS when Radar or the bank asks; 'any' = always challenge cards.
     threeDS: process.env.STRIPE_3DS === 'any' ? 'any' : 'automatic',
+  },
+  paystack: {
+    // One secret key does both: API calls and webhook signature checks.
+    secretKey: process.env.PAYSTACK_SECRET_KEY || '',
+    // Overridable only so tests can point at a local fake Paystack; a
+    // production deploy refuses anything but the real API (checked below).
+    apiBase: (process.env.PAYSTACK_API_BASE || 'https://api.paystack.co').replace(/\/$/, ''),
   },
   supabase: {
     url: process.env.SUPABASE_URL || '',
@@ -115,19 +180,54 @@ if (config.adminToken && config.adminToken.length < 32) {
   throw new Error('ADMIN_TOKEN must be at least 32 characters (try: openssl rand -hex 32)');
 }
 
-// Stripe will not charge less than $0.50 USD; the cheapest thing we sell is a
-// discounted relegation or a 1-day Herald booking.
-{
-  const r = config.rules;
+// Which processor takes each region's payments: stripe | paystack | demo.
+// Defaults: global → Stripe if keyed, else demo; ng → Paystack if keyed, else
+// demo. Global can use Paystack too (USD needs Paystack's approval on your
+// account): PAYMENTS_GLOBAL=paystack.
+const pick = (name, fallback) => {
+  const v = process.env[name] || fallback;
+  if (!['stripe', 'paystack', 'demo'].includes(v)) throw new Error(`${name} must be stripe, paystack or demo`);
+  return v;
+};
+config.processors = {
+  global: pick('PAYMENTS_GLOBAL', config.stripe.secretKey ? 'stripe' : 'demo'),
+  ng: pick('PAYMENTS_NG', config.paystack.secretKey ? 'paystack' : 'demo'),
+};
+for (const [region, processor] of Object.entries(config.processors)) {
+  if (processor === 'stripe' && (!config.stripe.secretKey || !config.stripe.webhookSecret)) {
+    throw new Error(`Region ${region} uses Stripe: set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET`);
+  }
+  if (processor === 'paystack' && !config.paystack.secretKey) {
+    throw new Error(`Region ${region} uses Paystack: set PAYSTACK_SECRET_KEY`);
+  }
+}
+
+if (production && config.paystack.apiBase !== 'https://api.paystack.co') {
+  throw new Error('PAYSTACK_API_BASE may only be overridden outside production (it exists for tests)');
+}
+
+export const REGION_IDS = Object.keys(config.regions);
+export const rulesFor = (regionId) => config.regions[regionId]?.rules ?? config.regions.global.rules;
+
+// Processors refuse tiny charges (Stripe: $0.50; Paystack: ₦100 is a safe
+// floor). The cheapest thing we sell is a discounted relegation or a 1-day
+// Herald booking.
+const MIN_CHARGE = { USD: 50, NGN: 10000 };
+for (const { id, rules: r } of Object.values(config.regions)) {
   const cheapest = Math.min(
     r.startingPriceCents,
-    ...Object.values(r.boards).map((b) => Math.round((b.dayPriceCents * (100 - r.relegationDiscountPct)) / 100)),
+    ...Object.values(r.boards).map((b) => b.dayPriceCents),
+    // Relegation (half price) only ever goes to the Court boards.
+    ...Object.values(r.boards).filter((b) => b.tier !== 'market').map((b) => Math.round((b.dayPriceCents * (100 - r.relegationDiscountPct)) / 100)),
   );
-  if (cheapest < 50) throw new Error('Every price must be at least 50 cents (Stripe minimum charge)');
+  if (cheapest < MIN_CHARGE[r.currency]) {
+    throw new Error(`Region ${id}: every price must be at least ${MIN_CHARGE[r.currency]} minor units (processor minimum charge)`);
+  }
 }
 
 // Never run real traffic with demo fallbacks. In particular this guarantees the
-// unauthenticated demo-pay route can never exist in production.
+// unauthenticated demo-pay route can never exist in production (outside an
+// explicit staging deploy).
 // Each process checks only what it uses: the API needs everything, the video
 // worker only needs the database and storage.
 export function assertProductionConfig(role) {
@@ -140,7 +240,9 @@ export function assertProductionConfig(role) {
   if (role !== 'api') return;
 
   const optional = [];
-  if (!config.stripe.secretKey || !config.stripe.webhookSecret) optional.push('STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET');
+  for (const [region, processor] of Object.entries(config.processors)) {
+    if (processor === 'demo') optional.push(`a real payment processor for region ${region} (PAYMENTS_${region.toUpperCase()})`);
+  }
   if (!config.openaiApiKey) optional.push('OPENAI_API_KEY');
   if (!config.webRiskApiKey) optional.push('WEB_RISK_API_KEY');
   if (!config.turnstileSecret) optional.push('TURNSTILE_SECRET_KEY');

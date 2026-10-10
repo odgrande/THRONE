@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { assertProductionConfig, config } from './config.js';
+import { assertProductionConfig, config, REGION_IDS } from './config.js';
 import { createStore } from './store/index.js';
 import { createPayments } from './services/payments.js';
 import { createModeration } from './services/moderation.js';
@@ -22,13 +22,25 @@ assertProductionConfig('api');
 
 const store = createStore(config);
 const storage = createStorage(config);
-const payments = createPayments(config.stripe);
+const payments = createPayments({ stripe: config.stripe, paystack: config.paystack, processors: config.processors, regions: config.regions });
 const moderation = createModeration(config.openaiApiKey);
 const links = createLinkChecker(config.webRiskApiKey);
 const turnstile = createTurnstile(config.turnstileSecret);
 const realtime = createRealtime();
-const hype = createHypeQueue({ store, minCents: config.hype.minCents });
-const game = createGame({ store, payments, realtime, hype, rules: config.rules });
+const hype = createHypeQueue({ store });
+const game = createGame({ store, payments, realtime, hype, regions: config.regions });
+
+// Which region a request is about. An explicit choice (?region= or the
+// X-Region header) wins; otherwise visitors in Nigeria get the Naira throne,
+// using the country Cloudflare stamps on every request (CF-IPCountry; only
+// trusted because the origin lock ensures requests came through Cloudflare).
+const isRegion = (r) => typeof r === 'string' && REGION_IDS.includes(r);
+const countryOf = (req) => (req.get('cf-ipcountry') ?? '').toUpperCase();
+const regionOf = (req) => {
+  const explicit = req.query.region ?? req.get('x-region') ?? req.body?.region;
+  if (isRegion(explicit)) return explicit;
+  return countryOf(req) === 'NG' ? 'ng' : 'global';
+};
 
 const app = express();
 app.set('trust proxy', config.trustProxy);
@@ -51,17 +63,17 @@ if (config.originSecret) {
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: config.corsOrigin }));
 
-// --- Stripe webhook ---
+// --- Payment webhooks ---
 // Registered before the JSON parser (signature checks need the raw body) and
-// before the rate limiter (Stripe retries must never be throttled).
+// before the rate limiter (processor retries must never be throttled).
 // This is the ONLY way an ad goes live in production: the event must carry a
-// valid Stripe signature, so a forged "I paid $1000" request is rejected.
+// valid processor signature, so a forged "I paid ₦1,000,000" request is rejected.
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (payments.mode !== 'stripe') return res.status(404).end();
+  if (!payments.stripe) return res.status(404).end();
 
   let event;
   try {
-    event = payments.constructWebhookEvent(req.body, req.headers['stripe-signature']);
+    event = payments.stripe.constructWebhookEvent(req.body, req.headers['stripe-signature']);
   } catch (err) {
     return res.status(400).send(`Webhook signature error: ${err.message}`);
   }
@@ -74,6 +86,43 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
       console.error('[webhook] settle failed; Stripe will retry', err);
       return res.status(500).end();
     }
+  }
+  res.json({ received: true });
+});
+
+// Paystack: HMAC-SHA512 signature over the raw body. We also check the amount
+// and currency against our own record of the ad, and confirm the transaction
+// with Paystack's API, before an ad goes live.
+app.post('/api/webhooks/paystack', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!payments.paystack) return res.status(404).end();
+  if (!payments.paystack.verifySignature(req.body, req.get('x-paystack-signature'))) {
+    return res.status(401).send('Bad signature');
+  }
+
+  let event;
+  try {
+    event = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    return res.status(400).send('Bad JSON');
+  }
+  if (event.event !== 'charge.success') return res.json({ received: true });
+
+  const reference = event.data?.reference;
+  if (typeof reference !== 'string' || !UUID.test(reference)) return res.json({ received: true });
+  try {
+    const bid = await store.getBid(reference);
+    if (!bid) return res.json({ received: true });
+    const rules = game.rulesOf(bid.region);
+    const expected = bid.amountCents + (bid.addonCents ?? 0);
+    const tx = await payments.paystack.verifyTransaction(reference);
+    if (tx.status !== 'success' || tx.amount !== expected || tx.currency !== rules.currency) {
+      console.error(`[paystack] MISMATCH for ad ${reference}: got ${tx.status} ${tx.amount} ${tx.currency}, expected ${expected} ${rules.currency}`);
+      return res.json({ received: true });
+    }
+    await game.settle(reference, reference);
+  } catch (err) {
+    console.error('[webhook] paystack settle failed; Paystack will retry', err);
+    return res.status(500).end();
   }
   res.json({ received: true });
 });
@@ -104,16 +153,21 @@ app.get('/api/health', (_req, res) =>
     env: config.deployEnv,
     store: store.kind,
     storage: storage.kind,
-    payments: payments.mode,
+    payments: Object.fromEntries(REGION_IDS.map((r) => [r, payments.modeFor(r)])),
     moderation: moderation.enabled,
     linkChecks: links.enabled,
     botCheck: turnstile.enabled,
   }),
 );
 
-app.get('/api/state', async (_req, res, next) => {
+// The region a visitor lands on: suggested from their country, overridable.
+app.get('/api/geo', (req, res) => {
+  res.json({ country: countryOf(req) || null, suggestedRegion: countryOf(req) === 'NG' ? 'ng' : 'global' });
+});
+
+app.get('/api/state', async (req, res, next) => {
   try {
-    res.json(await game.getState());
+    res.json(await game.getState(regionOf(req)));
   } catch (err) {
     next(err);
   }
@@ -130,17 +184,20 @@ if (config.adminToken) {
     next();
   });
 
-  // Financial health: credit liability vs. cash.
+  // Revenue per region (each in its own currency) plus operational alerts.
   admin.get('/health', async (_req, res, next) => {
     try {
       const financials = await store.getFinancials();
-      let stripeBalance = null;
-      try {
-        stripeBalance = await payments.getBalance();
-      } catch (err) {
-        console.error('[admin] Stripe balance unavailable', err.message);
+      const balances = {};
+      for (const region of REGION_IDS) {
+        try {
+          balances[region] = await payments.getBalance(region);
+        } catch (err) {
+          console.error(`[admin] ${region} processor balance unavailable`, err.message);
+          balances[region] = null;
+        }
       }
-      res.json(assessHealth(financials, stripeBalance));
+      res.json(assessHealth(financials, balances, config.regions, (r) => payments.modeFor(r)));
     } catch (err) {
       next(err);
     }
@@ -181,7 +238,7 @@ if (config.adminToken) {
         await store.clearImage(bid.id);
       }
       console.log(`[admin] removed ad ${bid.id} (${reason})${purged ? ' + media purged' : ''}`);
-      realtime.broadcast('removed', { bidId: bid.id });
+      realtime.broadcast('removed', { region: bid.region, bidId: bid.id });
       res.json({ ok: true, purged });
     }),
   );
@@ -191,7 +248,7 @@ if (config.adminToken) {
     withBid(async (_req, res, bid) => {
       await store.restoreBid(bid.id);
       console.log(`[admin] restored ad ${bid.id}`);
-      realtime.broadcast('removed', { bidId: bid.id });
+      realtime.broadcast('removed', { region: bid.region, bidId: bid.id });
       res.json({ ok: true });
     }),
   );
@@ -222,8 +279,9 @@ app.get('/api/legends', async (req, res, next) => {
     const sort = ['recent', 'longest', 'priciest'].includes(req.query.sort) ? req.query.sort : 'recent';
     const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 24));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    const page = await store.getLegends({ sort, limit, offset });
-    res.json({ ...page, items: page.items.map(maskRemoved) });
+    const region = regionOf(req);
+    const page = await store.getLegends({ region, sort, limit, offset });
+    res.json({ ...page, region, items: page.items.map(maskRemoved) });
   } catch (err) {
     next(err);
   }
@@ -233,7 +291,8 @@ app.get('/api/legends', async (req, res, next) => {
 app.get('/api/crowns', async (req, res, next) => {
   try {
     const limit = Math.min(60, Math.max(1, Number.parseInt(req.query.limit, 10) || 30));
-    res.json({ kings: await game.getDayKings(limit) });
+    const region = regionOf(req);
+    res.json({ region, kings: await game.getDayKings(region, limit) });
   } catch (err) {
     next(err);
   }
@@ -299,7 +358,7 @@ app.post('/api/reports', reportLimiter, async (req, res, next) => {
       threshold: config.reports.autoHideThreshold,
     });
     if (result.status === 'missing') return res.status(404).json({ error: 'Ad not found.' });
-    if (result.autoHidden) realtime.broadcast('removed', { bidId });
+    if (result.autoHidden) realtime.broadcast('removed', { region: (await store.getBid(bidId))?.region, bidId });
     // Duplicates get the same friendly answer: no need to tell people we counted them once.
     res.status(201).json({ ok: true });
   } catch (err) {
@@ -311,16 +370,22 @@ app.post('/api/reports', reportLimiter, async (req, res, next) => {
 // Unpaid bids are cheap to send, so this is far stricter than the global limit.
 const bidLimiter = limiter(config.bidsPerMinute, 'Too many bid attempts. Wait a minute and try again.');
 
-const MAX_BID_CENTS = 1_000_000; // $10,000 sanity cap
+// Prices in the region's own currency, for error messages.
+const money = (cents, rules) =>
+  new Intl.NumberFormat(rules.locale, { style: 'currency', currency: rules.currency, maximumFractionDigits: rules.currency === 'NGN' ? 0 : 2 }).format(cents / 100);
 
-function validateBid(body) {
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+
+function validateBid(body, rules) {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const tagline = typeof body.tagline === 'string' ? body.tagline.trim() : '';
   const amountCents = body.amountCents;
+  // Sanity cap: 2,000x the starting price ($10,000 / ₦4,000,000 by default).
+  const maxCents = rules.startingPriceCents * 2000;
 
   if (name.length < 1 || name.length > 40) return { error: 'Name must be 1-40 characters.' };
   if (tagline.length > 100) return { error: 'Tagline must be 100 characters or fewer.' };
-  if (!Number.isInteger(amountCents) || amountCents <= 0 || amountCents > MAX_BID_CENTS) {
+  if (!Number.isInteger(amountCents) || amountCents <= 0 || amountCents > maxCents) {
     return { error: 'Invalid bid amount.' };
   }
 
@@ -337,9 +402,18 @@ function validateBid(body) {
   if (body.withMap === true) {
     address = typeof body.address === 'string' ? body.address.trim().replace(/\s+/g, ' ') : '';
     if (address.length < 5 || address.length > 160) return { error: 'Business address must be 5-160 characters.' };
-    addonCents = config.rules.mapAddonCents;
+    addonCents = rules.mapAddonCents;
   }
   return { name, tagline, targetUrl, amountCents, address, addonCents };
+}
+
+// Paystack needs the buyer's email to send a receipt. We hand it to Paystack
+// and never store it.
+function paymentEmail(req, region) {
+  if (payments.modeFor(region) !== 'paystack') return null;
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  if (email.length > 254 || !EMAIL.test(email)) throw new Reject(400, 'Enter a valid email for your payment receipt.');
+  return email;
 }
 
 // Thrown inside the vetting pipeline to answer the client with a clean error.
@@ -397,19 +471,22 @@ async function vetAd(req, input) {
 
 // Creates the ad row and its payment. The owner code is returned exactly
 // once; the browser keeps it to prove ownership later (e.g. relegation).
-async function createPaidAd(res, fields, description) {
+async function createPaidAd(res, fields, description, email) {
   const owner = newOwnerToken();
   const bid = await store.createBid({ ...fields, ownerHash: owner.hash });
   // The charge is the ad price plus any add-on; amountCents alone is the bid.
   const chargeCents = bid.amountCents + (bid.addonCents ?? 0);
-  const { clientSecret } = await payments.createIntent({ bidId: bid.id, amountCents: chargeCents, description });
+  const checkout = await payments.createIntent({ region: bid.region, bidId: bid.id, amountCents: chargeCents, description, email });
   res.status(201).json({
     bidId: bid.id,
+    region: bid.region,
     board: bid.board,
     amountCents: chargeCents,
     addonCents: bid.addonCents ?? 0,
-    clientSecret,
-    paymentsMode: payments.mode,
+    currency: game.rulesOf(bid.region).currency,
+    paymentsMode: payments.modeFor(bid.region),
+    // Stripe: clientSecret. Paystack: accessCode (inline popup) + authorizationUrl (fallback redirect).
+    ...checkout,
     ownerToken: owner.token,
   });
 }
@@ -428,20 +505,24 @@ app.post(
   '/api/bids',
   bidLimiter,
   handle(async (req, res) => {
-    const input = validateBid(req.body);
+    const region = regionOf(req);
+    const rules = game.rulesOf(region);
+    const input = validateBid(req.body, rules);
     if (input.error) throw new Reject(400, input.error);
+    const email = paymentEmail(req, region);
     await requireHuman(req);
 
-    const minNext = await game.getMinNextBidCents();
+    const minNext = await game.getMinNextBidCents(region);
     if (input.amountCents < minNext) {
-      throw new Reject(409, `Bid must be at least $${(minNext / 100).toFixed(2)}. Amount updated.`, { minNextBidCents: minNext });
+      throw new Reject(409, `Bid must be at least ${money(minNext, rules)}. Amount updated.`, { minNextBidCents: minNext });
     }
 
     const imageUrl = await vetAd(req, input);
     await createPaidAd(
       res,
-      { ...input, board: 'throne', imageUrl, shieldSeconds: game.shieldSecondsFor(input.amountCents) },
+      { ...input, region, board: 'throne', imageUrl, shieldSeconds: game.shieldSecondsFor(region, input.amountCents) },
       `Throne bid by ${input.name}`,
+      email,
     );
   }),
 );
@@ -455,16 +536,22 @@ app.post(
     const days = req.body?.days;
     if (!BOARD_IDS.includes(board)) throw new Reject(400, 'Unknown board.');
     if (!BOOKING_DAYS.includes(days)) throw new Reject(400, 'Pick 1, 3 or 7 days.');
-    const amountCents = bookingPriceCents(board, days, config.rules);
-    const input = validateBid({ ...req.body, amountCents });
+    const region = regionOf(req);
+    const rules = game.rulesOf(region);
+    const amountCents = bookingPriceCents(board, days, rules);
+    // Market stalls are too small to show a map, so they never sell the add-on.
+    const isStall = rules.boards[board].tier === 'market';
+    if (isStall && req.body?.withMap) throw new Reject(400, 'Market stalls do not include a map.');
+    const input = validateBid({ ...req.body, amountCents }, rules);
     if (input.error) throw new Reject(400, input.error);
+    const email = paymentEmail(req, region);
     await requireHuman(req);
 
-    const { tooFar } = await game.bookingStartEstimate(board);
-    if (tooFar) throw new Reject(409, `This board is booked more than ${config.rules.maxBookingAheadDays} days ahead. Try the other board.`);
+    const { tooFar } = await game.bookingStartEstimate(region, board);
+    if (tooFar) throw new Reject(409, `This ${isStall ? 'stall' : 'board'} is booked more than ${rules.maxBookingAheadDays} days ahead. Try another one.`);
 
     const imageUrl = await vetAd(req, input);
-    await createPaidAd(res, { ...input, board, days, imageUrl }, `${config.rules.boards[board].name}: ${days} day(s) for ${input.name}`);
+    await createPaidAd(res, { ...input, region, board, days, imageUrl }, `${rules.boards[board].name}: ${days} day(s) for ${input.name}`, email);
   }),
 );
 
@@ -477,8 +564,8 @@ app.get(
     if (!UUID.test(req.params.bidId)) throw new Reject(404, 'Ad not found.');
     const offer = await game.getRelegationOffer(req.params.bidId, ownerToken(req));
     if (!offer.eligible) return res.json({ eligible: false, reason: offer.reason });
-    const { board, boardName, priceCents, startsAt, expiresAt } = offer;
-    res.json({ eligible: true, board, boardName, priceCents, startsAt, expiresAt });
+    const { region, board, boardName, priceCents, currency, startsAt, expiresAt } = offer;
+    res.json({ eligible: true, region, board, boardName, priceCents, currency, startsAt, expiresAt, needsEmail: payments.modeFor(region) === 'paystack' });
   }),
 );
 
@@ -494,10 +581,13 @@ app.post(
       throw new Reject(403, why[offer.reason] ?? 'This ad is not eligible.');
     }
     // Same ad, already screened when it took the throne: no new upload or check.
+    // It stays in its own region, paid in that region's currency.
     const { bid } = offer;
+    const email = paymentEmail(req, bid.region);
     await createPaidAd(
       res,
       {
+        region: bid.region,
         board: offer.board,
         days: 1,
         amountCents: offer.priceCents,
@@ -510,6 +600,7 @@ app.post(
         address: bid.addonCents > 0 ? bid.address : null,
       },
       `Relegation of ${bid.name} to ${offer.boardName}`,
+      email,
     );
   }),
 );
@@ -524,14 +615,15 @@ app.get('/api/bids/:id/status', async (req, res, next) => {
   }
 });
 
-// Demo mode only: stands in for a cleared Apple Pay / Google Pay payment.
-// config.js refuses to start a production deploy without Stripe (only an
-// explicit DEPLOY_ENV=staging test deploy may run demo payments), so this route
-// can never be reached on a live deployment.
+// Demo mode only: stands in for a cleared payment. Only works for ads in a
+// region whose processor is "demo"; config.js refuses a production deploy with
+// any demo region (only an explicit DEPLOY_ENV=staging test deploy may), so
+// this route can never settle a real-money ad.
 app.post('/api/bids/:id/demo-pay', async (req, res, next) => {
-  if (payments.mode !== 'demo') return res.status(404).end();
   try {
     if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Bid not found.' });
+    const pending = await store.getBid(req.params.id);
+    if (!pending || payments.modeFor(pending.region) !== 'demo') return res.status(404).end();
     const result = await game.settle(req.params.id, `demo_${req.params.id}`);
     if (result.status === 'missing') return res.status(404).json({ error: 'Bid not found.' });
     const bid = await store.getBid(req.params.id);
@@ -570,6 +662,6 @@ if (config.hype.inlineWorker) {
 app.listen(config.port, () => {
   console.log(`Throne backend on http://localhost:${config.port}`);
   console.log(
-    `  store=${store.kind} payments=${payments.mode} moderation=${moderation.enabled ? 'on' : 'OFF'} linkChecks=${links.enabled ? 'on' : 'OFF'}`,
+    `  store=${store.kind} payments=${REGION_IDS.map((r) => `${r}:${payments.modeFor(r)}`).join(',')} moderation=${moderation.enabled ? 'on' : 'OFF'} linkChecks=${links.enabled ? 'on' : 'OFF'}`,
   );
 });

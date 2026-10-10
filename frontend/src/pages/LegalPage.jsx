@@ -1,11 +1,12 @@
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
 
-// DRAFT legal texts. They describe how the product actually works so a lawyer
-// can start from facts. Fill every [BRACKETED] placeholder and have counsel
-// review before launch (and again for the Nigeria edition: NDPA 2023).
+// Live legal texts, reviewed by counsel (October 2026). They describe how the
+// product actually works: if a feature changes, update the matching section
+// and LAST_UPDATED, and have counsel re-check the change.
+const LAST_UPDATED = '10 October 2026';
 const OPERATOR = '[COMPANY NAME]';
-const CONTACT = '[CONTACT EMAIL]';
+const CONTACT = 'therone@gmail.com';
 const ADDRESS = '[REGISTERED ADDRESS]';
 const LAW = '[GOVERNING LAW / COUNTRY]';
 
@@ -39,10 +40,11 @@ const SECTIONS = [
     id: 'privacy',
     title: 'Privacy Policy',
     body: [
-      'What we collect: the ad you submit (name, tagline, image, link); the amount and time of each purchase; a hashed (scrambled) version of a private owner code for each ad; a salted hash of the IP address of anyone who reports an ad (used only to count each person once); and short-lived IP-based counters to stop abuse.',
+      'What we collect: the ad you submit (name, tagline, image, link, and the business address if you buy the map add-on); which edition you used (Global or Nigeria, picked from your country as reported by Cloudflare, which you can change); the amount and time of each purchase; a hashed (scrambled) version of a private owner code for each ad; a salted hash of the IP address of anyone who reports an ad (used only to count each person once); and short-lived IP-based counters to stop abuse.',
       'No accounts and no tracking cookies. Your browser keeps the owner codes for ads you bought (localStorage), so it can offer you a relegation if your Throne ad is outbid.',
-      'Payments are processed by [PAYMENT PROCESSOR, e.g. Paystack]. We never see or store full card numbers.',
-      'Service providers who receive data to run the site: [PAYMENT PROCESSOR] (payments), Supabase (database and file storage), Cloudflare (security, bot checks and delivery), OpenAI (automated content screening of submitted ads), Google Web Risk (checking submitted links), and Render (hosting).',
+      'Payments are processed by Paystack (Nigeria, in Naira) and [GLOBAL PROCESSOR, e.g. Stripe] (elsewhere). We never see or store card numbers or bank details.',
+      'Email for payment receipts. Paystack requires an email address to send your receipt. We pass the email you type straight to Paystack and do not store it ourselves.',
+      'Service providers who receive data to run the site: Paystack and [GLOBAL PROCESSOR] (payments), Supabase (database and file storage), Cloudflare (security, bot checks and delivery), OpenAI (automated content screening of submitted ads), Google Web Risk (checking submitted links), and Render (hosting).',
       'Your ad is public. It is shown on the billboard and kept in the public History of Kings archive. If you buy the map add-on, the business address you enter is shown publicly with your ad. You can ask us to remove an ad you placed.',
       'Maps. Business maps are provided by Google Maps and load only when you click "Show map"; at that point your browser contacts Google, whose privacy policy then applies.',
       `Your rights: you can ask to access or delete information about you, subject to records we must keep (for example payment records). Contact ${CONTACT}. [ADD: jurisdiction-specific rights, e.g. GDPR / NDPA 2023, data controller details]`,
@@ -63,9 +65,6 @@ export default function LegalPage() {
   return (
     <div className="min-h-screen bg-canvas">
       <Header />
-      <p className="border-b-4 border-ink bg-bh-yellow px-4 py-3 text-center text-sm font-black uppercase tracking-wider">
-        Draft · for legal review before launch · not legal advice
-      </p>
       <main className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[220px_1fr] lg:px-8 lg:py-16">
         <nav aria-label="Legal sections" className="h-fit lg:sticky lg:top-8">
           <p className="label mb-3">On this page</p>
@@ -78,7 +77,10 @@ export default function LegalPage() {
           </ul>
         </nav>
         <div className="space-y-10">
-          <h1 className="display text-5xl sm:text-7xl">The rules</h1>
+          <div>
+            <h1 className="display text-5xl sm:text-7xl">The rules</h1>
+            <p className="label mt-3 text-ink/60">Last updated {LAST_UPDATED}</p>
+          </div>
           {SECTIONS.map((s) => (
             <section key={s.id} id={s.id} className="card scroll-mt-8 p-6 lg:p-8">
               <h2 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{s.title}</h2>

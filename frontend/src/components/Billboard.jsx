@@ -1,10 +1,9 @@
-import { useRef } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { formatMoney, formatMoneyShort } from '../lib/api.js';
-import { gsap, reducedMotion, useGSAP } from '../lib/motion.js';
 import CountUp from './CountUp.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
+import { t } from '../lib/i18n.js';
 
 // Every king gets a frame colour of their own, so a takeover is visible at a
 // glance (and on stream). Picked from the ad id: the same ad is always the
@@ -56,11 +55,11 @@ function EmptyThrone() {
       <Shape kind="circle" color="red" className="absolute -left-10 -top-10 h-40 w-40 border-4 border-ink" />
       <Shape kind="square" color="blue" className="absolute -bottom-8 -right-8 h-32 w-32 rotate-45 border-4 border-ink" />
       <p className="display relative text-4xl sm:text-6xl">
-        The throne
+        {t('empty.title1')}
         <br />
-        is empty
+        {t('empty.title2')}
       </p>
-      <p className="label relative mt-4">Claim it before anyone else does</p>
+      <p className="label relative mt-4">{t('empty.sub')}</p>
     </section>
   );
 }
@@ -159,24 +158,15 @@ export function BillboardStats({ stats }) {
 
 // practice: no outbound link (practice ads are not real).
 export default function Billboard({ throne, now = Date.now(), practice = false }) {
-  const scope = useRef(null);
   const accent = throne ? accentFor(throne.id) : ACCENTS[2];
 
-  // Every new king drops in like a stamp and the lamps flash.
-  useGSAP(
-    () => {
-      if (!throne || reducedMotion()) return;
-      gsap
-        .timeline()
-        .fromTo('.billboard-card', { y: -48, rotation: -2.5, opacity: 0 }, { y: 0, rotation: 0, opacity: 1, duration: 0.6, ease: 'back.out(2.2)' })
-        .fromTo('.billboard-lamp', { scale: 1.6 }, { scale: 1, duration: 0.35, stagger: 0.06, ease: 'power2.out' }, '-=0.35');
-    },
-    { scope, dependencies: [throne?.id] },
-  );
+  // Every new king drops in like a stamp and the lamps flash: CSS animations
+  // (index.css) that replay because the card is re-mounted per king
+  // (key={throne.id}). A CSS entrance can never leave the ad invisible.
 
   if (!throne) {
     return (
-      <div ref={scope}>
+      <div>
         <Structure>
           <EmptyThrone />
         </Structure>
@@ -187,9 +177,9 @@ export default function Billboard({ throne, now = Date.now(), practice = false }
   const faceClass = 'group relative block aspect-video overflow-hidden bg-onyx';
 
   return (
-    <div ref={scope}>
+    <div>
       <Structure lamp={accent.name}>
-        <section key={throne.id} className="billboard-card card">
+        <section key={throne.id} className="billboard-card billboard-drop card">
           <div className={`flex items-center justify-between gap-3 border-b-2 border-ink px-4 py-2 lg:border-b-4 ${accent.bar}`}>
             <span className="label flex items-center gap-2">
               <Shape kind="circle" color="ink" className="h-2.5 w-2.5 animate-pulse" />

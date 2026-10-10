@@ -13,8 +13,9 @@ export default function Logo({ inverted = false, onYellow = false }) {
         <Shape kind="square" color="blue" className="h-5 w-5 border-2 border-ink" />
         <Shape kind="triangle" color={onYellow ? 'ink' : 'yellow'} className="h-5 w-6" />
       </span>
-      <span className={`text-xl font-black uppercase tracking-tighter ${inverted ? 'text-white' : 'text-ink'}`}>
-        Throne
+      <span className={`flex flex-col leading-none ${inverted ? 'text-white' : 'text-ink'}`}>
+        <span className="text-xl font-black uppercase tracking-tighter">Throne</span>
+        <span className="hidden text-[10px] font-bold uppercase tracking-[0.2em] opacity-70 sm:block">Live ad billboard</span>
       </span>
     </a>
   );

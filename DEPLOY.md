@@ -66,7 +66,17 @@ Rules → **Transform Rules** → Modify Request Header → Create:
 This stops attackers from calling `throne-api.onrender.com` directly to skip the WAF or fake their IP.
 `/api/health` stays open so Render's health checks work.
 
-## 7. Stripe webhook + Apple Pay
+## 7. Payment webhooks
+
+### 7a. Paystack (Nigeria edition)
+1. Paystack → switch to **Live Mode** → Settings → **API Keys & Webhooks**.
+2. Render → api → Environment: `PAYMENTS_NG=paystack`, `PAYSTACK_SECRET_KEY` = the **live** secret key (`sk_live_…`). Save.
+3. Set **Live Webhook URL** to `https://api.yourdomain.com/api/webhooks/paystack` → Save. Paystack signs every webhook with your secret key; the API also re-verifies each payment with Paystack and checks the amount and currency before an ad goes live.
+4. Cloudflare: exclude `/api/webhooks/paystack` from WAF challenges and rate limits (Paystack can't solve a challenge). Optionally allow only Paystack's webhook IPs (listed in Paystack's docs) on that path.
+5. Make sure your Paystack business is fully activated (KYC done), or live payments are refused.
+
+### 7b. Stripe (Global edition, only if `PAYMENTS_GLOBAL=stripe`)
+If Paystack enables USD for your business, you can use `PAYMENTS_GLOBAL=paystack` instead and skip this part.
 1. Stripe → Developers → Webhooks → Add endpoint `https://api.yourdomain.com/api/webhooks/stripe`, event **`payment_intent.succeeded`** → copy the signing secret (`whsec_…`).
 2. Render → api → Environment → set `STRIPE_WEBHOOK_SECRET` → Save (Render redeploys).
 3. Stripe → Settings → Payment method domains → add `yourdomain.com`. Without it, the Apple Pay button never appears.
@@ -112,9 +122,9 @@ If you turn it on, watch Stripe → Webhooks for failed deliveries.
 ## 10. Launch checklist
 - [ ] `https://api.yourdomain.com/api/health` shows `store: supabase`, `storage: supabase`, `payments: stripe`, `moderation: true`, `linkChecks: true`, `botCheck: true`.
 - [ ] `https://throne-api.onrender.com/api/state` returns **403** (origin lock works).
-- [ ] Place a test bid with Stripe test card `4242 4242 4242 4242`. The ad appears on two open browsers within a second.
-- [ ] Stripe → Webhooks shows a `200` delivery.
-- [ ] Get outbid from a second browser, and check the first one's Throne Credits balance went up.
+- [ ] Nigeria edition (`?region=ng`): pay ₦2,000 with Paystack test mode first, then one small live payment. The ad appears on two open browsers within seconds, and Paystack → Settings → Webhooks shows successful deliveries.
+- [ ] Global edition: one test payment on its processor.
+- [ ] Get outbid from a second browser: the first browser is offered the 50%-off relegation.
 - [ ] Place a $20+ bid. Within about a minute, `GET /api/hype` shows a `done` job with a Supabase video URL that plays.
 - [ ] `/admin` opens with `ADMIN_TOKEN` and shows **Healthy**.
 - [ ] Switch Stripe to live keys (new secret, publishable and webhook secret) and redeploy both API and Pages.

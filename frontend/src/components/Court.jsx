@@ -1,15 +1,18 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, CalendarDays, Loader2, Lock, MapPin, X } from 'lucide-react';
 import MapCard from './MapCard.jsx';
+import { accentFor } from './Billboard.jsx';
 import { api, formatMoney } from '../lib/api.js';
 import { rememberOwnedAd } from '../lib/owned.js';
 import { useModal } from '../lib/useModal.js';
-import AdFields, { EMPTY_AD } from './AdFields.jsx';
+import { needsEmail } from '../lib/region.js';
+import AdFields, { EMPTY_AD, EmailField } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 import { LegalNote } from './BidForm.jsx';
+import { t } from '../lib/i18n.js';
 
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const when = (iso, now) => (Date.parse(iso) <= now + 60_000 ? 'now' : dayFmt.format(new Date(iso)));
@@ -19,6 +22,13 @@ const LOOK = {
   b2: { accent: 'bg-bh-blue text-white', shape: 'circle', shapeColor: 'yellow' },
   b3: { accent: 'bg-bh-yellow text-ink', shape: 'triangle', shapeColor: 'red' },
 };
+// Market stalls cycle the three primaries.
+const STALL_LOOKS = [
+  { accent: 'bg-bh-red text-white', shape: 'circle', shapeColor: 'yellow' },
+  { accent: 'bg-bh-blue text-white', shape: 'square', shapeColor: 'yellow' },
+  { accent: 'bg-bh-yellow text-ink', shape: 'triangle', shapeColor: 'red' },
+];
+const lookOf = (id) => LOOK[id] ?? STALL_LOOKS[(Number(id.slice(1)) - 1) % STALL_LOOKS.length];
 
 function BoardFace({ ad, look }) {
   if (ad.removed) {
@@ -37,7 +47,7 @@ function BoardFace({ ad, look }) {
 }
 
 function MiniBoard({ board, now, onBook, onMap }) {
-  const look = LOOK[board.id];
+  const look = lookOf(board.id);
   const ad = board.current;
   const cheapest = Math.min(...Object.entries(board.prices).map(([d, p]) => p / Number(d)));
 
@@ -48,7 +58,7 @@ function MiniBoard({ board, now, onBook, onMap }) {
           <Shape kind={look.shape} color={look.shapeColor} className="h-3 w-3" />
           {board.name}
         </span>
-        <span className="label opacity-80">Guaranteed time</span>
+        <span className="label opacity-80">{ad && !ad.removed ? 'Paid ad · Guaranteed time' : 'Guaranteed time'}</span>
       </div>
 
       <div className="relative aspect-video overflow-hidden border-b-2 border-ink bg-onyx lg:border-b-4">
@@ -110,7 +120,9 @@ function MiniBoard({ board, now, onBook, onMap }) {
 
 const PACKAGE_COPY = { 1: '1 day', 3: '3 days', 7: '7 days' };
 
-function BookingDialog({ board, now, mapAddonCents, onClose }) {
+function BookingDialog({ board, now, mapAddonCents: boardMapCents, onClose }) {
+  // Market stalls are too small to show a map: no add-on there.
+  const mapAddonCents = board.tier === 'market' ? 0 : boardMapCents;
   const dialog = useModal(onClose);
   const [days, setDays] = useState(7);
   const [ad, setAd] = useState(EMPTY_AD);
@@ -118,6 +130,7 @@ function BookingDialog({ board, now, mapAddonCents, onClose }) {
   const [checkout, setCheckout] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [email, setEmail] = useState('');
   const [botToken, setBotToken] = useState(null);
   const turnstileRef = useRef(null);
   const waitingForBotCheck = Boolean(TURNSTILE_SITE_KEY) && !botToken;
@@ -128,7 +141,7 @@ function BookingDialog({ board, now, mapAddonCents, onClose }) {
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBooking({ board: board.id, days, ...ad, turnstileToken: botToken });
+      const res = await api.createBooking({ board: board.id, days, ...ad, turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -146,7 +159,7 @@ function BookingDialog({ board, now, mapAddonCents, onClose }) {
       aria-labelledby="booking-title"
       className="m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60"
     >
-      <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-b-4 border-ink px-5 py-3 ${LOOK[board.id].accent}`}>
+      <div className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-b-4 border-ink px-5 py-3 ${lookOf(board.id).accent}`}>
         <h2 id="booking-title" className="font-black uppercase tracking-wider">Book the {board.name}</h2>
         <button type="button" onClick={() => dialog.current.close()} aria-label="Close" className="hover:opacity-80">
           <X className="h-5 w-5" strokeWidth={3} />
@@ -211,6 +224,7 @@ function BookingDialog({ board, now, mapAddonCents, onClose }) {
             </fieldset>
 
             <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} mapAddonCents={mapAddonCents} />
+            {needsEmail() && <EmailField value={email} onChange={setEmail} idPrefix={`book-${board.id}`} />}
 
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
             <Turnstile ref={turnstileRef} onToken={setBotToken} />
@@ -270,13 +284,129 @@ export default function Court({ boards, now, mapAddonCents }) {
           </p>
         </div>
         <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2">
-          {boards.map((b) => (
+          {boards.filter((b) => b.tier !== 'market').map((b) => (
             <MiniBoard key={b.id} board={b} now={now} onBook={setBooking} onMap={setMapFor} />
           ))}
         </div>
       </div>
       {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} onClose={() => setBooking(null)} />}
       {mapFor && <MapDialog ad={mapFor} addonCents={mapAddonCents} onClose={() => setMapFor(null)} />}
+    </section>
+  );
+}
+
+// One stall on the Market wall: a small square ad with the same markings as
+// the billboard (paid-ad label, report, safety-checked visit link, frame
+// colour), or an open slot to book.
+function Stall({ board, index, onBook }) {
+  const look = lookOf(board.id);
+  const ad = board.current;
+  const dayPrice = formatMoney(board.prices[1]);
+  const style = { '--i': index };
+  if (!ad) {
+    return (
+      <button
+        type="button"
+        onClick={() => onBook(board)}
+        style={style}
+        className="court-stall group flex aspect-square flex-col items-center justify-center gap-1 border-2 border-dashed border-ink bg-paper p-2 text-center transition duration-200 hover:-translate-y-0.5 hover:bg-bh-cream"
+        aria-label={`${t('market.free')}: ${board.name}, ${dayPrice}/day`}
+      >
+        <Shape kind={look.shape} color={look.shapeColor} className="h-6 w-6 border-2 border-ink transition duration-200 group-hover:scale-110" />
+        <span className="text-xs font-black uppercase leading-tight">{t('market.free')}</span>
+        <span className="text-[11px] font-bold tabular-nums text-ink/70">{dayPrice}/day</span>
+      </button>
+    );
+  }
+  const accent = accentFor(ad.id);
+  return (
+    <article style={style} className="court-stall flex aspect-square flex-col border-2 border-ink bg-paper shadow-hard-xs">
+      <div className={`flex items-center justify-between gap-1 border-b-2 border-ink px-1.5 py-0.5 ${accent.bar}`}>
+        <span className="truncate text-[9px] font-black uppercase tracking-wider opacity-90">{ad.removed ? 'Removed' : 'Paid ad'}</span>
+        {!ad.removed && <ReportButton bidId={ad.id} adName={ad.name} compact className="shrink-0 opacity-80 hover:opacity-100" />}
+      </div>
+      {ad.removed ? (
+        <div className="flex flex-1 items-center justify-center bg-muted p-2 text-center text-xs font-bold text-ink/60">Ad removed</div>
+      ) : (
+        <a
+          href={`/go/${ad.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Visit ${ad.name}'s ad (opens a safety check first)`}
+          className="group relative block min-h-0 flex-1 overflow-hidden bg-onyx"
+        >
+          {ad.imageUrl ? (
+            <img src={ad.imageUrl} alt={ad.tagline || ad.name} className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
+          ) : (
+            <span className={`flex h-full items-center justify-center p-2 text-center text-xs font-black uppercase leading-tight sm:text-sm ${look.accent}`}>
+              {ad.tagline || ad.name}
+            </span>
+          )}
+          <span className="btn-yellow absolute right-1 top-1 px-1.5 py-0.5 text-[9px] opacity-0 transition duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+            Visit <ArrowUpRight className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        </a>
+      )}
+      {/* The ad's frame colour, like the billboard. */}
+      <div aria-hidden="true" className={`h-[4px] border-t-[4px] ${accent.frame}`} />
+      <div className="flex items-baseline justify-between gap-1 border-t-2 border-ink px-1.5 py-0.5">
+        <span className="truncate text-[11px] font-black uppercase">{ad.name}</span>
+        <span className="shrink-0 text-[9px] text-ink/60">to {new Date(ad.endsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
+      </div>
+    </article>
+  );
+}
+
+// The Market: a wall of small, cheap stalls for advertisers on a tight budget.
+// The Million Dollar Homepage idea (2005: a million pixels at $1 each), made
+// live: every stall is a fixed-price, guaranteed-time booking.
+export function Market({ boards, now, mapAddonCents }) {
+  const [booking, setBooking] = useState(null);
+  // Stalls pop in (CSS) the first time the wall scrolls into view. Plain CSS:
+  // if the animation never runs, the stalls are simply shown.
+  const wall = useRef(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (!wall.current || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setSeen(true);
+        io.disconnect();
+      }
+    }, { threshold: 0.15 });
+    io.observe(wall.current);
+    return () => io.disconnect();
+  }, []);
+  const stalls = boards.filter((b) => b.tier === 'market');
+  if (!stalls.length) return null;
+  const dayPrice = formatMoney(Math.min(...stalls.map((b) => b.prices[1])));
+  // "Book any free stall": the one that frees up first.
+  const soonest = [...stalls].sort((a, b) => Date.parse(a.nextFreeAt) - Date.parse(b.nextFreeAt))[0];
+  return (
+    <section className="border-b-4 border-ink bg-bh-cream" aria-labelledby="market-title">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="label text-bh-blue">{t('market.kicker')}</p>
+            <h2 id="market-title" className="display mt-2 text-4xl sm:text-6xl">
+              {t('market.title')}
+            </h2>
+          </div>
+          <div className="max-w-md space-y-3">
+            <p className="font-medium leading-relaxed text-ink/80">{t('market.body', { price: dayPrice })}</p>
+            <button type="button" onClick={() => setBooking(soonest)} className="btn-red btn-sm">
+              {t('market.book', { price: dayPrice })}
+            </button>
+          </div>
+        </div>
+        <div ref={wall} className={`stall-wall mt-10 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6 ${seen ? 'is-in' : ''}`}>
+          {stalls.map((b, i) => (
+            <Stall key={b.id} board={b} index={i} onBook={setBooking} />
+          ))}
+        </div>
+        <p className="mt-4 text-sm font-medium text-ink/70">{t('market.howto')}</p>
+      </div>
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} onClose={() => setBooking(null)} />}
     </section>
   );
 }

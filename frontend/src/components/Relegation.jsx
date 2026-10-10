@@ -4,6 +4,7 @@ import { api, formatMoney } from '../lib/api.js';
 import { ownedAds, rememberOwnedAd } from '../lib/owned.js';
 import { useModal } from '../lib/useModal.js';
 import PayStep from './PayStep.jsx';
+import { EmailField } from './AdFields.jsx';
 import Shape from './Shape.jsx';
 
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
@@ -38,20 +39,33 @@ function RelegateDialog({ offer, onClose }) {
   const [checkout, setCheckout] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
   const started = useRef(false);
 
   // Create the relegation exactly once per dialog (StrictMode mounts twice in dev).
-  useEffect(() => {
+  const start = (receiptEmail) => {
     if (started.current) return;
     started.current = true;
+    setSent(true);
     api
-      .relegate(offer.bidId, offer.token)
+      .relegate(offer.bidId, offer.token, receiptEmail)
       .then((res) => {
         rememberOwnedAd(res);
         setCheckout(res);
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        started.current = false;
+        setSent(false);
+        setError(err.message);
+      });
+  };
+  // Paystack offers wait for the receipt email; others start straight away.
+  useEffect(() => {
+    if (!offer.needsEmail) start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offer]);
+  const asking = offer.needsEmail && !checkout && !sent;
 
   return (
     <dialog ref={dialog} aria-labelledby="relegate-title" className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60">
@@ -62,8 +76,24 @@ function RelegateDialog({ offer, onClose }) {
         </button>
       </div>
       <div className="p-5">
-        {error ? (
+        {error && !asking ? (
           <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 font-bold text-white">{error}</p>
+        ) : asking ? (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError(null);
+              start(email);
+            }}
+          >
+            <p className="font-medium leading-relaxed">
+              1 day on the {offer.boardName} for <span className="font-black">{formatMoney(offer.priceCents, offer.region)}</span>, starting {when(offer.startsAt)}.
+            </p>
+            <EmailField value={email} onChange={setEmail} idPrefix="relegate" />
+            {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
+            <button type="submit" className="btn-blue w-full">Continue to payment</button>
+          </form>
         ) : result ? (
           <div className="space-y-4">
             <p className="border-2 border-ink bg-bh-yellow p-4 font-medium">
@@ -78,7 +108,7 @@ function RelegateDialog({ offer, onClose }) {
             checkout={checkout}
             intro={
               <>
-                Same ad, no new upload. Pay <span className="font-black">{formatMoney(checkout.amountCents)}</span> for 1 day on the{' '}
+                Same ad, no new upload. Pay <span className="font-black">{formatMoney(checkout.amountCents, offer.region)}</span> for 1 day on the{' '}
                 {offer.boardName}, starting {when(offer.startsAt)}.
               </>
             }
@@ -106,7 +136,7 @@ export function RelegationBanner({ offer, onDismiss }) {
           <ArrowDownRight className="h-6 w-6 shrink-0" strokeWidth={3} />
           <span>
             You were dethroned. Keep your ad visible: 1 day on the {offer.boardName} for{' '}
-            <span className="bg-bh-yellow px-1.5 font-black text-ink">{formatMoney(offer.priceCents)}</span> (half price), starting {when(offer.startsAt)}.
+            <span className="bg-bh-yellow px-1.5 font-black text-ink">{formatMoney(offer.priceCents, offer.region)}</span> (half price), starting {when(offer.startsAt)}.
           </span>
         </p>
         <div className="flex gap-2">
