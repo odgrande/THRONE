@@ -30,8 +30,27 @@ create table if not exists bids (
   created_at     timestamptz not null default now(),
   settled_at     timestamptz,
   shield_ends_at timestamptz,
+  -- Takedown: a removed ad's name, tagline, image and link are hidden
+  -- everywhere. The bid itself stays (the slot was paid for).
+  removed_at     timestamptz,
+  removed_reason text,
+  removed_by     text check (removed_by in ('admin', 'auto')),
   check (credits_cents + charge_cents = amount_cents)
 );
+
+-- Visitor reports against an ad. Reporters are anonymous; we keep only a
+-- salted hash of their IP, enough to count each person once per ad.
+create table if not exists reports (
+  id             bigint generated always as identity primary key,
+  bid_id         uuid not null references bids (id),
+  reason         text not null check (reason in ('scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'other')),
+  details        text check (char_length(details) <= 500),
+  reporter_hash  text not null,
+  status         text not null default 'open' check (status in ('open', 'actioned', 'dismissed')),
+  created_at     timestamptz not null default now(),
+  unique (bid_id, reporter_hash)
+);
+create index if not exists reports_open_idx on reports (bid_id) where status = 'open';
 
 -- Single-row table: who holds the throne, the Creator Fund tracker and
 -- lifetime counters for the stats bar.
@@ -99,6 +118,8 @@ alter table bids enable row level security;
 alter table throne enable row level security;
 alter table throne_legends enable row level security;
 alter table hype_jobs enable row level security;
+alter table reports enable row level security;
+alter table crown_rounds enable row level security;
 
 -- Public bucket for ad images and takeover videos. Anyone can read; only the
 -- backend (service role) can write, because storage.objects has no policies
@@ -297,6 +318,46 @@ begin
 end;
 $$;
 
+-- Files a report (once per reporter per ad). If enough different people report
+-- the same live ad, it is hidden at once ('auto') pending admin review; the
+-- admin can restore it. p_threshold <= 0 disables auto-hiding.
+create or replace function report_bid(
+  p_bid_id uuid,
+  p_reason text,
+  p_details text,
+  p_reporter_hash text,
+  p_threshold integer
+) returns json
+language plpgsql
+as $$
+declare
+  v_open   integer;
+  v_hidden boolean := false;
+begin
+  perform 1 from bids where id = p_bid_id and status = 'won' for update;
+  if not found then
+    return json_build_object('status', 'missing');
+  end if;
+
+  insert into reports (bid_id, reason, details, reporter_hash)
+  values (p_bid_id, p_reason, p_details, p_reporter_hash)
+  on conflict (bid_id, reporter_hash) do nothing;
+  if not found then
+    return json_build_object('status', 'duplicate');
+  end if;
+
+  select count(*) into v_open from reports where bid_id = p_bid_id and status = 'open';
+  if p_threshold > 0 and v_open >= p_threshold then
+    update bids
+       set removed_at = now(), removed_reason = 'Hidden after multiple reports, pending review', removed_by = 'auto'
+     where id = p_bid_id and removed_at is null;
+    v_hidden := found;
+  end if;
+
+  return json_build_object('status', 'filed', 'autoHidden', v_hidden);
+end;
+$$;
+
 create or replace function record_click(p_bid_id uuid) returns void
 language sql
 as $$
@@ -347,5 +408,6 @@ revoke execute on function admin_financials() from public, anon, authenticated;
 revoke execute on function settle_bid(uuid, text, jsonb) from public, anon, authenticated;
 revoke execute on function tick_crown(jsonb) from public, anon, authenticated;
 revoke execute on function record_click(uuid) from public, anon, authenticated;
+revoke execute on function report_bid(uuid, text, text, text, integer) from public, anon, authenticated;
 revoke execute on function claim_hype_job() from public, anon, authenticated;
 revoke execute on function archive_deposed_king() from public, anon, authenticated;

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,7 +14,7 @@ import { decodeImage, saveImage } from './services/images.js';
 import { createStorage, LOCAL_DIRS } from './services/storage.js';
 import { createTurnstile } from './services/turnstile.js';
 import { findOrCreateWallet, findWallet } from './services/wallets.js';
-import { createGame } from './game.js';
+import { createGame, maskRemoved } from './game.js';
 import { assessHealth, requireAdmin } from './admin.js';
 
 assertProductionConfig('api');
@@ -135,27 +135,89 @@ app.get('/api/wallet', async (req, res, next) => {
   }
 });
 
-// --- Admin: financial health (credit liability vs. cash) ---
+// --- Admin (only exists when ADMIN_TOKEN is set) ---
 if (config.adminToken) {
-  app.get(
-    '/api/admin/health',
-    limiter(30, 'Too many admin requests.'),
-    requireAdmin(config.adminToken),
-    async (_req, res, next) => {
+  const admin = express.Router();
+  admin.use(limiter(60, 'Too many admin requests.'), requireAdmin(config.adminToken), (_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
+
+  // Financial health: credit liability vs. cash.
+  admin.get('/health', async (_req, res, next) => {
+    try {
+      const financials = await store.getFinancials();
+      let stripeBalance = null;
       try {
-        const financials = await store.getFinancials();
-        let stripeBalance = null;
-        try {
-          stripeBalance = await payments.getBalance();
-        } catch (err) {
-          console.error('[admin] Stripe balance unavailable', err.message);
-        }
-        res.set('Cache-Control', 'no-store').json(assessHealth(financials, stripeBalance));
+        stripeBalance = await payments.getBalance();
       } catch (err) {
-        next(err);
+        console.error('[admin] Stripe balance unavailable', err.message);
       }
-    },
+      res.json(assessHealth(financials, stripeBalance));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Moderation queue: open reports grouped by ad, plus recent takedowns.
+  admin.get('/reports', async (_req, res, next) => {
+    try {
+      const [open, removed] = await Promise.all([store.listReports(), store.listRemoved(30)]);
+      res.json({ open, removed, autoHideThreshold: config.reports.autoHideThreshold });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  const withBid = (handler) => async (req, res, next) => {
+    try {
+      if (!UUID.test(req.params.id)) return res.status(404).json({ error: 'Ad not found.' });
+      const bid = await store.getBid(req.params.id);
+      if (!bid) return res.status(404).json({ error: 'Ad not found.' });
+      await handler(req, res, bid);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Take an ad down everywhere. purgeMedia also deletes the image file, which
+  // is required for illegal content (hiding it is not enough).
+  admin.post(
+    '/bids/:id/remove',
+    withBid(async (req, res, bid) => {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
+      await store.removeBid(bid.id, reason);
+      let purged = false;
+      if (req.body?.purgeMedia === true && bid.imageUrl) {
+        purged = await storage.remove(bid.imageUrl);
+        await store.clearImage(bid.id);
+      }
+      console.log(`[admin] removed ad ${bid.id} (${reason})${purged ? ' + media purged' : ''}`);
+      realtime.broadcast('removed', { bidId: bid.id });
+      res.json({ ok: true, purged });
+    }),
   );
+
+  admin.post(
+    '/bids/:id/restore',
+    withBid(async (_req, res, bid) => {
+      await store.restoreBid(bid.id);
+      console.log(`[admin] restored ad ${bid.id}`);
+      realtime.broadcast('removed', { bidId: bid.id });
+      res.json({ ok: true });
+    }),
+  );
+
+  admin.post(
+    '/bids/:id/dismiss',
+    withBid(async (_req, res, bid) => {
+      await store.dismissReports(bid.id);
+      res.json({ ok: true });
+    }),
+  );
+
+  app.use('/api/admin', admin);
 }
 
 // --- Hype videos (latest renders, for the team / a future gallery) ---
@@ -173,7 +235,8 @@ app.get('/api/legends', async (req, res, next) => {
     const sort = ['recent', 'longest', 'priciest'].includes(req.query.sort) ? req.query.sort : 'recent';
     const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 24));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    res.json(await store.getLegends({ sort, limit, offset }));
+    const page = await store.getLegends({ sort, limit, offset });
+    res.json({ ...page, items: page.items.map(maskRemoved) });
   } catch (err) {
     next(err);
   }
@@ -192,15 +255,23 @@ app.get('/api/crowns', async (req, res, next) => {
 // --- Outbound link interstitial ---
 // The billboard never links straight out: it opens /go/:id, which shows the
 // destination and a warning before the visitor continues.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// A live (or archived) ad that hasn't been taken down.
 const visibleBid = async (id) => {
+  if (!UUID.test(id)) return { error: 404 };
   const bid = await store.getBid(id);
-  return bid && bid.status === 'won' ? bid : null;
+  if (!bid || bid.status !== 'won') return { error: 404 };
+  if (bid.removedAt) return { error: 410 };
+  return { bid };
 };
+const goError = (res, code) =>
+  res.status(code).json({ error: code === 410 ? 'This ad was removed for breaking the rules.' : 'Ad not found.' });
 
 app.get('/api/go/:id', async (req, res, next) => {
   try {
-    const bid = await visibleBid(req.params.id);
-    if (!bid) return res.status(404).json({ error: 'Ad not found.' });
+    const { bid, error } = await visibleBid(req.params.id);
+    if (error) return goError(res, error);
     res.json({ name: bid.name, targetUrl: bid.targetUrl, host: new URL(bid.targetUrl).host });
   } catch (err) {
     next(err);
@@ -211,10 +282,39 @@ const clickLimiter = limiter(20, 'Too many clicks. Try again in a minute.');
 
 app.post('/api/go/:id', clickLimiter, async (req, res, next) => {
   try {
-    const bid = await visibleBid(req.params.id);
-    if (!bid) return res.status(404).json({ error: 'Ad not found.' });
+    const { bid, error } = await visibleBid(req.params.id);
+    if (error) return goError(res, error);
     await store.recordClick(bid.id);
     res.json({ targetUrl: bid.targetUrl });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Reports: any visitor can flag an ad, no account needed ---
+const REPORT_REASONS = ['scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'other'];
+const reportLimiter = limiter(5, 'Too many reports. Try again in a minute.');
+
+app.post('/api/reports', reportLimiter, async (req, res, next) => {
+  try {
+    const { bidId, reason } = req.body ?? {};
+    const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 500) : '';
+    if (typeof bidId !== 'string' || !UUID.test(bidId)) return res.status(400).json({ error: 'Unknown ad.' });
+    if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error: 'Pick a reason.' });
+
+    // Only a salted hash of the IP is stored: enough to count each person once.
+    const reporterHash = createHash('sha256').update(`${config.reports.ipHashSalt}:${req.ip}`).digest('hex');
+    const result = await store.reportBid({
+      bidId,
+      reason,
+      details: details || null,
+      reporterHash,
+      threshold: config.reports.autoHideThreshold,
+    });
+    if (result.status === 'missing') return res.status(404).json({ error: 'Ad not found.' });
+    if (result.autoHidden) realtime.broadcast('removed', { bidId });
+    // Duplicates get the same friendly answer: no need to tell people we counted them once.
+    res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -332,7 +432,7 @@ app.post('/api/bids', bidLimiter, async (req, res, next) => {
 
 app.get('/api/bids/:id/status', async (req, res, next) => {
   try {
-    const bid = await store.getBid(req.params.id);
+    const bid = UUID.test(req.params.id) ? await store.getBid(req.params.id) : null;
     if (!bid) return res.status(404).json({ error: 'Bid not found.' });
     res.json({ status: bid.status });
   } catch (err) {

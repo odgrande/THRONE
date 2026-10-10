@@ -1,10 +1,19 @@
 import { minNextBidCents, shieldSecondsFor, splitPayment } from './rules.js';
 
+// A taken-down ad keeps its place in history (price, times) but its content is
+// gone: no name, tagline, image or link reaches any visitor.
+export function maskRemoved(entry) {
+  if (!entry) return entry;
+  if (!entry.removedAt) return { ...entry, removed: false };
+  return { ...entry, name: 'Removed ad', tagline: null, imageUrl: null, targetUrl: null, removed: true };
+}
+
 // Core rules of the throne: pricing, settlement, credits and broadcasting.
 export function createGame({ store, payments, realtime, hype, rules }) {
   // Never expose payment references or wallet ids to the browser.
   const publicBid = (b) =>
-    b && {
+    b &&
+    maskRemoved({
       id: b.id,
       name: b.name,
       tagline: b.tagline,
@@ -15,7 +24,8 @@ export function createGame({ store, payments, realtime, hype, rules }) {
       clicks: b.clicks,
       startedAt: b.settledAt,
       shieldEndsAt: b.shieldEndsAt,
-    };
+      removedAt: b.removedAt,
+    });
 
   const publicRound = (r) => r && { id: r.id, baseEndsAt: r.baseEndsAt, endsAt: r.endsAt, takeovers: r.takeovers };
 
@@ -32,8 +42,8 @@ export function createGame({ store, payments, realtime, hype, rules }) {
       minNextBidCents: minNextBidCents(bid, Date.now(), rules),
       creatorFundCents,
       stats: { takeovers, volumeCents },
-      crown: { round: publicRound(round), lastKing: lastKing ?? null },
-      recentLegends: recent.items,
+      crown: { round: publicRound(round), lastKing: maskRemoved(lastKing) ?? null },
+      recentLegends: recent.items.map(maskRemoved),
       rules,
       paymentsMode: payments.mode,
       serverTime: new Date().toISOString(),
@@ -48,7 +58,7 @@ export function createGame({ store, payments, realtime, hype, rules }) {
 
   async function announceCrowned(crowned) {
     if (!crowned?.bidId) return; // nobody held the throne when the round ended
-    const king = await store.getBid(crowned.bidId);
+    const king = maskRemoved(await store.getBid(crowned.bidId));
     realtime.broadcast('crowned', { roundId: crowned.roundId, name: king.name, amountCents: king.amountCents });
   }
 
@@ -61,7 +71,7 @@ export function createGame({ store, payments, realtime, hype, rules }) {
     await announceCrowned(crowned);
   }
 
-  const getDayKings = (limit) => store.getDayKings(limit);
+  const getDayKings = async (limit) => (await store.getDayKings(limit)).map(maskRemoved);
 
   async function getMinNextBidCents() {
     const { bid } = await store.getThrone();

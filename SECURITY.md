@@ -70,7 +70,21 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 | The `/admin` page is `noindex`, and the token lives in `sessionStorage` (gone when the tab closes) | Code: `AdminPage.jsx` |
 | For extra safety, put `/admin` and `/api/admin/*` behind Cloudflare Access (free for small teams) so only your team's emails reach it | **Config: Cloudflare** |
 
+## 6. Reports and takedowns
+
+| Defence | Where |
+|---|---|
+| A "Report ad" button on the billboard, the archive and the link-warning page. Anonymous, rate-limited (5/min/IP); only a salted IP hash is stored, and each person counts once per ad | Code: `ReportDialog.jsx`, `server.js`, `report_bid()` |
+| Auto-hide: once `REPORT_AUTOHIDE_THRESHOLD` (default 5) different people report a live ad, it's hidden at once pending review. Restorable, so mass-reporting by rivals can be undone | Code: `report_bid()` |
+| Admin → Moderation: review the unmasked ad, then take it down (with a reason), dismiss the reports, or restore it | Code: `ModerationQueue.jsx`, `/api/admin/bids/:id/*` |
+| "Also delete the image file" permanently erases the file from storage, including the archive's copy. Use it for illegal content: hiding alone isn't enough | Code: `storage.remove()`, `clearImage()` |
+| Removed ads are masked everywhere (billboard, battle log, archive, Kings of the Day, `/go/` returns 410) and are never rendered into hype videos | Code: `maskRemoved()`, `videoWorker.js` |
+
+**Legal duty for some content:** child sexual abuse material must be reported to the authorities (in the US, NCMEC), not just deleted.
+Write that procedure down before launch.
+
 ## Known gaps before launch
-- No admin takedown / report button yet. You need one for legal notices (DMCA, trademark).
+- The legal pages (`/legal`) are **drafts**. Fill in the placeholders and have a lawyer review them.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
+- The schema uses `create table if not exists`. Once a live database exists, later changes need real migrations (e.g. Supabase CLI migrations).
 - Click counts are best-effort and can be inflated. Label them as approximate to advertisers.

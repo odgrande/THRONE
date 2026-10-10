@@ -77,6 +77,8 @@ export default function ThronePage() {
       setBanner(`👑 ${data.name} is King of the Day!`);
       if (soundRef.current) announceCrowned(data.name);
     });
+    // An ad was taken down or restored: refetch so every screen updates at once.
+    events.addEventListener('removed', refresh);
     events.addEventListener('viewers', (e) => setViewers(JSON.parse(e.data).count));
     // Resync after a dropped connection, in case takeovers were missed.
     events.addEventListener('open', refresh);

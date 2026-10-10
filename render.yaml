@@ -54,6 +54,9 @@ services:
       # Copy the generated value into that rule, or the API answers 403.
       - key: ORIGIN_SECRET
         generateValue: true
+      # Salt for hashing reporter IPs (one report per person per ad).
+      - key: IP_HASH_SALT
+        generateValue: true
 
   # Video renderer. Docker image (headless Chrome needs system libraries) and
   # a 2 GB plan: Remotion is memory-hungry, and 512 MB plans crash mid-render.

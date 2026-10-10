@@ -4,6 +4,7 @@ import { api, formatDuration, formatMoney } from '../lib/api.js';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
 import Shape, { CornerMark } from '../components/Shape.jsx';
+import ReportButton from '../components/ReportDialog.jsx';
 
 const SORTS = [
   { key: 'recent', label: 'Most recent' },
@@ -14,16 +15,22 @@ const SORTS = [
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 function LegendCard({ legend, index }) {
+  const faceClass = 'block aspect-video overflow-hidden border-b-2 border-ink bg-ink lg:border-b-4';
   return (
     <article className="card group flex flex-col transition duration-200 ease-out hover:-translate-y-1">
       {/* The fallen are shown in grayscale; color returns on hover. Archived ads
-          still click out through the warning page. */}
+          still click out through the warning page; removed ones don't link at all. */}
+      {legend.removed ? (
+        <div className={`${faceClass} dot-grid-ink flex items-center justify-center !bg-muted`}>
+          <p className="display text-2xl text-ink/60">Ad removed</p>
+        </div>
+      ) : (
       <a
         href={`/go/${legend.bidId}`}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Visit ${legend.name}'s ad (opens a safety check first)`}
-        className="block aspect-video overflow-hidden border-b-2 border-ink bg-ink lg:border-b-4"
+        className={faceClass}
       >
         {legend.imageUrl ? (
           <img
@@ -38,6 +45,7 @@ function LegendCard({ legend, index }) {
           </div>
         )}
       </a>
+      )}
 
       <div className="relative flex flex-1 flex-col p-5">
         <CornerMark index={index} />
@@ -70,6 +78,11 @@ function LegendCard({ legend, index }) {
           <dt>Clicks</dt>
           <dd>{legend.clicks.toLocaleString()}</dd>
         </dl>
+        {!legend.removed && (
+          <div className="mt-4 text-right">
+            <ReportButton bidId={legend.bidId} adName={legend.name} className="text-ink/50" />
+          </div>
+        )}
       </div>
     </article>
   );

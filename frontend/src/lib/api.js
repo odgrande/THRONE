@@ -25,7 +25,15 @@ export const api = {
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
   getWallet: (token) => request('/api/wallet', { headers: token ? { 'X-Wallet-Token': token } : {} }),
   getLink: (bidId) => request(`/api/go/${bidId}`),
+  report: (bidId, reason, details) => request('/api/reports', { method: 'POST', body: JSON.stringify({ bidId, reason, details }) }),
   adminHealth: (token) => request('/api/admin/health', { headers: { Authorization: `Bearer ${token}` } }),
+  adminReports: (token) => request('/api/admin/reports', { headers: { Authorization: `Bearer ${token}` } }),
+  adminAction: (token, bidId, action, body = {}) =>
+    request(`/api/admin/bids/${bidId}/${action}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    }),
   visit: (bidId) => request(`/api/go/${bidId}`, { method: 'POST' }),
   eventsUrl: () => `${API_URL}/api/events`,
 };

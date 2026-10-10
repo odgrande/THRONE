@@ -9,10 +9,11 @@ export default function Footer() {
           Ads are bought by anyone and are not endorsed by Project Throne. Every ad is screened by AI before payment,
           and every outbound click shows its destination first.
         </p>
-        <nav className="flex gap-6">
+        <nav className="flex flex-wrap gap-x-6 gap-y-3">
           <a href="/" className="label hover:text-bh-yellow">Throne</a>
           <a href="/kings" className="label hover:text-bh-yellow">Kings</a>
           <a href="/practice" className="label hover:text-bh-yellow">Practice</a>
+          <a href="/legal" className="label hover:text-bh-yellow">Terms &amp; Privacy</a>
         </nav>
       </div>
     </footer>

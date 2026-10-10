@@ -3,6 +3,7 @@ import KingsPage from './pages/KingsPage.jsx';
 import GoPage from './pages/GoPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import PracticePage from './pages/PracticePage.jsx';
+import LegalPage from './pages/LegalPage.jsx';
 
 // A handful of pages, so plain path matching instead of a router dependency.
 export default function App() {
@@ -12,5 +13,6 @@ export default function App() {
   if (path === '/kings') return <KingsPage />;
   if (path === '/admin') return <AdminPage />;
   if (path === '/practice') return <PracticePage />;
+  if (path === '/legal') return <LegalPage />;
   return <ThronePage />;
 }

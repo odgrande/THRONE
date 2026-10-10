@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 
 const int = (name, fallback) => {
   const raw = process.env[name];
@@ -83,6 +84,14 @@ export const config = {
   turnstileSecret: process.env.TURNSTILE_SECRET_KEY || '',
   // Shared secret Cloudflare adds to every request (X-Origin-Secret). Blank = off.
   originSecret: process.env.ORIGIN_SECRET || '',
+
+  reports: {
+    // Distinct reporters needed to hide a live ad pending review (0 = never auto-hide).
+    autoHideThreshold: int('REPORT_AUTOHIDE_THRESHOLD', 5),
+    // Salt for hashing reporter IPs. Set it in production so the "one report per
+    // person" rule survives restarts and is shared across API instances.
+    ipHashSalt: process.env.IP_HASH_SALT || randomBytes(16).toString('hex'),
+  },
 };
 
 if (config.adminToken && config.adminToken.length < 32) {

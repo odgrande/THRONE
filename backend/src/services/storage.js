@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
@@ -24,6 +24,15 @@ export function createStorage({ supabase, storageBucket, publicUrl }) {
         if (error) throw new Error(`Storage upload failed: ${error.message}`);
         return bucket.getPublicUrl(key).data.publicUrl;
       },
+      // Deletes a file by its public URL (…/object/public/<bucket>/<key>).
+      async remove(url) {
+        const marker = `/object/public/${storageBucket}/`;
+        const at = url?.indexOf(marker) ?? -1;
+        if (at < 0) return false;
+        const { error } = await bucket.remove([decodeURIComponent(url.slice(at + marker.length))]);
+        if (error) throw new Error(`Storage delete failed: ${error.message}`);
+        return true;
+      },
     };
   }
 
@@ -35,6 +44,12 @@ export function createStorage({ supabase, storageBucket, publicUrl }) {
       await mkdir(dir, { recursive: true });
       await writeFile(path.join(dir, name), buffer);
       return `${publicUrl}/${folder}/${name}`;
+    },
+    async remove(url) {
+      const match = url && /\/(uploads|renders)\/([\w.-]+)$/.exec(url);
+      if (!match) return false;
+      await rm(path.join(LOCAL_DIRS[match[1]], match[2]), { force: true });
+      return true;
     },
   };
 }

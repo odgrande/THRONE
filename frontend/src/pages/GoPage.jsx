@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2, TriangleAlert } from 'lucide-react';
 import { api } from '../lib/api.js';
 import Logo from '../components/Logo.jsx';
 import Shape from '../components/Shape.jsx';
+import ReportButton from '../components/ReportDialog.jsx';
 
 // Interstitial for every outbound ad click: shows the real destination host
 // before the visitor leaves, and counts the click for the advertiser.
@@ -44,7 +45,7 @@ export default function GoPage({ bidId }) {
         <div className="p-5 sm:p-6">
           {error ? (
             <>
-              <p className="text-xl font-black uppercase tracking-tight">Ad not found</p>
+              <p className="text-xl font-black uppercase tracking-tight">Link unavailable</p>
               <p className="mt-2 font-medium text-ink/70">{error}</p>
               <a href="/" className="btn-outline mt-6 w-full">
                 <ArrowLeft className="h-4 w-4" strokeWidth={3} /> Back to the throne
@@ -79,6 +80,9 @@ export default function GoPage({ bidId }) {
                   Continue {leaving ? null : <ArrowRight className="h-4 w-4" strokeWidth={3} />}
                 </button>
               </div>
+              <p className="mt-5 text-center">
+                <ReportButton bidId={bidId} adName={link.name} className="text-ink/60" />
+              </p>
             </>
           )}
         </div>

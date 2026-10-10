@@ -17,6 +17,7 @@ export function createMemoryStore() {
   const legends = [];
   const hypeJobs = [];
   const rounds = [];
+  const reports = [];
   let throneBidId = null;
   let creatorFundCents = 0;
   let takeovers = 0;
@@ -95,6 +96,9 @@ export function createMemoryStore() {
         createdAt: new Date().toISOString(),
         settledAt: null,
         shieldEndsAt: null,
+        removedAt: null,
+        removedReason: null,
+        removedBy: null,
       };
       bids.set(bid.id, bid);
       return { ...bid };
@@ -184,8 +188,72 @@ export function createMemoryStore() {
             tagline: bid.tagline,
             imageUrl: bid.imageUrl,
             amountCents: bid.amountCents,
+            removedAt: bid.removedAt,
           };
         });
+    },
+
+    // --- Reports & takedowns: mirrors report_bid() in schema.sql ---
+    async reportBid({ bidId, reason, details, reporterHash, threshold }) {
+      const bid = bids.get(bidId);
+      if (!bid || bid.status !== 'won') return { status: 'missing' };
+      if (reports.some((r) => r.bidId === bidId && r.reporterHash === reporterHash)) return { status: 'duplicate' };
+      reports.push({ id: reports.length + 1, bidId, reason, details, reporterHash, status: 'open', createdAt: new Date().toISOString() });
+      const open = reports.filter((r) => r.bidId === bidId && r.status === 'open').length;
+      let autoHidden = false;
+      if (threshold > 0 && open >= threshold && !bid.removedAt) {
+        Object.assign(bid, {
+          removedAt: new Date().toISOString(),
+          removedReason: 'Hidden after multiple reports, pending review',
+          removedBy: 'auto',
+        });
+        autoHidden = true;
+      }
+      return { status: 'filed', autoHidden };
+    },
+
+    async listReports() {
+      const open = reports.filter((r) => r.status === 'open');
+      return [...new Set(open.map((r) => r.bidId))].map((bidId) => ({
+        bid: { ...bids.get(bidId) },
+        reports: open.filter((r) => r.bidId === bidId).map(({ reporterHash, ...r }) => r),
+      }));
+    },
+
+    async listRemoved(limit) {
+      return [...bids.values()]
+        .filter((b) => b.removedAt)
+        .sort((a, b) => b.removedAt.localeCompare(a.removedAt))
+        .slice(0, limit)
+        .map((b) => ({ ...b }));
+    },
+
+    async removeBid(id, reason) {
+      const bid = bids.get(id);
+      if (!bid) return null;
+      Object.assign(bid, { removedAt: new Date().toISOString(), removedReason: reason, removedBy: 'admin' });
+      for (const r of reports) if (r.bidId === id && r.status === 'open') r.status = 'actioned';
+      return { ...bid };
+    },
+
+    async restoreBid(id) {
+      const bid = bids.get(id);
+      if (!bid) return null;
+      Object.assign(bid, { removedAt: null, removedReason: null, removedBy: null });
+      for (const r of reports) if (r.bidId === id && r.status === 'open') r.status = 'dismissed';
+      return { ...bid };
+    },
+
+    async dismissReports(id) {
+      for (const r of reports) if (r.bidId === id && r.status === 'open') r.status = 'dismissed';
+    },
+
+    // After the file itself is deleted: drop every reference to it, including
+    // the archive's snapshot copy.
+    async clearImage(id) {
+      const bid = bids.get(id);
+      if (bid) bid.imageUrl = null;
+      for (const l of legends) if (l.bidId === id) l.imageUrl = null;
     },
 
     async setStatus(id, status) {
@@ -209,7 +277,7 @@ export function createMemoryStore() {
         total: legends.length,
         items: sorted.slice(offset, offset + limit).map((l) => {
           const bid = bids.get(l.bidId);
-          return { ...l, dividendCents: bid.dividendCents, clicks: bid.clicks };
+          return { ...l, dividendCents: bid.dividendCents, clicks: bid.clicks, removedAt: bid.removedAt };
         }),
       };
     },

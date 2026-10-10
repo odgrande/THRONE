@@ -350,7 +350,11 @@ export default function BidForm({ minNextBidCents, paymentsMode, rules, wallet, 
             `Take the throne · ${formatMoney(split.chargeCents)}`
           )}
         </button>
-        <p className="text-center text-xs text-ink/60">No account. Blocked ads are never charged.</p>
+        <p className="text-center text-xs text-ink/60">
+          No account. Blocked ads are never charged. By bidding you agree to the{' '}
+          <a href="/legal#terms" className="font-bold underline hover:text-bh-red">Terms</a> and{' '}
+          <a href="/legal#ad-policy" className="font-bold underline hover:text-bh-red">Ad Policy</a>.
+        </p>
       </form>
     );
   }

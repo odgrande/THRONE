@@ -70,6 +70,18 @@ The throne never closes, but every day has a champion. Whoever holds the throne 
   transaction (`tick_crown()`). A payment that clears after the clock hit zero can't steal the crown.
 - All timings are env-tunable (`CROWN_*`).
 
+## Reports, takedowns and legal pages
+- Visitors can **report** any ad, anonymously. Five reports from different people hide a live ad pending review.
+- **Admin → Moderation** (`/admin`) shows the report queue. You can take an ad down (optionally deleting its image for good), dismiss the reports, or restore it. Taken-down ads are masked everywhere.
+- **`/legal`** has *draft* Terms, Ad Policy, Throne Credits terms, Privacy Policy and Copyright/takedown process. They're written to match how the system actually works. Fill the `[PLACEHOLDERS]` and get a lawyer's review before launch.
+
+## Roadmap: Nigeria edition (decided, not built)
+- **A separate Naira throne** (`ng`) alongside the global one. Same database and codebase, with a region tag on throne data.
+  Bids can't be fairly compared across currencies (exchange-rate swings), and Naira pricing can start at a locally sensible level.
+- Visitors from Nigeria land on the NG throne automatically (from Cloudflare's country header), with a manual switch.
+- Paystack and/or Flutterwave payments; Pidgin, Yoruba, Hausa and Igbo translations (reviewed by native speakers);
+  light/dark mode; legal review under Nigeria's data protection law (NDPA 2023).
+
 ## Practice mode (`/practice`)
 A private, in-browser simulation with $500 of play money and computer rivals (off / slow / fast). It uses the real
 pricing rules, shields and comeback credits, and sends nothing to the server.

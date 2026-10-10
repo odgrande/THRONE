@@ -59,6 +59,12 @@ export function startVideoWorker({ store, storage, siteLabel }) {
         continue;
       }
       const started = Date.now();
+      // Never advertise an ad that was taken down before its video was made.
+      const bid = await store.getBid(job.payload.bidId).catch(() => null);
+      if (bid?.removedAt) {
+        await store.finishHypeJob(job.id, { status: 'failed', error: 'Ad was removed before rendering.' });
+        continue;
+      }
       try {
         const videoUrl = await render(job);
         await store.finishHypeJob(job.id, { status: 'done', videoUrl });

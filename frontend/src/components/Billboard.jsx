@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react';
 import { formatMoney } from '../lib/api.js';
+import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
 
 // The ad mounted as a real billboard, built only from Bauhaus geometry:
@@ -47,7 +48,20 @@ function EmptyThrone() {
   );
 }
 
+// Shown in place of an ad that was taken down. The holder keeps the slot until
+// outbid, but none of their content is shown.
+function RemovedFace() {
+  return (
+    <div className="dot-grid-ink flex h-full flex-col items-center justify-center gap-3 bg-muted p-8 text-center">
+      <Shape kind="square" color="red" className="h-10 w-10 rotate-45 border-4 border-ink" />
+      <p className="display text-3xl sm:text-5xl">Ad removed</p>
+      <p className="max-w-md font-medium">This ad broke the rules and was taken down. The throne is still up for grabs.</p>
+    </div>
+  );
+}
+
 function AdFace({ throne }) {
+  if (throne.removed) return <RemovedFace />;
   return (
     <>
       {throne.imageUrl ? (
@@ -92,10 +106,17 @@ export default function Billboard({ throne, practice = false }) {
             <Shape kind="circle" color="red" className="h-2.5 w-2.5 animate-pulse" />
             Now reigning
           </span>
-          <span className="label text-white/70">{practice ? 'Practice ad' : 'Paid ad'}</span>
+          {practice || throne.removed ? (
+            <span className="label text-white/70">{practice ? 'Practice ad' : 'Removed'}</span>
+          ) : (
+            <span className="flex items-center gap-4">
+              <span className="label hidden text-white/70 sm:inline">Paid ad</span>
+              <ReportButton bidId={throne.id} adName={throne.name} className="text-white/70 hover:!text-bh-yellow" />
+            </span>
+          )}
         </div>
 
-        {practice ? (
+        {practice || throne.removed ? (
           <div className={faceClass}>
             <AdFace throne={throne} />
           </div>

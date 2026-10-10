@@ -31,6 +31,9 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       createdAt: r.created_at,
       settledAt: r.settled_at,
       shieldEndsAt: r.shield_ends_at,
+      removedAt: r.removed_at,
+      removedReason: r.removed_reason,
+      removedBy: r.removed_by,
     };
 
   const walletFromRow = (r) =>
@@ -51,6 +54,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     survivedShield: r.survived_shield,
     dividendCents: r.bid?.dividend_cents ?? 0,
     clicks: r.bid?.clicks ?? 0,
+    removedAt: r.bid?.removed_at ?? null,
   });
 
   const jobFromRow = (r) =>
@@ -123,7 +127,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       const rows = check(
         await db
           .from('crown_rounds')
-          .select('id, closed_at, takeovers, bid:bids!crown_rounds_winner_bid_id_fkey(id, name, tagline, image_url, amount_cents)')
+          .select('id, closed_at, takeovers, bid:bids!crown_rounds_winner_bid_id_fkey(id, name, tagline, image_url, amount_cents, removed_at)')
           .not('winner_bid_id', 'is', null)
           .order('closed_at', { ascending: false })
           .limit(limit),
@@ -137,7 +141,82 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
         tagline: r.bid.tagline,
         imageUrl: r.bid.image_url,
         amountCents: r.bid.amount_cents,
+        removedAt: r.bid.removed_at,
       }));
+    },
+
+    // --- Reports & takedowns ---
+    async reportBid({ bidId, reason, details, reporterHash, threshold }) {
+      return check(
+        await db.rpc('report_bid', {
+          p_bid_id: bidId,
+          p_reason: reason,
+          p_details: details,
+          p_reporter_hash: reporterHash,
+          p_threshold: threshold,
+        }),
+      );
+    },
+
+    async listReports() {
+      const rows = check(
+        await db
+          .from('reports')
+          .select('id, bid_id, reason, details, status, created_at, bid:bids(*)')
+          .eq('status', 'open')
+          .order('created_at', { ascending: false })
+          .limit(500),
+      );
+      const byBid = new Map();
+      for (const r of rows) {
+        if (!byBid.has(r.bid_id)) byBid.set(r.bid_id, { bid: fromRow(r.bid), reports: [] });
+        byBid.get(r.bid_id).reports.push({ id: r.id, bidId: r.bid_id, reason: r.reason, details: r.details, status: r.status, createdAt: r.created_at });
+      }
+      return [...byBid.values()];
+    },
+
+    async listRemoved(limit) {
+      const rows = check(
+        await db.from('bids').select('*').not('removed_at', 'is', null).order('removed_at', { ascending: false }).limit(limit),
+      );
+      return rows.map(fromRow);
+    },
+
+    async removeBid(id, reason) {
+      const row = check(
+        await db
+          .from('bids')
+          .update({ removed_at: new Date().toISOString(), removed_reason: reason, removed_by: 'admin' })
+          .eq('id', id)
+          .select()
+          .maybeSingle(),
+      );
+      check(await db.from('reports').update({ status: 'actioned' }).eq('bid_id', id).eq('status', 'open'));
+      return fromRow(row);
+    },
+
+    async restoreBid(id) {
+      const row = check(
+        await db
+          .from('bids')
+          .update({ removed_at: null, removed_reason: null, removed_by: null })
+          .eq('id', id)
+          .select()
+          .maybeSingle(),
+      );
+      check(await db.from('reports').update({ status: 'dismissed' }).eq('bid_id', id).eq('status', 'open'));
+      return fromRow(row);
+    },
+
+    async dismissReports(id) {
+      check(await db.from('reports').update({ status: 'dismissed' }).eq('bid_id', id).eq('status', 'open'));
+    },
+
+    // After the file itself is deleted: drop every reference to it, including
+    // the archive's snapshot copy.
+    async clearImage(id) {
+      check(await db.from('bids').update({ image_url: null }).eq('id', id));
+      check(await db.from('throne_legends').update({ image_url: null }).eq('bid_id', id));
     },
 
     async setStatus(id, status) {
@@ -165,7 +244,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
         await db
           .from('throne_legends')
           // Two FKs point at bids (bid_id, deposed_by), so name the one we join on.
-          .select('*, bid:bids!throne_legends_bid_id_fkey(dividend_cents, clicks)', { count: 'exact' })
+          .select('*, bid:bids!throne_legends_bid_id_fkey(dividend_cents, clicks, removed_at)', { count: 'exact' })
           .order(LEGEND_SORTS[sort] ?? LEGEND_SORTS.recent, { ascending: false })
           .range(offset, offset + limit - 1),
       );

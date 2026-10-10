@@ -3,6 +3,7 @@ import { Loader2, LogOut, RefreshCw } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import Logo from '../components/Logo.jsx';
 import Shape from '../components/Shape.jsx';
+import ModerationQueue from '../components/ModerationQueue.jsx';
 
 const TOKEN_KEY = 'throne.adminToken';
 const REFRESH_MS = 30_000;
@@ -88,6 +89,7 @@ export default function AdminPage() {
   const [health, setHealth] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState('treasury');
 
   useEffect(() => {
     const meta = document.createElement('meta');
@@ -163,7 +165,24 @@ export default function AdminPage() {
             <Loader2 className="h-4 w-4 animate-spin" strokeWidth={3} /> {error ?? 'Loading treasury'}
           </p>
         ) : (
-          <Dashboard health={health} error={error} />
+          <>
+            <nav className="mt-8 flex gap-3" aria-label="Admin sections">
+              {[
+                ['treasury', 'Treasury'],
+                ['moderation', 'Moderation'],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  aria-pressed={tab === key}
+                  className={`${tab === key ? 'btn-yellow' : 'btn-outline'} btn-sm`}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : <ModerationQueue token={token} />}
+          </>
         )}
       </main>
     </div>
