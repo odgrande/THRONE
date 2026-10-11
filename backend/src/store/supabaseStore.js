@@ -228,6 +228,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       check(await db.from('contact_messages').delete().lt('at', beforeIso));
     },
 
+    // Paid ads that were not placed and still need their money back.
+    async listRefundsOwed(beforeIso) {
+      return check(await db.from('bids').select('*').in('status', ['outbid', 'void']).not('payment_ref', 'is', null).lte('created_at', beforeIso).limit(100)).map(fromRow);
+    },
+
     async videoUsage(url) {
       const rows = check(await db.from('bids').select('status').eq('video_url', url));
       if (rows.some((r) => r.status !== 'pending')) return 'paid';

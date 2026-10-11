@@ -232,7 +232,8 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
         }
         await store.setStatus(bidId, 'refunded');
       } catch (err) {
-        console.error(`[game] REFUND FAILED for ${result.status} ad ${bidId}; refund manually.`, err);
+        // Stays 'outbid'/'void' = refund owed; retryRefunds() keeps trying.
+        console.error(`[game] refund failed for ${result.status} ad ${bidId}; will retry automatically.`, err.message);
       }
       return result;
     }
@@ -273,7 +274,9 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     try {
       await payments.refund(bid.region, bid.paymentRef, bid.amountCents + (bid.addonCents ?? 0), `rejected-${bidId}`);
     } catch (err) {
-      console.error(`[game] REFUND FAILED for rejected video ad ${bidId}; refund manually.`, err);
+      // Mark it owed ('void'); retryRefunds() keeps trying until it succeeds.
+      await store.setStatus(bidId, 'void');
+      console.error(`[game] refund failed for rejected ad ${bidId}; will retry automatically.`, err.message);
     }
     // The rejected file is deleted; the poster image stays for the record.
     if (storage && bid.videoUrl) await storage.remove(bid.videoUrl).catch((err) => console.error('[game] video delete failed', err));
@@ -336,7 +339,24 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     }
   }
 
+  // Refunds that failed (e.g. the processor balance had not settled yet) are
+  // kept as owed and retried until they go through. Nobody is left unpaid.
+  async function retryRefunds() {
+    const owed = await store.listRefundsOwed(new Date(Date.now() - 2 * 60_000).toISOString());
+    for (const bid of owed) {
+      try {
+        await payments.refund(bid.region, bid.paymentRef, bid.amountCents + (bid.addonCents ?? 0), `retry-${bid.id}`);
+        await store.setStatus(bid.id, 'refunded');
+        console.log(`[game] owed refund paid for ad ${bid.id}`);
+      } catch (err) {
+        console.error(`[game] owed refund for ad ${bid.id} still failing: ${err.message}`);
+      }
+    }
+    return owed.length;
+  }
+
   return {
+    retryRefunds,
     trackReach,
     approveVideo,
     rejectVideo,

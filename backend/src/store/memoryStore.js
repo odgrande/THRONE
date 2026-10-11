@@ -483,6 +483,11 @@ export function createMemoryStore() {
       for (let i = contacts.length - 1; i >= 0; i--) if (contacts[i].at < beforeIso) contacts.splice(i, 1);
     },
 
+    // Paid ads that were not placed and still need their money back.
+    async listRefundsOwed(beforeIso) {
+      return [...bids.values()].filter((b) => ['outbid', 'void'].includes(b.status) && b.paymentRef && (b.settledAt ?? b.createdAt) <= beforeIso).map((b) => ({ ...b }));
+    },
+
     async videoUsage(url) {
       const users = [...bids.values()].filter((b) => b.videoUrl === url);
       if (users.some((b) => b.status !== 'pending')) return 'paid';

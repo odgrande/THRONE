@@ -259,6 +259,13 @@ if (config.adminToken) {
         health.alerts.push({ level: 'amber', message: `${videos.length} paid video ad(s) waiting for review (oldest over an hour). Open the review queue.` });
         if (health.status === 'green') health.status = 'amber';
       }
+      // Refunds still owed (the processor refused them so far; retried every 15 min).
+      const owed = (await store.listRefundsOwed(new Date().toISOString())).length;
+      health.refundsOwed = owed;
+      if (owed > 0) {
+        health.alerts.push({ level: 'amber', message: `${owed} refund(s) owed: the payment provider refused them so far (often an unsettled balance). Retrying every 15 minutes.` });
+        if (health.status === 'green') health.status = 'amber';
+      }
       res.json(health);
     } catch (err) {
       next(err);
@@ -475,7 +482,11 @@ if (config.adminToken) {
       if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirm the refund: it cannot be undone.' });
       if (!['won', 'review'].includes(bid.status) || !bid.paymentRef) return res.status(409).json({ error: 'Only a paid ad can be refunded.' });
       const charge = bid.amountCents + (bid.addonCents ?? 0);
-      await payments.refund(bid.region, bid.paymentRef, charge, `admin-${bid.id}`);
+      try {
+        await payments.refund(bid.region, bid.paymentRef, charge, `admin-${bid.id}`);
+      } catch (err) {
+        return res.status(502).json({ error: `The payment provider refused the refund: ${err.message}. Nothing was changed; try again later.` });
+      }
       if (bid.board === 'throne') await store.forceRetire(bid.region, bid.id);
       await store.setStatus(bid.id, 'refunded');
       if (!bid.removedAt) await store.removeBid(bid.id, `Refunded: ${reason}`);
@@ -574,6 +585,18 @@ if (config.adminToken) {
     try {
       if (!/^\d{1,15}$/.test(req.params.id)) return res.status(404).json({ error: 'Not found.' });
       res.json({ ok: await store.deleteContact(req.params.id) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Retry refunds the payment provider refused earlier, right now.
+  admin.post('/refunds/retry', async (_req, res, next) => {
+    try {
+      const tried = await game.retryRefunds();
+      const left = (await store.listRefundsOwed(new Date().toISOString())).length;
+      await store.logAdmin({ action: 'retry-refunds', after: { tried, left } });
+      res.json({ tried, left });
     } catch (err) {
       next(err);
     }
@@ -1142,6 +1165,11 @@ setInterval(() => {
 setInterval(() => {
   store.purgeContacts(new Date(Date.now() - 90 * 86400_000).toISOString()).catch((err) => console.error('[contact] purge failed', err));
 }, 6 * 3600_000).unref();
+
+// Refunds the payment provider refused earlier are retried every 15 minutes.
+setInterval(() => {
+  game.retryRefunds().catch((err) => console.error('[game] refund retry failed', err));
+}, 15 * 60_000).unref();
 
 // Ad reach: credit live viewers to live ads every 15 s.
 setInterval(() => {
