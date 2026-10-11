@@ -1,16 +1,16 @@
 import { BadgeCheck } from 'lucide-react';
 import { t } from '../lib/i18n.js';
 
-// Official social accounts. Set the full profile URLs at build time
-// (frontend/.env or the Cloudflare Pages settings). Only the ones you set are
-// shown, so the site never links to an account that isn't ours.
+// Official social accounts: @theroneads everywhere. A VITE_SOCIAL_* build
+// setting overrides one link if a profile ever moves.
+const HANDLE = 'theroneads';
 const ACCOUNTS = [
-  { id: 'x', label: 'X', url: import.meta.env.VITE_SOCIAL_X },
-  { id: 'tiktok', label: 'TikTok', url: import.meta.env.VITE_SOCIAL_TIKTOK },
-  { id: 'instagram', label: 'Instagram', url: import.meta.env.VITE_SOCIAL_INSTAGRAM },
-  { id: 'linkedin', label: 'LinkedIn', url: import.meta.env.VITE_SOCIAL_LINKEDIN },
-  { id: 'facebook', label: 'Facebook', url: import.meta.env.VITE_SOCIAL_FACEBOOK },
-].filter((a) => /^https:\/\//.test(a.url ?? ''));
+  { id: 'x', label: 'X', url: import.meta.env.VITE_SOCIAL_X || `https://x.com/${HANDLE}` },
+  { id: 'tiktok', label: 'TikTok', url: import.meta.env.VITE_SOCIAL_TIKTOK || `https://www.tiktok.com/@${HANDLE}` },
+  { id: 'instagram', label: 'Instagram', url: import.meta.env.VITE_SOCIAL_INSTAGRAM || `https://www.instagram.com/${HANDLE}` },
+  { id: 'linkedin', label: 'LinkedIn', url: import.meta.env.VITE_SOCIAL_LINKEDIN || `https://www.linkedin.com/company/${HANDLE}` },
+  { id: 'facebook', label: 'Facebook', url: import.meta.env.VITE_SOCIAL_FACEBOOK || `https://www.facebook.com/${HANDLE}` },
+].filter((a) => /^https:\/\//.test(a.url));
 
 // Brand marks, drawn inline (no third-party scripts or icon fonts).
 function Mark({ id }) {
@@ -69,7 +69,7 @@ export function OfficialSocials({ className = '' }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer me"
-          aria-label={`Throne on ${a.label}`}
+          aria-label={`Throne on ${a.label} (@${HANDLE})`}
           title={a.label}
           className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink bg-paper transition duration-200 hover:-translate-y-0.5 hover:bg-bh-yellow hover:text-ink"
         >

@@ -6,7 +6,7 @@ export default function Logo({ inverted = false, onYellow = false }) {
     <a
       href="/"
       className="group flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
-      aria-label="Project Throne home"
+      aria-label="Throne home"
     >
       <span className="flex items-end gap-1 transition duration-200 ease-out group-hover:scale-110">
         <Shape kind="circle" color="red" className="h-5 w-5 border-2 border-ink" />

@@ -586,7 +586,7 @@ app.post('/api/go/:id', clickLimiter, async (req, res, next) => {
 });
 
 // --- Reports: any visitor can flag an ad, no account needed ---
-const REPORT_REASONS = ['scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'other'];
+const REPORT_REASONS = ['scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'political', 'other'];
 const reportLimiter = limiter(5, 'Too many reports. Try again in a minute.');
 
 app.post('/api/reports', reportLimiter, async (req, res, next) => {

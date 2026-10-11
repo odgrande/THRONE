@@ -98,7 +98,7 @@ export default function AdminPage() {
     meta.name = 'robots';
     meta.content = 'noindex, nofollow';
     document.head.appendChild(meta);
-    document.title = 'Treasury · Project Throne';
+    document.title = 'Admin · Throne';
     return () => meta.remove();
   }, []);
 

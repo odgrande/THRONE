@@ -59,7 +59,7 @@ create index if not exists bids_throne_record_idx on bids (region, amount_cents 
 create table if not exists reports (
   id             bigint generated always as identity primary key,
   bid_id         uuid not null references bids (id),
-  reason         text not null check (reason in ('scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'other')),
+  reason         text not null check (reason in ('scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'political', 'other')),
   details        text check (char_length(details) <= 500),
   reporter_hash  text not null,
   status         text not null default 'open' check (status in ('open', 'actioned', 'dismissed')),
@@ -126,6 +126,10 @@ alter table bids add column if not exists review_since timestamptz;
 -- 'review': paid video ad waiting for a human; never live until approved.
 alter table bids drop constraint if exists bids_status_check;
 alter table bids add constraint bids_status_check check (status in ('pending', 'review', 'won', 'outbid', 'void', 'refunded'));
+
+-- Political ads are not allowed: visitors can report them.
+alter table reports drop constraint if exists reports_reason_check;
+alter table reports add constraint reports_reason_check check (reason in ('scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'political', 'other'));
 
 -- Upgrade path for databases created before the Market stalls existed.
 alter table bids drop constraint if exists bids_board_check;

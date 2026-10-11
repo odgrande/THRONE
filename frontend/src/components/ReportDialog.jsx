@@ -10,6 +10,7 @@ export const REPORT_REASONS = [
   { key: 'violence', label: 'Violence or dangerous acts' },
   { key: 'copyright', label: 'Uses my copyright or trademark' },
   { key: 'impersonation', label: 'Impersonates someone' },
+  { key: 'political', label: 'Political ad (not allowed)' },
   { key: 'other', label: 'Something else' },
 ];
 

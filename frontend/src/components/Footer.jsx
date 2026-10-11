@@ -10,6 +10,7 @@ export default function Footer() {
           <Logo inverted />
           <OfficialSocials className="text-ink" />
           <a href="mailto:therone@gmail.com" className="text-sm font-bold text-white/80 hover:text-bh-yellow">therone@gmail.com</a>
+          <p className="text-xs text-white/50">© {new Date().getFullYear()} Odgrande NG Limited. Throne is owned and operated by Odgrande NG Limited.</p>
         </div>
         <div className="max-w-md space-y-2 text-sm leading-relaxed text-white/70">
           <p>

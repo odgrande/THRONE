@@ -91,7 +91,7 @@ Webhooks are idempotent: a retried event for a settled ad is a no-op.
 
 ## Languages
 The Nigeria edition has a language picker: English, **Nigerian Pidgin, Yorùbá, Hausa, Igbo**. The interface strings are in `frontend/src/lib/i18n.js`. Missing keys fall back to English, and `<html lang>` is set.
-- ⚠️ The four translations are **drafts written without a native speaker**. Have each one checked before you promote it.
+- The four translations were reviewed by a native speaker (October 2026) and are live. Have any new or changed string checked the same way.
 - Ads appear exactly as the advertiser wrote them. The legal pages stay in English.
 
 ## Add-ons and site experience
@@ -124,7 +124,7 @@ Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign 
 
 ## Legal (`/legal`)
 Terms, Ad Policy, Privacy Policy and Copyright & Takedowns. They have been reviewed by counsel and are live (last updated 10 October 2026). Contact: **therone@gmail.com**.
-Remaining fields to fill in `frontend/src/pages/LegalPage.jsx`: `OPERATOR` (company name), `ADDRESS`, `LAW`, the political-ads decision, the global processor's name, and the jurisdiction-specific rights clause (NDPA 2023 / GDPR).
+Throne is owned and operated by **Odgrande NG Limited** (online business, contact by email). Terms are governed by Nigerian law, with Global-edition consumers keeping their own country's non-excludable consumer protections. **Political ads are not allowed** (reasons in the Ad Policy; visitors can report them). Data rights follow the NDPA 2023 and, for users there, the GDPR. Socials: **@theroneads** on X, TikTok, Instagram, LinkedIn and Facebook.
 If a feature changes, update the matching section and `LAST_UPDATED`.
 
 ## Hype videos

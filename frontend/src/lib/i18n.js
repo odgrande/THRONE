@@ -1,6 +1,6 @@
 // Interface languages. English is the source; Nigerian Pidgin, Yoruba, Hausa
-// and Igbo are DRAFTS written without a native speaker. Have each one checked
-// by a native speaker before launch (see README "Translations").
+// and Igbo were reviewed by a native speaker (October 2026). When you add or
+// change a string, have the new wording checked the same way.
 //
 // Only the interface is translated. Ads are shown as the advertiser wrote
 // them, and the legal pages stay in English (the governing text).

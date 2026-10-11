@@ -107,7 +107,7 @@ Write that procedure down before launch.
 | Body-parser errors (oversized upload, malformed JSON) answer 4xx, never a server error | Code: `server.js` |
 
 ## Known gaps before launch
-- The legal pages (`/legal`) are reviewed and live. A few fields (company name, address, governing law, political ads, global processor, data-rights clause) still need filling in `LegalPage.jsx`.
+- The legal pages are live. Clauses added on 11 October 2026 (owner, governing law, political ads, data rights, video ads, results disclaimer) should be checked by counsel. Check whether the company's CAC registration number (and registered office) must appear on the site.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
 - The schema uses `create table if not exists`. Once a live database exists, later changes need real migrations (e.g. Supabase CLI migrations).
 - Click counts and reach are best-effort: one person behind a VPN or several people behind one shared IP (common on Nigerian mobile networks) can skew them. The site describes how they are counted; don't sell them as audited figures.
