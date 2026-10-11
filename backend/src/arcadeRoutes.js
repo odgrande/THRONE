@@ -3,13 +3,14 @@
 
 const WALLET_HEADER = 'x-wallet';
 const DEVICE_HEADER = 'x-device';
+const FP_HEADER = 'x-fp';
 const NAME = /^[\p{L}\p{N} ._-]{2,24}$/u;
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function mountArcade(app, deps) {
   const { arcade, store, game, payments, config, limiter, handle, Reject, requireHuman, vetAd, validateBid, paymentEmail, regionOf, UUID, politicalMatch, moderation } = deps;
 
-  const ctx = (req) => ({ ip: req.ip, device: req.get(DEVICE_HEADER) });
+  const ctx = (req) => ({ ip: req.ip, device: req.get(DEVICE_HEADER), fp: req.get(FP_HEADER) });
   const walletOf = async (req) => arcade.walletFromToken(req.get(WALLET_HEADER));
   // Arcade errors -> clean JSON answers.
   const play = (fn) =>

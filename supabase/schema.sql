@@ -255,6 +255,14 @@ alter table wallets add column if not exists created_device_hash text;
 alter table game_attempts add column if not exists device_hash text;
 create index if not exists game_attempts_device_idx on game_attempts (device_hash, started_at desc);
 create index if not exists wallets_device_idx on wallets (created_device_hash, created_at);
+-- A scrambled browser signature (screen, time zone, graphics...), which
+-- survives private windows and cleared storage. Used only for the reset timer
+-- and welcome coins (where two identical phones sharing it costs little),
+-- never for daily free tries. Erased after 30 days like the other hashes.
+alter table wallets add column if not exists created_fp_hash text;
+alter table game_attempts add column if not exists fp_hash text;
+create index if not exists game_attempts_fp_idx on game_attempts (fp_hash, started_at desc);
+create index if not exists wallets_fp_idx on wallets (created_fp_hash, created_at);
 -- Moderation and the "Saved" badge.
 alter table wallets add column if not exists banned boolean not null default false;
 alter table wallets add column if not exists ban_reason text;

@@ -13,7 +13,9 @@ export default function Footer() {
         <p className="max-w-xs text-sm leading-relaxed text-white/70">{t('footer.short')}</p>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3">
           {[
-            ['/', 'Advertise'],
+            ['/', 'Play'],
+            ['/advertise', 'Advertise'],
+            ['/invite', 'Invite & earn'],
             ['/kings', 'Kings'],
             ['/practice', 'Practice'],
             ['/my-ads', 'My ads'],

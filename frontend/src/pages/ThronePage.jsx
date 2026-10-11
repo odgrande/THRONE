@@ -266,8 +266,8 @@ export default function ThronePage() {
               return (
                 <>
                   {before}
-                  <a href="#court" className="font-bold text-ink underline decoration-2 underline-offset-2 hover:text-bh-red">
-                    {t('hero.bookLink')}
+                  <a href={gameMode ? '/advertise' : '#court'} className="font-bold text-ink underline decoration-2 underline-offset-2 hover:text-bh-red">
+                    {t(gameMode ? 'hero.game.bookLink' : 'hero.bookLink')}
                   </a>
                   {after}
                 </>
@@ -302,11 +302,12 @@ export default function ThronePage() {
 
       {!gameMode && <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />}
 
-      <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
+      {/* In game mode the boards are shown here, and booked on /advertise. */}
+      <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} linkToAdvertise={gameMode} />
 
-      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
+      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} linkToAdvertise={gameMode} />
 
-      <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
+      <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} linkToAdvertise={gameMode} />
 
       <RecentlyDethroned legends={state.recentlyDethroned} now={now} />
 

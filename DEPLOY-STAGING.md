@@ -8,7 +8,7 @@ A public test copy of Project Throne at **$0**:
 | API | Render (free web service) → `https://<name>.onrender.com` | sleeps after 15 min idle; first visit after that takes ~1 min |
 | Database + images | Supabase (free) | pauses after 7 days without activity; "Restore" in the dashboard wakes it |
 | Payments | **demo mode** (fake pay button), or **Paystack test mode** for the Nigeria edition (step 7b) | no real money moves either way |
-| Hype videos | **off** | the video worker needs a paid plan |
+| Hype videos | **off** | not used in game mode (only paid Throne bids get one) |
 
 Staging runs with `DEPLOY_ENV=staging`, which allows demo payments and missing optional keys.
 It's a test site only: anyone can "pay" with the demo button.
@@ -78,24 +78,24 @@ Paystack test mode takes test cards and fake bank transfers; no real money moves
    - `PAYMENTS_NG` = `paystack`
    Save (it redeploys).
 3. On the same Paystack page, set **Test Webhook URL** to `https://<your-api>.onrender.com/api/webhooks/paystack` → Save.
-4. Open your site with `?region=ng`, bid ₦2,000, and pay with Paystack's test card (shown on the Paystack checkout, e.g. `4084 0840 8408 4081`, any future date, CVV `408`, OTP `123456`).
-   The ad should go live on two open browsers within a few seconds.
+4. Open your site with `?region=ng`, book a **Market stall** for 1 day, choose **Pay with: Money**, and pay with Paystack's test card (shown on the Paystack checkout, e.g. `4084 0840 8408 4081`, any future date, CVV `408`, OTP `123456`).
+   The ad waits about 5 minutes in the review queue (the ARCON hold), then goes live on two open browsers. In `/admin` → Review queue you can approve it sooner.
 
 The Global edition stays on the demo button in staging. The public key isn't needed: the server starts each payment, and the browser only receives a one-time access code.
 
 ## Step 7c: Flutterwave in test mode (Global edition, USD, you, 5 min)
 1. Flutterwave dashboard → switch to **Test mode** → Settings → **API Keys**: copy the **v3 Test Secret Key** (`FLWSECK_TEST-...`). It goes only into Render → Environment as `FLUTTERWAVE_SECRET_KEY`, plus `PAYMENTS_GLOBAL` = `flutterwave`.
 2. Settings → **Webhooks**: URL `https://<your-api>.onrender.com/api/webhooks/flutterwave`, and type a **Secret hash** (any long random text). Put the same text in Render as `FLUTTERWAVE_WEBHOOK_HASH`. Save (Render redeploys).
-3. Open your site with `?region=global`, bid $5, and pay on Flutterwave's page with one of Flutterwave's published test cards. You land on My ads; the ad goes live within seconds.
+3. Open your site with `?region=global`, book a **Market stall** for 1 day, choose **Pay with: Money**, and pay on Flutterwave's page with one of Flutterwave's published test cards. You land on My ads; the ad goes live within seconds.
 
 (The v4 Client ID / Client Secret / Encryption Key are not used: Throne uses Flutterwave's hosted checkout, so card details never touch our servers.)
 
 ## Step 8: Check it works
-Send the two URLs to your developer, who checks: health, CORS, live updates across two browsers, an image upload to Supabase Storage, the archive, the admin page, reports and takedowns. Things to expect:
+Follow **LAUNCH-CHECKLIST.md, phase B4** (the game, wallets, invites, bookings, admin and phone checks). Things to expect:
 - The first load after idle takes ~1 minute (Render free tier waking up).
 - The yellow "Demo mode" banner is correct: payments are simulated.
 
 ## Moving to production later
 1. A real domain on Cloudflare (enables the origin lock and `api.yourdomain.com`).
-2. Real payments: Paystack **live** secret key + live webhook URL (DEPLOY.md, step 7). Pick the Global edition's processor (`PAYMENTS_GLOBAL`): Paystack in USD if Paystack enables it for your business, or Stripe.
-3. Copy `deploy/render.production.yaml` over `render.yaml` (paid always-on API + video worker), then follow `DEPLOY.md`.
+2. Real payments: Paystack and Flutterwave **live** keys + live webhook URLs (DEPLOY.md, step 7).
+3. Copy `deploy/render.production.yaml` over `render.yaml` (paid always-on API), then follow **LAUNCH-CHECKLIST.md** phase C.

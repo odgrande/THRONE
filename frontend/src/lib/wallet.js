@@ -42,6 +42,57 @@ export function deviceId() {
   return id;
 }
 
+// A browser signature: a SHA-256 of stable traits (screen, time zone,
+// languages, graphics chip, a canvas drawing). It is the same in a private
+// window or after clearing storage, so the reset timer can't be dodged that
+// way. Hashed here and salted again on the server; never stored raw.
+let fpPromise = null;
+export function browserSignature() {
+  fpPromise ??= (async () => {
+    try {
+      const parts = [
+        navigator.userAgent,
+        navigator.language,
+        (navigator.languages ?? []).join(','),
+        navigator.platform,
+        navigator.hardwareConcurrency,
+        navigator.deviceMemory,
+        navigator.maxTouchPoints,
+        `${screen.width}x${screen.height}x${screen.colorDepth}`,
+        window.devicePixelRatio,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ];
+      try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+        if (ext) parts.push(gl.getParameter(ext.UNMASKED_VENDOR_WEBGL), gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+      } catch {
+        // no WebGL
+      }
+      try {
+        const c = document.createElement('canvas');
+        c.width = 220;
+        c.height = 30;
+        const g = c.getContext('2d');
+        g.textBaseline = 'top';
+        g.font = '16px Arial';
+        g.fillStyle = '#f60';
+        g.fillRect(100, 1, 62, 20);
+        g.fillStyle = '#069';
+        g.fillText('Throne 👑 fair play', 2, 15);
+        parts.push(c.toDataURL());
+      } catch {
+        // canvas blocked
+      }
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(parts.join('|')));
+      return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return null;
+    }
+  })();
+  return fpPromise;
+}
+
 // Invite links (?ref=CODE) are remembered until a wallet is made.
 if (typeof window !== 'undefined') {
   const ref = new URLSearchParams(window.location.search).get('ref');
@@ -65,6 +116,8 @@ export const walletToken = () => token;
 
 async function request(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-Device': deviceId() };
+  const fp = await browserSignature();
+  if (fp) headers['X-Fp'] = fp;
   if (auth && token) headers['X-Wallet'] = token;
   if (requestRegion()) headers['X-Region'] = requestRegion();
   const res = await fetch(API_URL + path, { method, headers, body: body ? JSON.stringify(body) : undefined });

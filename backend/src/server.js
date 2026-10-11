@@ -234,6 +234,8 @@ app.get('/api/health', (_req, res) =>
     moderation: moderation.enabled,
     linkChecks: links.enabled,
     botCheck: turnstile.enabled,
+    throneMode: config.throneMode,
+    coinPacks: config.coinPacks,
   }),
 );
 
@@ -1266,9 +1268,14 @@ setInterval(async () => {
   try {
     await game.tick();
     await game.expireReviews();
-    await arcade.expireCardReviews();
   } catch (err) {
     console.error('[throne] tick failed', err);
+  }
+  // Separate, so a problem with an ad card can never stop the throne clock.
+  try {
+    await arcade.expireCardReviews();
+  } catch (err) {
+    console.error('[arcade] card review expiry failed', err);
   } finally {
     tickRunning = false;
   }

@@ -33,6 +33,8 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
   const netHash = (ip) => sha(`${salt}:net:${ip ?? ''}`);
   // The browser sends a random device id (kept in its storage) plus a few
   // stable browser traits; without one we fall back to the network.
+  // Browser signature (hex SHA-256 computed in the browser): salted again here.
+  const fpHashOf = (fp) => (typeof fp === 'string' && /^[0-9a-f]{64}$/.test(fp) ? sha(`${salt}:fp:${fp}`) : null);
   const deviceHash = (device, ip) => (typeof device === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(device) ? sha(`${salt}:dev:${device}`) : `net:${netHash(ip)}`);
 
   const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -69,27 +71,33 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
     return w;
   }
 
-  async function createWallet({ region, ip, device, ref }) {
+  async function createWallet({ region, ip, device, fp, ref }) {
     const g = G(region);
     const since = new Date(Date.now() - 86400_000).toISOString();
     const ipHash = netHash(ip);
     const devHash = deviceHash(device, ip);
-    // Welcome coins only for the first few new wallets per network / device a day.
-    const [byNet, byDev] = await Promise.all([store.countWalletsByIp(ipHash, since), store.countWalletsByDevice(devHash, since)]);
-    const welcome = byNet < g.welcomePerNetworkPerDay && byDev < g.welcomePerDevicePerDay;
+    const fpHash = fpHashOf(fp);
+    // Welcome coins only for the first few new wallets per network / device /
+    // browser a day (private windows and cleared storage don't reset it).
+    const [byNet, byDev, byFp] = await Promise.all([
+      store.countWalletsByIp(ipHash, since),
+      store.countWalletsByDevice(devHash, since),
+      fpHash ? store.countWalletsByFp(fpHash, since) : 0,
+    ]);
+    const welcome = byNet < g.welcomePerNetworkPerDay && byDev < g.welcomePerDevicePerDay && byFp < g.welcomePerDevicePerDay;
 
     // Invites: never from yourself (same network or device as the inviter).
     let referredBy = null;
     if (typeof ref === 'string' && /^[A-Z0-9]{8}$/.test(ref)) {
       const inviter = await store.getWalletByReferral(ref);
-      if (inviter && !inviter.banned && inviter.region === region && inviter.createdIpHash !== ipHash && inviter.createdDeviceHash !== devHash) referredBy = inviter.id;
+      if (inviter && !inviter.banned && inviter.region === region && inviter.createdIpHash !== ipHash && inviter.createdDeviceHash !== devHash && (!fpHash || inviter.createdFpHash !== fpHash)) referredBy = inviter.id;
     }
 
     const token = newWalletToken();
     let wallet;
     for (let i = 0; i < 3 && !wallet; i++) {
       try {
-        wallet = await store.createWallet({ region, tokenHash: hashToken(token), referralCode: newReferralCode(), referredBy, ipHash, deviceHash: devHash });
+        wallet = await store.createWallet({ region, tokenHash: hashToken(token), referralCode: newReferralCode(), referredBy, ipHash, deviceHash: devHash, fpHash });
       } catch (err) {
         if (i === 2) throw err; // referral code clash: try another
       }
@@ -235,7 +243,7 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
 
   // Everything that decides whether a new try may start, shown to the player
   // before they press Play (and enforced again when they do).
-  async function playStatus(w, { ip, device }) {
+  async function playStatus(w, { ip, device, fp }) {
     const region = w.region;
     const g = G(region);
     const round = await currentRound(region);
@@ -244,12 +252,15 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
     const now = Date.now();
 
     // Recent tries of this wallet and this device (catches wallet switching).
-    const [mine, onDevice] = await Promise.all([
+    const [mine, onDevice, onBrowser] = await Promise.all([
       store.recentAttempts({ walletId: w.id, limit: g.failStreak + 1 }),
       store.recentAttempts({ deviceHash: devHash, limit: g.failStreak + 1 }),
+      // Same browser in a private window / after clearing storage: the reset
+      // timer still applies (signature only; daily tries are not shared).
+      fpHashOf(fp) ? store.recentAttempts({ fpHash: fpHashOf(fp), limit: g.failStreak + 1 }) : [],
     ]);
     const seen = new Map();
-    for (const a of [...mine, ...onDevice]) seen.set(a.id, await expireIfStale(a));
+    for (const a of [...mine, ...onDevice, ...onBrowser]) seen.set(a.id, await expireIfStale(a));
     const recent = [...seen.values()].sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1));
     const open = recent.find((a) => a.status === 'started' && a.walletId === w.id);
 
@@ -290,6 +301,7 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
       cardStatus: card?.status ?? null,
       ipHash,
       devHash,
+      fpHash: fpHashOf(fp),
     };
   }
 
@@ -332,10 +344,10 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
     ...extra,
   });
 
-  async function start(w, { ip, device, pay }) {
+  async function start(w, { ip, device, fp, pay }) {
     requireActive(w);
     const region = w.region;
-    const status = await playStatus(w, { ip, device });
+    const status = await playStatus(w, { ip, device, fp });
     // Reload / second tab: the same board, clock still running.
     if (status.open) return { resumed: true, ...attemptView(status.open), status: publicStatus(status) };
     if (status.cardStatus !== 'approved') {
@@ -364,7 +376,7 @@ export function createArcade({ store, game, realtime, regions, salt, coinPacks =
     }
     let a;
     try {
-      a = await store.createAttempt({ walletId: w.id, region, roundId: status.round.id, seed: newSeed(), paidCoins, ipHash: status.ipHash, deviceHash: status.devHash });
+      a = await store.createAttempt({ walletId: w.id, region, roundId: status.round.id, seed: newSeed(), paidCoins, ipHash: status.ipHash, deviceHash: status.devHash, fpHash: status.fpHash });
     } catch (err) {
       // The try was paid for but never dealt: give the coins back.
       if (paidCoins) await store.applyCoins(w.id, paidCoins, 'refund', id).catch(() => {});

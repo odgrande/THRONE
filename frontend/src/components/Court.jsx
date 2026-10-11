@@ -125,7 +125,7 @@ function MiniBoard({ board, now, onBook, onMap }) {
 
 const PACKAGE_COPY = { 1: '1 day', 3: '3 days', 7: '7 days' };
 
-function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCents = 0, performance, onClose }) {
+function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCents = 0, performance, defaultPay = 'coins', onClose }) {
   // Spotlight and Market tiles are too small to show a map: no add-on there.
   const mapAddonCents = board.tier && board.tier !== 'court' ? 0 : boardMapCents;
   const dialog = useModal(onClose);
@@ -143,7 +143,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
   const perDay = (d) => board.prices[d] / d;
   // Pay with coins (the free game's play money) or with money.
   const { wallet } = useWallet();
-  const [payWith, setPayWith] = useState('coins');
+  const [payWith, setPayWith] = useState(defaultPay);
   const [walletOpen, setWalletOpen] = useState(false);
   const priceCents = board.prices[days] + (ad.withMap ? mapAddonCents : 0) + (ad.withVideo && board.tier !== 'market' ? videoAddonCents : 0);
   const priceCoins = coinsFor(priceCents);
@@ -329,8 +329,14 @@ function MapDialog({ ad, addonCents, onClose }) {
   );
 }
 
-export default function Court({ boards, now, mapAddonCents, videoAddonCents, performance }) {
-  const [booking, setBooking] = useState(null);
+// Home shows the boards with links to /advertise (linkToAdvertise); the
+// Advertise page books them, money first (defaultPay), and can open one
+// straight from a link (openId).
+const advertiseLink = (board) => window.location.assign(`/advertise?board=${board.id}`);
+
+export default function Court({ boards, now, mapAddonCents, videoAddonCents, performance, linkToAdvertise = false, defaultPay, openId }) {
+  const [booking, setBookingRaw] = useState(() => boards.find((b) => b.id === openId && b.tier !== 'market' && b.tier !== 'spotlight') ?? null);
+  const setBooking = (b) => (linkToAdvertise && b ? advertiseLink(b) : setBookingRaw(b));
   const [mapFor, setMapFor] = useState(null);
   return (
     <section id="court" className="scroll-mt-4 border-b-4 border-ink bg-canvas" aria-labelledby="court-title">
@@ -352,7 +358,7 @@ export default function Court({ boards, now, mapAddonCents, videoAddonCents, per
           ))}
         </div>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} defaultPay={defaultPay} onClose={() => setBookingRaw(null)} />}
       {mapFor && <MapDialog ad={mapFor} addonCents={mapAddonCents} onClose={() => setMapFor(null)} />}
     </section>
   );
@@ -422,8 +428,9 @@ function Stall({ board, index, onBook, big = false }) {
 }
 
 // A wall of booking tiles (the Spotlight and the Market share it).
-function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddonCents, videoAddonCents, performance }) {
-  const [booking, setBooking] = useState(null);
+function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddonCents, videoAddonCents, performance, linkToAdvertise = false, defaultPay, openId }) {
+  const [booking, setBookingRaw] = useState(() => boards.find((b) => b.id === openId && b.tier === tier) ?? null);
+  const setBooking = (b) => (linkToAdvertise && b ? advertiseLink(b) : setBookingRaw(b));
   // Tiles pop in (CSS) the first time the wall scrolls into view. Plain CSS:
   // if the animation never runs, the tiles are simply shown.
   const wall = useRef(null);
@@ -468,7 +475,7 @@ function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddon
         </div>
         <p className="mt-4 text-sm font-medium text-ink/70">{t(`${copy}.howto`)}</p>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} defaultPay={defaultPay} onClose={() => setBookingRaw(null)} />}
     </section>
   );
 }

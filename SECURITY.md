@@ -128,10 +128,11 @@ Write that procedure down before launch.
 | Cross-edition arbitrage | A wallet belongs to the edition it was made in; all its coins are spent there | `wallets.region` |
 | Abusive names / ad cards | Names: whitelist pattern + political filter + AI moderation. Ad cards: same screening as paid ads; Nigeria cards held for review | `arcadeRoutes.js` |
 | Moderation | Admin can ban wallets, adjust coins (with reason), void results (dethrones), reject cards; all logged | `/admin` → Game & wallets |
-| Privacy | Network/device identifiers stored only as salted hashes and erased after 30 days | `purgeAttemptHashes()` |
+| Private windows / cleared storage | A browser signature (SHA-256 of screen, time zone, languages, graphics chip, a canvas drawing; salted again on the server) also counts for the reset timer and welcome coins. Not for daily free tries, so two identical phones never share those | `wallet.js` `browserSignature()`, `arcade.js` |
+| Privacy | Network/device/browser identifiers stored only as salted hashes and erased after 30 days | `purgeAttemptHashes()` |
 
 ## Known gaps before launch
-- Device limits rely on a random id in browser storage plus the network: a determined cheater who clears storage AND changes network can get a few more free tries per day (still capped by cooldowns, coin costs and the bot check). Turn on Turnstile (`TURNSTILE_SECRET_KEY`) before launch.
+- Daily free tries are counted per wallet, per random device id and per network (not per browser signature, to avoid punishing identical phones). A determined cheater who clears storage can get a few more free tries a day, each needing a new bot-checked wallet with no welcome coins and its own approved ad card; the reset timer still applies. Turn on Turnstile (`TURNSTILE_SECRET_KEY`) before launch.
 - Have counsel check the coin/game terms (no cash value, no cash-out, skill game, invite rewards) for Nigeria (incl. the National Lottery Regulatory Commission's view of prize promotions) and the main Global markets.
 - The legal pages are live. Clauses added on 11 October 2026 (owner, governing law, political ads, data rights, video ads, results disclaimer) should be checked by counsel. Check whether the company's CAC registration number (and registered office) must appear on the site.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).

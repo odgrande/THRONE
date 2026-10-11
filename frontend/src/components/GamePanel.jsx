@@ -6,6 +6,7 @@ import AcceptRules, { termsVersion } from './AcceptRules.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 import { WalletDialog } from './WalletChip.jsx';
 import { coinFmt } from './WalletPanel.jsx';
+import { CornerMark } from './Shape.jsx';
 
 const GameDialog = lazy(() => import('./GameDialog.jsx'));
 
@@ -150,15 +151,16 @@ export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
   };
 
   return (
-    <div className="space-y-5 text-white">
+    <div className="card space-y-5 p-5 sm:p-6">
+      <CornerMark index={0} />
       <div>
-        <p className="label text-bh-yellow">Free to play · Daily race</p>
+        <p className="label text-bh-blue">Free to play · Daily race</p>
         <h2 className="display mt-1 text-3xl sm:text-4xl">Win the Throne</h2>
-        <p className="mt-2 font-medium leading-snug text-white/85">Solve the 3D puzzle faster than the king and your ad takes the big billboard, live. New race every day.</p>
+        <p className="mt-2 font-medium leading-snug text-ink/75">Solve the 3D puzzle faster than the king and your ad takes the big billboard, live. New race every day.</p>
       </div>
 
       {/* The king to beat */}
-      <div className="border-4 border-ink bg-paper p-3 text-ink shadow-hard-sm">
+      <div className="border-2 border-ink bg-bh-cream p-3 text-ink">
         {king?.scoreMs ? (
           <>
             <p className="label flex items-center gap-1.5 text-ink/70">
@@ -183,16 +185,16 @@ export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
       </div>
 
       {wallet?.banned ? (
-        <p className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold">This wallet is suspended. Email therone@gmail.com.</p>
+        <p className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">This wallet is suspended. Email therone@gmail.com.</p>
       ) : (
-        <button type="button" onClick={play} disabled={wallet && card?.status === 'review'} className="btn-yellow w-full text-xl" data-testid="play">
+        <button type="button" onClick={play} disabled={wallet && card?.status === 'review'} className="btn-red w-full text-xl" data-testid="play">
           <Play className="h-6 w-6" strokeWidth={3} />
           {!wallet ? 'Play free' : !card ? 'Set up your ad card' : card.status === 'review' ? 'Ad card in review…' : status?.openAttemptId ? 'Resume your game' : readyIn > 0 ? `Next try in ${clock(readyIn)}` : 'Play now'}
         </button>
       )}
 
       {board?.roundEndsAt && (
-        <p className="text-xs font-bold uppercase tracking-wider text-bh-yellow">Today’s race ends in {clock(Date.parse(board.roundEndsAt) - now)}: fastest then is King of the Day</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-bh-red">Today’s race ends in {clock(Date.parse(board.roundEndsAt) - now)}: fastest then is King of the Day</p>
       )}
       {wallet && (wallet.records?.bestMs || wallet.streak > 0) && (
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-bold">
@@ -202,17 +204,17 @@ export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
       )}
 
       {wallet && status && (
-        <p className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-white/85">
+        <p className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-ink/70">
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" strokeWidth={3} /> {status.freeLeft > 0 ? `${status.freeLeft} free tries left today` : `Extra tries: ${status.extraAttemptCoins} coins`}
           </span>
-          {status.locked && <span className="text-bh-yellow">Break: {clock(readyIn)}</span>}
+          {status.locked && <span className="text-bh-red">Break: {clock(readyIn)}</span>}
         </p>
       )}
 
       {cardNote && <p className="border-2 border-ink bg-bh-yellow px-3 py-2 text-sm font-bold text-ink">{cardNote}</p>}
       {card?.status === 'rejected' && (
-        <p className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold">Your ad card was not approved{card.reason ? `: ${card.reason}` : ''}. Edit it to play.</p>
+        <p className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">Your ad card was not approved{card.reason ? `: ${card.reason}` : ''}. Edit it to play.</p>
       )}
 
       {editCard ? (
@@ -227,12 +229,12 @@ export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
         />
       ) : (
         card && (
-          <div className="flex items-center justify-between gap-3 border-2 border-ink bg-onyx/40 px-3 py-2 text-sm">
+          <div className="flex items-center justify-between gap-3 border-2 border-ink bg-canvas px-3 py-2 text-sm">
             <span className="min-w-0">
-              <span className="label block text-white/60">Your ad card</span>
+              <span className="label block text-ink/60">Your ad card</span>
               <span className="block truncate font-bold">{card.name}</span>
             </span>
-            <button type="button" className="label flex shrink-0 items-center gap-1 text-bh-yellow hover:underline" onClick={() => setEditCard(true)}>
+            <button type="button" className="label flex shrink-0 items-center gap-1 text-bh-blue hover:underline" onClick={() => setEditCard(true)}>
               <Pencil className="h-3.5 w-3.5" strokeWidth={3} /> Edit
             </button>
           </div>
@@ -257,7 +259,7 @@ export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
       )}
 
       {feed.length > 0 && (
-        <ul className="space-y-1 border-2 border-ink bg-onyx/50 px-3 py-2 text-sm" aria-live="polite" aria-label="Live solves">
+        <ul className="space-y-1 border-2 border-ink bg-canvas px-3 py-2 text-sm" aria-live="polite" aria-label="Live solves">
           {feed.slice(0, 4).map((e) => (
             <li key={e.at} className="flex justify-between gap-2">
               <span className="truncate">

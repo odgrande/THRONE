@@ -8,7 +8,7 @@ export default function SoundControls() {
   useEffect(() => onSoundPrefs(setPrefs), []);
 
   return (
-    <div className="flex gap-2">
+    <div className="flex shrink-0 gap-2">
       <button
         type="button"
         onClick={() => setSoundPrefs({ effects: !prefs.effects })}
@@ -17,7 +17,7 @@ export default function SoundControls() {
         className={`${prefs.effects ? 'btn-yellow' : 'btn-outline'} btn-sm`}
       >
         {prefs.effects ? <Volume2 className="h-4 w-4" strokeWidth={3} /> : <VolumeX className="h-4 w-4" strokeWidth={3} />}
-        <span className="hidden sm:inline">{prefs.effects ? 'Sound on' : 'Sound off'}</span>
+        <span className="hidden whitespace-nowrap xl:inline">{prefs.effects ? 'Sound on' : 'Sound off'}</span>
       </button>
       <button
         type="button"

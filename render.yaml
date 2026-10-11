@@ -26,6 +26,11 @@ services:
       # Visitor -> Render load balancer -> app (no Cloudflare in front yet).
       - key: TRUST_PROXY
         value: "1"
+      # The Throne is the free puzzle race; coins are earn-only play money.
+      - key: THRONE_MODE
+        value: game
+      - key: COIN_PACKS
+        value: "off"
       # No video worker on the free tier: never queue videos.
       - key: HYPE_MIN_CENTS
         value: "2000000000"

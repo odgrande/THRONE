@@ -54,7 +54,7 @@ function securityHeaders(apiOrigin, mediaOrigin) {
 
 // sitemap.xml + robots.txt, written at build time from the public site URL
 // (VITE_SITE_URL), so they always point at the real domain.
-const PUBLIC_PAGES = ['/', '/kings', '/practice', '/invite', '/faq', '/safety', '/contact', '/partners', '/changelog', '/legal'];
+const PUBLIC_PAGES = ['/', '/advertise', '/kings', '/practice', '/invite', '/faq', '/safety', '/contact', '/partners', '/changelog', '/legal'];
 function seoFiles(siteUrl) {
   return {
     name: 'throne-seo-files',

@@ -108,6 +108,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       referralPaid: r.referral_paid,
       createdIpHash: r.created_ip_hash,
       createdDeviceHash: r.created_device_hash,
+      createdFpHash: r.created_fp_hash,
       region: r.region,
       banned: r.banned,
       banReason: r.ban_reason,
@@ -136,6 +137,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       paidCoins: r.paid_coins,
       ipHash: r.ip_hash,
       deviceHash: r.device_hash,
+      fpHash: r.fp_hash,
       startedAt: r.started_at,
       finishedAt: r.finished_at,
       moves: r.moves,
@@ -287,12 +289,12 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     },
 
     // --- Ads Game: wallets and coins (see apply_coins & co. in schema.sql) ---
-    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null }) {
+    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null, fpHash = null }) {
       return walletFrom(
         check(
           await db
             .from('wallets')
-            .insert({ region, token_hash: tokenHash, referral_code: referralCode, referred_by: referredBy, created_ip_hash: ipHash, created_device_hash: deviceHash })
+            .insert({ region, token_hash: tokenHash, referral_code: referralCode, referred_by: referredBy, created_ip_hash: ipHash, created_device_hash: deviceHash, created_fp_hash: fpHash })
             .select()
             .single(),
         ),
@@ -311,6 +313,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       let q = db.from('wallets').select('id', { count: 'exact', head: true }).gte('created_at', sinceIso);
       q = deviceHash ? q.or(`created_ip_hash.eq.${ipHash},created_device_hash.eq.${deviceHash}`) : q.eq('created_ip_hash', ipHash);
       const { count, error } = await q;
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async countWalletsByFp(fpHash, sinceIso) {
+      const { count, error } = await db.from('wallets').select('id', { count: 'exact', head: true }).eq('created_fp_hash', fpHash).gte('created_at', sinceIso);
       if (error) throw new Error(error.message);
       return count ?? 0;
     },
@@ -344,7 +351,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return check(await q).map(orderFrom);
     },
     async purgeAttemptHashes(beforeIso) {
-      check(await db.from('game_attempts').update({ ip_hash: null, device_hash: null }).lt('started_at', beforeIso).not('ip_hash', 'is', null));
+      check(await db.from('game_attempts').update({ ip_hash: null, device_hash: null, fp_hash: null }).lt('started_at', beforeIso).not('ip_hash', 'is', null));
+      check(await db.from('wallets').update({ created_ip_hash: null, created_device_hash: null, created_fp_hash: null }).lt('created_at', beforeIso).not('created_ip_hash', 'is', null));
     },
     async countReferrals(walletId) {
       const { count, error } = await db.from('wallets').select('id', { count: 'exact', head: true }).eq('referred_by', walletId).eq('referral_paid', true);
@@ -381,10 +389,14 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     async payCoinOrder(id, paymentRef) {
       return check(await db.rpc('pay_coin_order', { p_order: id, p_payment_ref: paymentRef }));
     },
+    // A full card (with its name) is inserted or replaced; a partial change
+    // (e.g. status only, from review) must be an update: an upsert would try
+    // to insert a row without the required columns.
     async upsertCard(walletId, card) {
-      const row = { wallet_id: walletId, updated_at: new Date().toISOString() };
+      const row = { updated_at: new Date().toISOString() };
       for (const [k, col] of Object.entries(CARD_COLS)) if (k in card) row[col] = card[k];
-      return cardFrom(check(await db.from('ad_cards').upsert(row).select().single()));
+      if ('name' in card) return cardFrom(check(await db.from('ad_cards').upsert({ wallet_id: walletId, ...row }).select().single()));
+      return cardFrom(check(await db.from('ad_cards').update(row).eq('wallet_id', walletId).select().maybeSingle()));
     },
     async getCard(walletId) {
       return cardFrom(check(await db.from('ad_cards').select('*').eq('wallet_id', walletId).maybeSingle()));
@@ -392,12 +404,12 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     async listCardReviews() {
       return check(await db.from('ad_cards').select('*').eq('status', 'review').order('review_since')).map(cardFrom);
     },
-    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null }) {
+    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null, fpHash = null }) {
       return attemptFrom(
         check(
           await db
             .from('game_attempts')
-            .insert({ wallet_id: walletId, region, round_id: roundId, seed, paid_coins: paidCoins, ip_hash: ipHash, device_hash: deviceHash })
+            .insert({ wallet_id: walletId, region, round_id: roundId, seed, paid_coins: paidCoins, ip_hash: ipHash, device_hash: deviceHash, fp_hash: fpHash })
             .select()
             .single(),
         ),
@@ -427,8 +439,9 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       if (error) throw new Error(error.message);
       return count ?? 0;
     },
-    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, limit = 10 }) {
+    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, fpHash = null, limit = 10 }) {
       const ors = [];
+      if (fpHash) ors.push(`fp_hash.eq.${fpHash}`);
       if (walletId) ors.push(`wallet_id.eq.${walletId}`);
       if (ipHash) ors.push(`ip_hash.eq.${ipHash}`);
       if (deviceHash) ors.push(`device_hash.eq.${deviceHash}`);

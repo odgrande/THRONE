@@ -16,7 +16,7 @@ export const LANGUAGES = [
 ];
 
 const en = {
-  'nav.throne': "Advertise",
+  'nav.throne': 'Play',
   'nav.kings': 'History of Kings',
   'nav.practice': 'Practice',
   'nav.invite': 'Invite & earn',
@@ -38,6 +38,8 @@ const en = {
   'hero.game.fast': 'Fastest',
   'hero.game.king': 'is King.',
   'hero.game.sub': 'A free daily 3D puzzle race. The fastest time puts its ad on the big billboard, live, until someone beats it. Or {book}.',
+  'hero.game.bookLink': 'advertise directly, no game needed',
+  'nav.advertise': 'Advertise',
   'lang.label': 'Language',
   'hero.one': "Advertise here.",
   'hero.outbid': "Outbid",
@@ -232,7 +234,8 @@ const en = {
 };
 
 const pcm = {
-  'nav.throne': "Advertise",
+  'nav.throne': 'Play',
+  'nav.advertise': 'Advertise',
   'nav.kings': 'Kings wey don pass',
   'nav.practice': 'Practice',
   'nav.invite': 'Invite & earn',
@@ -430,7 +433,8 @@ const pcm = {
 };
 
 const yo = {
-  'nav.throne': "Polówó",
+  'nav.throne': 'Ṣeré',
+  'nav.advertise': 'Polówó',
   'nav.kings': 'Ìtàn àwọn Ọba',
   'nav.practice': 'Ìdánrawò',
   'nav.invite': 'Pe ọ̀rẹ́',
@@ -628,7 +632,8 @@ const yo = {
 };
 
 const ha = {
-  'nav.throne': "Yi talla",
+  'nav.throne': 'Yi wasa',
+  'nav.advertise': 'Yi talla',
   'nav.kings': 'Tarihin Sarakuna',
   'nav.practice': 'Gwaji',
   'nav.invite': 'Gayyata',
@@ -826,7 +831,8 @@ const ha = {
 };
 
 const ig = {
-  'nav.throne': "Mgbasa ozi",
+  'nav.throne': 'Kpọọ egwu',
+  'nav.advertise': 'Mgbasa ozi',
   'nav.kings': 'Akụkọ Ndị Eze',
   'nav.practice': 'Mmega',
   'nav.invite': 'Kpọọ ndị enyi',

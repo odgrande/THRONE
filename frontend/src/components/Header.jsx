@@ -11,6 +11,7 @@ import { ownedAds } from '../lib/owned.js';
 const NAV = [
   { href: '/', key: 'nav.throne' },
   { href: '/kings', key: 'nav.kings' },
+  { href: '/advertise', key: 'nav.advertise' },
   { href: '/practice', key: 'nav.practice' },
   { href: '/invite', key: 'nav.invite' },
 ];
@@ -26,7 +27,7 @@ export default function Header({ children }) {
       key={item.href}
       href={item.href}
       aria-current={path === item.href ? 'page' : undefined}
-      className={`label transition duration-200 hover:text-bh-red ${path === item.href ? 'text-bh-red' : ''}`}
+      className={`label whitespace-nowrap transition duration-200 hover:text-bh-red ${path === item.href ? 'text-bh-red' : ''}`}
     >
       {t(item.key)}
     </a>
@@ -35,9 +36,9 @@ export default function Header({ children }) {
   return (
     <header className="border-b-4 border-ink bg-paper">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-10">
+        <div className="flex items-center gap-6 xl:gap-10">
           <Logo />
-          <nav className="hidden items-center gap-8 md:flex">{nav.map(navLink)}</nav>
+          <nav className="hidden items-center gap-5 lg:flex xl:gap-7">{nav.map(navLink)}</nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           {children}
@@ -54,7 +55,7 @@ export default function Header({ children }) {
             <ThemeToggle />
           </div>
           <button
-            className="btn-outline btn-sm md:hidden"
+            className="btn-outline btn-sm lg:hidden"
             aria-label={open ? 'Close menu' : 'Open menu'}
             aria-expanded={open}
             onClick={() => setOpen(!open)}
@@ -64,7 +65,7 @@ export default function Header({ children }) {
         </div>
       </div>
       {open && (
-        <div className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 md:hidden">
+        <div className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 lg:hidden">
           <nav className="flex flex-col gap-4">
             {nav.map(navLink)}
             {[

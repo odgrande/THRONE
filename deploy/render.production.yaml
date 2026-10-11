@@ -1,7 +1,7 @@
 # Render Blueprint: PRODUCTION (paid). Copy this file to the repo root as
 # render.yaml for the real launch (render.yaml there is the free staging setup).
-# The API and the video worker. The frontend deploys to Cloudflare Pages and
-# the database is Supabase (see DEPLOY.md).
+# The API only. The frontend deploys to Cloudflare Pages and the database is
+# Supabase (see DEPLOY.md and LAUNCH-CHECKLIST.md).
 # Keys marked `sync: false` are secrets: Render asks for them when you create
 # the Blueprint, and they never live in this file.
 
@@ -25,6 +25,12 @@ services:
       # Visitor -> Cloudflare -> Render load balancer -> app.
       - key: TRUST_PROXY
         value: "2"
+      # The Throne is the free puzzle race; coins are earn-only play money
+      # (COIN_PACKS=on would sell coins through Paystack/Flutterwave).
+      - key: THRONE_MODE
+        value: game
+      - key: COIN_PACKS
+        value: "off"
       - key: PUBLIC_URL
         sync: false # https://api.yourdomain.com
       - key: SITE_URL
@@ -49,15 +55,12 @@ services:
         sync: false
       - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: STRIPE_3DS
-        value: automatic
-      # Only takeovers of $20+ (global) / ₦10,000+ (NG) get a hype video.
+      # Stripe is not used (Global pays through Flutterwave). Only if you switch
+      # PAYMENTS_GLOBAL=stripe: add STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET.
+      # Hype videos are made only for PAID throne takeovers; in game mode the
+      # Throne is won for free, so no videos are queued and no worker is needed.
       - key: HYPE_MIN_CENTS
-        value: "2000"
+        value: "2000000000"
       - key: OPENAI_API_KEY
         sync: false
       - key: WEB_RISK_API_KEY
@@ -74,21 +77,22 @@ services:
       - key: IP_HASH_SALT
         generateValue: true
 
-  # Video renderer. Docker image (headless Chrome needs system libraries) and
-  # a 2 GB plan: Remotion is memory-hungry, and 512 MB plans crash mid-render.
-  - type: worker
-    name: throne-video-worker
-    runtime: docker
-    plan: standard
-    region: frankfurt
-    dockerfilePath: ./backend/Dockerfile.worker
-    dockerContext: ./backend
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: SITE_URL
-        sync: false # https://yourdomain.com (printed in the videos)
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+  # Video renderer: only needed with THRONE_MODE=auction (paid takeovers get a
+  # hype video). Uncomment it then, and set HYPE_MIN_CENTS back to 2000.
+  # Docker image (headless Chrome needs system libraries) and a 2 GB plan.
+  # - type: worker
+  #   name: throne-video-worker
+  #   runtime: docker
+  #   plan: standard
+  #   region: frankfurt
+  #   dockerfilePath: ./backend/Dockerfile.worker
+  #   dockerContext: ./backend
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: SITE_URL
+  #       sync: false
+  #     - key: SUPABASE_URL
+  #       sync: false
+  #     - key: SUPABASE_SERVICE_ROLE_KEY
+  #       sync: false

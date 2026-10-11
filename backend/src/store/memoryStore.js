@@ -513,8 +513,8 @@ export function createMemoryStore() {
     },
 
     // --- Ads Game: wallets and coins ---
-    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null }) {
-      const w = { id: randomUUID(), region, banned: false, banReason: null, backedUpAt: null, tokenHash, balance: 0, streakDays: 0, playerName: null, referralCode, referredBy, referralPaid: false, createdIpHash: ipHash, createdDeviceHash: deviceHash, lastDailyAt: null, createdAt: new Date().toISOString() };
+    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null, fpHash = null }) {
+      const w = { id: randomUUID(), region, createdFpHash: fpHash, banned: false, banReason: null, backedUpAt: null, tokenHash, balance: 0, streakDays: 0, playerName: null, referralCode, referredBy, referralPaid: false, createdIpHash: ipHash, createdDeviceHash: deviceHash, lastDailyAt: null, createdAt: new Date().toISOString() };
       wallets.set(w.id, w);
       return { ...w };
     },
@@ -532,6 +532,9 @@ export function createMemoryStore() {
     },
     async countWalletsByIp(ipHash, sinceIso, deviceHash = null) {
       return [...wallets.values()].filter((w) => (w.createdIpHash === ipHash || (deviceHash && w.createdDeviceHash === deviceHash)) && w.createdAt >= sinceIso).length;
+    },
+    async countWalletsByFp(fpHash, sinceIso) {
+      return [...wallets.values()].filter((w) => w.createdFpHash === fpHash && w.createdAt >= sinceIso).length;
     },
     async countWalletsByDevice(deviceHash, sinceIso) {
       return [...wallets.values()].filter((w) => w.createdDeviceHash === deviceHash && w.createdAt >= sinceIso).length;
@@ -564,7 +567,8 @@ export function createMemoryStore() {
     },
     // Privacy: network/device hashes are only kept for the anti-cheat window.
     async purgeAttemptHashes(beforeIso) {
-      for (const a of attempts.values()) if (a.startedAt < beforeIso) Object.assign(a, { ipHash: null, deviceHash: null });
+      for (const a of attempts.values()) if (a.startedAt < beforeIso) Object.assign(a, { ipHash: null, deviceHash: null, fpHash: null });
+      for (const w of wallets.values()) if (w.createdAt < beforeIso) Object.assign(w, { createdIpHash: null, createdDeviceHash: null, createdFpHash: null });
     },
     async countReferrals(walletId) {
       return [...wallets.values()].filter((w) => w.referredBy === walletId && w.referralPaid).length;
@@ -628,8 +632,8 @@ export function createMemoryStore() {
       return [...cards.values()].filter((c) => c.status === 'review').map((c) => ({ ...c }));
     },
     // --- Game attempts ---
-    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null }) {
-      const a = { id: randomUUID(), walletId, region, roundId, seed, status: 'started', paidCoins, ipHash, deviceHash, startedAt: new Date().toISOString(), finishedAt: null, moves: null, durationMs: null };
+    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null, fpHash = null }) {
+      const a = { id: randomUUID(), walletId, region, roundId, seed, status: 'started', paidCoins, ipHash, deviceHash, fpHash, startedAt: new Date().toISOString(), finishedAt: null, moves: null, durationMs: null };
       attempts.set(a.id, a);
       return { ...a };
     },
@@ -655,9 +659,9 @@ export function createMemoryStore() {
       ).length;
     },
     // Newest attempts first, for one wallet / IP / device (cooldowns).
-    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, limit = 10 }) {
+    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, fpHash = null, limit = 10 }) {
       return [...attempts.values()]
-        .filter((a) => (walletId !== null && a.walletId === walletId) || (ipHash !== null && a.ipHash === ipHash) || (deviceHash !== null && a.deviceHash === deviceHash))
+        .filter((a) => (walletId !== null && a.walletId === walletId) || (ipHash !== null && a.ipHash === ipHash) || (deviceHash !== null && a.deviceHash === deviceHash) || (fpHash !== null && a.fpHash === fpHash))
         .sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))
         .slice(0, limit)
         .map((a) => ({ ...a }));

@@ -41,7 +41,7 @@ export default function WalletChip() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 border-2 border-ink bg-bh-yellow px-2 py-1 text-sm font-black tabular-nums shadow-hard-xs transition duration-150 hover:-translate-y-0.5"
+        className="flex shrink-0 items-center gap-1.5 whitespace-nowrap border-2 border-ink bg-bh-yellow px-2 py-1 text-sm font-black tabular-nums shadow-hard-xs transition duration-150 hover:-translate-y-0.5"
         aria-label={wallet ? `${wallet.balance} coins. ${wallet.backedUp ? 'Wallet saved.' : 'Wallet not backed up yet.'} Open wallet` : 'Get free coins'}
         data-testid="wallet-chip"
       >
