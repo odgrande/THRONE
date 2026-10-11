@@ -6,6 +6,8 @@ import { useModal } from '../lib/useModal.js';
 import PayStep from './PayStep.jsx';
 import { EmailField } from './AdFields.jsx';
 import Shape from './Shape.jsx';
+import ReportButton from './ReportDialog.jsx';
+import { accentFor } from './Billboard.jsx';
 
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 const when = (iso) => (Date.parse(iso) <= Date.now() + 60_000 ? 'right now' : dayFmt.format(new Date(iso)));
@@ -171,12 +173,18 @@ export function RecentlyDethroned({ legends, now }) {
         </div>
         <ul className="mt-5 flex gap-4 overflow-x-auto pb-2">
           {legends.map((l, i) => (
-            <li key={l.id} className="shrink-0">
+            <li key={l.id} className={`dethroned-chip flex w-64 shrink-0 flex-col border-2 border-ink bg-canvas shadow-hard-xs`}>
+              {/* Same markings as every ad: paid label, report, frame colour. */}
+              <div className={`flex items-center justify-between gap-2 border-b-2 border-ink px-2 py-0.5 ${accentFor(l.bidId).bar}`}>
+                <span className="text-[9px] font-black uppercase tracking-wider opacity-90">Paid ad</span>
+                <ReportButton bidId={l.bidId} adName={l.name} compact className="opacity-80 hover:opacity-100" />
+              </div>
               <a
                 href={`/go/${l.bidId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="dethroned-chip flex w-64 items-center gap-3 border-2 border-ink bg-canvas p-3 shadow-hard-xs transition duration-200 hover:-translate-y-0.5 hover:bg-bh-cream"
+                aria-label={`Visit ${l.name}'s ad (opens a safety check first)`}
+                className="flex items-center gap-3 p-3 transition duration-200 hover:bg-bh-cream"
               >
                 <span className="h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-ink bg-bh-yellow">
                   {l.imageUrl ? (

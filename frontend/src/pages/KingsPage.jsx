@@ -19,6 +19,9 @@ function LegendCard({ legend, index }) {
   const faceClass = 'block aspect-video overflow-hidden border-b-2 border-ink bg-onyx lg:border-b-4';
   return (
     <article className="card group flex flex-col transition duration-200 ease-out hover:-translate-y-1">
+      {!legend.removed && (
+        <div className="border-b-2 border-ink bg-onyx px-3 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/80">Paid ad · archive</div>
+      )}
       {/* The fallen are shown in grayscale; color returns on hover. Archived ads
           still click out through the warning page; removed ones don't link at all. */}
       {legend.removed ? (
