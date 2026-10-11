@@ -18,6 +18,8 @@ const ACTION_LABEL = {
   resume: 'Resumed new ads',
   'approve-video': 'Approved video',
   'reject-video': 'Rejected video',
+  approve: 'Approved',
+  reject: 'Rejected + refunded',
 };
 
 // One ad with every admin action. Each action asks for what it needs

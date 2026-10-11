@@ -33,7 +33,15 @@ function ReviewCard({ item, token, onDone }) {
   return (
     <article className="card p-5">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_1fr]">
-        <video src={item.videoUrl} poster={item.imageUrl ?? undefined} controls playsInline className="aspect-video w-full border-2 border-ink bg-onyx" />
+        {item.videoUrl ? (
+          <video src={item.videoUrl} poster={item.imageUrl ?? undefined} controls playsInline className="aspect-video w-full border-2 border-ink bg-onyx" />
+        ) : item.imageUrl ? (
+          <img src={item.imageUrl} alt="" className="aspect-video w-full border-2 border-ink bg-onyx object-contain" />
+        ) : (
+          <div className="flex aspect-video w-full items-center justify-center border-2 border-ink bg-bh-red p-4 text-center text-2xl font-black uppercase text-white">
+            {item.tagline || item.name}
+          </div>
+        )}
         <div className="min-w-0 space-y-2">
           <p className="label text-bh-red">
             {item.boardName} · {item.region === 'ng' ? 'Nigeria' : 'Global'} · waiting {ago(item.reviewSince)}
@@ -47,7 +55,13 @@ function ReviewCard({ item, token, onDone }) {
             Paid {formatMoney(item.amountCents + item.addonCents, item.region)} (incl. {formatMoney(item.addonCents, item.region)} add-ons)
             {item.days ? ` · ${item.days} day(s)` : ''} · {timeFmt.format(new Date(item.reviewSince))}
           </p>
-          <p className="text-xs text-ink/60">Watch it to the end. Check for nudity, violence, hate, scams, misleading claims and other people's brands.</p>
+          {item.goesLiveAt ? (
+            <p className="border-2 border-ink bg-bh-yellow px-2 py-1 text-xs font-bold">
+              Nigeria review hold: goes live automatically at {timeFmt.format(new Date(item.goesLiveAt))} unless you reject it.
+            </p>
+          ) : (
+            <p className="text-xs text-ink/60">Watch it to the end. Check for nudity, violence, hate, scams, misleading claims and other people's brands.</p>
+          )}
 
           {rejecting ? (
             <form
@@ -73,7 +87,7 @@ function ReviewCard({ item, token, onDone }) {
           ) : (
             <div className="flex flex-wrap gap-2 pt-2">
               <button type="button" disabled={busy} onClick={() => act('approve')} className="btn-blue btn-sm">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={3} /> : <Check className="h-4 w-4" strokeWidth={3} />} Approve, go live
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={3} /> : <Check className="h-4 w-4" strokeWidth={3} />} {item.goesLiveAt ? 'Approve now' : 'Approve, go live'}
               </button>
               <button type="button" disabled={busy} onClick={() => setRejecting(true)} className="btn-outline btn-sm">
                 <X className="h-4 w-4" strokeWidth={3} /> Reject
@@ -127,9 +141,10 @@ export default function VideoReviews({ token, onCount }) {
   return (
     <section className="mt-8 space-y-6">
       <div>
-        <h2 className="display text-4xl">Video review</h2>
+        <h2 className="display text-4xl">Review queue</h2>
         <p className="mt-2 max-w-2xl font-medium text-ink/70">
-          Paid video ads stay hidden until you approve them. Anything not reviewed within 24 hours is refunded automatically.
+          Paid ads waiting before they go live. Videos stay hidden until you approve them (not reviewed in 24 hours = refunded). In the Nigeria edition every
+          ad waits here for 5 minutes (ARCON) and then goes live on its own unless you reject it. Reject = full refund.
         </p>
       </div>
       {log.length > 0 && (
@@ -144,7 +159,7 @@ export default function VideoReviews({ token, onCount }) {
       {items.length === 0 ? (
         <div className="card flex items-center gap-4 p-6">
           <Shape kind="circle" color="blue" className="h-8 w-8 border-2 border-ink" />
-          <p className="font-bold">No videos waiting. Nice.</p>
+          <p className="font-bold">Nothing waiting. Nice.</p>
         </div>
       ) : (
         items.map((item) => <ReviewCard key={item.id} item={item} token={token} onDone={done} />)

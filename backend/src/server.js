@@ -13,6 +13,7 @@ import { createHypeQueue } from './services/hype.js';
 import { decodeImage, saveImage } from './services/images.js';
 import { createVideoUploads, MAX_VIDEO_BYTES } from './services/videos.js';
 import { isOwner } from './services/owners.js';
+import { politicalMatch } from './services/political.js';
 import { createStorage, LOCAL_DIRS } from './services/storage.js';
 import { createTurnstile } from './services/turnstile.js';
 import { newOwnerToken } from './services/owners.js';
@@ -210,12 +211,13 @@ if (config.adminToken) {
         }
       }
       const health = assessHealth(financials, balances, config.regions, (r) => payments.modeFor(r));
-      // Paid videos waiting for a person: alert after an hour (they auto-refund at 24 h).
-      const reviews = await store.listReviews();
-      const oldest = reviews[0] ? Date.parse(reviews[0].reviewSince) : null;
-      health.reviews = { waiting: reviews.length, oldestSince: reviews[0]?.reviewSince ?? null };
+      // Paid videos waiting for a person: alert after an hour (they auto-refund
+      // at 24 h). Held picture ads publish themselves after the hold.
+      const videos = (await store.listReviews()).filter((b) => b.videoUrl);
+      const oldest = videos[0] ? Date.parse(videos[0].reviewSince) : null;
+      health.reviews = { waitingVideos: videos.length, oldestSince: videos[0]?.reviewSince ?? null };
       if (oldest && Date.now() - oldest > 3600_000) {
-        health.alerts.push({ level: 'amber', message: `${reviews.length} paid video ad(s) waiting for review (oldest over an hour). Open Video review.` });
+        health.alerts.push({ level: 'amber', message: `${videos.length} paid video ad(s) waiting for review (oldest over an hour). Open the review queue.` });
         if (health.status === 'green') health.status = 'amber';
       }
       res.json(health);
@@ -303,6 +305,8 @@ if (config.adminToken) {
         currency: game.rulesOf(b.region).currency,
         days: b.days,
         reviewSince: b.reviewSince,
+        // Picture ads in an edition with a hold go live on their own at this time.
+        goesLiveAt: b.videoUrl ? null : new Date(Date.parse(b.reviewSince) + (game.rulesOf(b.region).reviewHoldSeconds ?? 0) * 1000).toISOString(),
       }));
       res.json({ items });
     } catch (err) {
@@ -314,7 +318,7 @@ if (config.adminToken) {
     '/bids/:id/approve',
     withBid(async (_req, res, bid) => {
       const result = await game.approveVideo(bid.id);
-      await store.logAdmin({ action: 'approve-video', bidId: bid.id, region: bid.region, after: { status: result.status } });
+      await store.logAdmin({ action: 'approve', bidId: bid.id, region: bid.region, after: { status: result.status } });
       console.log(`[admin] approved video ad ${bid.id}: ${result.status}`);
       res.json({ status: result.status });
     }),
@@ -326,7 +330,7 @@ if (config.adminToken) {
       const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
       if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
       const result = await game.rejectVideo(bid.id, reason);
-      await store.logAdmin({ action: 'reject-video', bidId: bid.id, region: bid.region, reason, after: { status: result.status } });
+      await store.logAdmin({ action: 'reject', bidId: bid.id, region: bid.region, reason, after: { status: result.status } });
       console.log(`[admin] rejected video ad ${bid.id} (${reason}): ${result.status}`);
       res.json({ status: result.status });
     }),
@@ -626,6 +630,7 @@ const money = (cents, rules) =>
     rules.currency === 'NGN' ? Math.ceil(cents / 100) : cents / 100,
   );
 
+const CONTACT_EMAIL = 'therone@gmail.com';
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 function validateBid(body, rules) {
@@ -728,6 +733,11 @@ async function vetAd(req, input) {
     }
   }
 
+  // Political and advocacy ads are not allowed (Ad Policy).
+  if (politicalMatch([input.name, input.tagline, input.targetUrl].filter(Boolean).join(' '))) {
+    throw new Reject(422, `Political and advocacy ads are not allowed on Throne (see the Ad Policy). You have not been charged. If your ad is not political, email ${CONTACT_EMAIL}.`);
+  }
+
   let linkVerdict;
   try {
     linkVerdict = await links.check(input.targetUrl);
@@ -770,12 +780,16 @@ async function createPaidAd(res, { videoName: _videoName, ...fields }, descripti
     amountCents: chargeCents,
     addonCents: bid.addonCents ?? 0,
     currency: game.rulesOf(bid.region).currency,
+    vatPct: game.rulesOf(bid.region).vatPct ?? 0,
     paymentsMode: payments.modeFor(bid.region),
     // Stripe: clientSecret. Paystack: accessCode (inline popup) + authorizationUrl (fallback redirect).
     ...checkout,
     ownerToken: owner.token,
-    // Video ads go to a person for review after payment, then live.
-    needsReview: Boolean(bid.videoUrl && !bid.relegatedFrom),
+    // Paid ads that wait in review first: videos (for a person), and every
+    // ad in an edition with a review hold (Nigeria: 5 minutes).
+    needsReview: !bid.relegatedFrom && Boolean(bid.videoUrl || game.rulesOf(bid.region).reviewHoldSeconds > 0),
+    reviewKind: bid.videoUrl ? 'video' : game.rulesOf(bid.region).reviewHoldSeconds > 0 ? 'hold' : null,
+    holdMinutes: Math.ceil(game.rulesOf(bid.region).reviewHoldSeconds / 60),
   });
 }
 

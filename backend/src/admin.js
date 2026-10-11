@@ -34,6 +34,9 @@ export function assessHealth(financials, balances, regions, modeFor) {
       locale: region.locale,
       processor: modeFor(id),
       netCents: f.grossCents - f.estFeesCents,
+      // VAT included in the prices (Nigeria 7.5%): the part of revenue owed as VAT.
+      vatPct: region.rules.vatPct ?? 0,
+      vatCents: region.rules.vatPct ? Math.round((f.grossCents * region.rules.vatPct) / (100 + region.rules.vatPct)) : 0,
       balance: balances[id] ?? null,
     };
   }

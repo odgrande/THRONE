@@ -60,6 +60,13 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
       mapAddonCents: p('MAP_ADDON_CENTS', defaults.mapAddonCents),
       // Video add-on: video ads cost more and always wait for a human review.
       videoAddonCents: p('VIDEO_ADDON_CENTS', defaults.videoAddonCents),
+      // Every paid ad waits this long in the admin review queue before going
+      // live (0 = straight live). Nigeria: 5 minutes, for ARCON pre-vetting.
+      // Admin can approve sooner or reject (full refund). Videos always wait
+      // for a person regardless.
+      reviewHoldSeconds: p('REVIEW_HOLD_SECONDS', defaults.reviewHoldSeconds),
+      // VAT included in the prices shown (percent; 0 = none shown).
+      vatPct: p('VAT_PCT', defaults.vatPct),
       crownCutoffHourUtc: p('CROWN_CUTOFF_HOUR_UTC', defaults.crownCutoffHourUtc),
       // Render a takeover video only for bids at or above this amount.
       hypeMinCents: p('HYPE_MIN_CENTS', defaults.hypeMinCents),
@@ -120,6 +127,8 @@ export const config = {
       board3DayCents: 150,
       marketDayCents: 50,
       videoAddonCents: 500,
+      reviewHoldSeconds: 0,
+      vatPct: 0,
       spotlightDayCents: 100,
       mapAddonCents: 200,
       crownCutoffHourUtc: 0, // midnight UTC
@@ -136,6 +145,8 @@ export const config = {
       board3DayCents: 80000, // ₦800
       marketDayCents: 30000, // ₦300
       videoAddonCents: 200000, // ₦2,000
+      reviewHoldSeconds: 300, // 5-minute ARCON hold
+      vatPct: 7.5, // prices include 7.5% VAT
       spotlightDayCents: 50000, // ₦500
       mapAddonCents: 100000, // ₦1,000
       crownCutoffHourUtc: 23, // midnight in Lagos (WAT = UTC+1)

@@ -114,7 +114,8 @@ export default function BidForm({ minNextBidCents, rules, performance, onPriceCh
       setMessage({ ok: true, text: t('bid.won') });
       setAd(EMPTY_AD);
     } else if (status === 'review') {
-      setMessage({ ok: true, title: t('media.reviewTitle'), text: t('media.reviewThrone') });
+      const hold = checkout?.reviewKind === 'hold';
+      setMessage({ ok: true, title: t(hold ? 'hold.title' : 'media.reviewTitle'), text: hold ? t('hold.throne', { m: checkout.holdMinutes }) : t('media.reviewThrone') });
       setAd(EMPTY_AD);
     } else if (status === 'refunded' || status === 'outbid') {
       setMessage({ ok: false, text: t('bid.refunded') });

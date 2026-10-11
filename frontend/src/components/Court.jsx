@@ -181,8 +181,10 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
               </div>
             ) : result.status === 'review' ? (
               <div className="border-2 border-ink bg-bh-yellow p-4">
-                <p className="text-xl font-black uppercase tracking-tight">{t('media.reviewTitle')}</p>
-                <p className="mt-1 font-medium leading-relaxed">{t('media.reviewBooking')}</p>
+                <p className="text-xl font-black uppercase tracking-tight">{t(checkout?.reviewKind === 'hold' ? 'hold.title' : 'media.reviewTitle')}</p>
+                <p className="mt-1 font-medium leading-relaxed">
+                  {checkout?.reviewKind === 'hold' ? t('hold.booking', { m: checkout.holdMinutes }) : t('media.reviewBooking')}
+                </p>
               </div>
             ) : (
               <p className="border-2 border-ink bg-muted p-4 font-medium">Payment received, still confirming. Your booking will appear in a moment.</p>

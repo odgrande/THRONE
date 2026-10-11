@@ -7,24 +7,27 @@ import Footer from '../components/Footer.jsx';
 const LAST_UPDATED = '11 October 2026';
 const OPERATOR = 'Odgrande NG Limited';
 const CONTACT = 'therone@gmail.com';
+const RC_NUMBER = 'RC1029807';
 
 const SECTIONS = [
   {
     id: 'terms',
     title: 'Terms of Service',
     body: [
-      `Throne is owned and operated by ${OPERATOR}, a company registered in Nigeria ("we", "us"). Throne is an online business; you can reach us at ${CONTACT}. By using the site or buying an ad you agree to these terms.`,
+      `Throne is owned and operated by ${OPERATOR}, a company registered with the Corporate Affairs Commission of Nigeria under number ${RC_NUMBER} ("we", "us"). Throne is an online business; you can reach us at ${CONTACT}. By using the site or buying an ad you agree to these terms.`,
       'Who can buy. You must be at least 18 and able to enter a binding contract, and you must have the right to advertise the business, product or person in your ad. There are no accounts: you are responsible for everything you submit.',
       'What you can buy. The Throne (an auction): pay at least the minimum price shown and your ad replaces the current one immediately. A Throne ad that is not outbid retires automatically after the maximum term (currently 7 days). Time on the Throne is not guaranteed: it ends when you are outbid or your term ends.',
       'Bookings (fixed price): the Court boards, the Spotlight spaces and the Market stalls can be booked for 1, 3 or 7 days. Your ad runs for the full period you paid for, starting at the next free slot when your payment clears, and other advertisers cannot displace it.',
       'Relegation. If your Throne ad is outbid, you may, within 24 hours, move the same ad to a Court board for one day at a discount. Dethroned ads are also shown free for 24 hours in "Recently dethroned".',
+      'Review before publishing (Nigeria edition). In line with the advertising rules of the Advertising Regulatory Council of Nigeria (ARCON), every ad bought in the Nigeria edition waits in our review queue for about 5 minutes after payment before it goes live. We may reject it in that time, in which case we refund you in full. A Throne bid that has been outbid by the time it goes live is refunded in full.',
+      'Prices and VAT. Prices in the Nigeria edition are in Naira and include Value Added Tax (VAT) at 7.5%. Prices in the Global edition are in US dollars.',
       'Video ads cost more and are watched by a member of our team before they go live. A video is not shown until it is approved. If we reject it, if it is not reviewed within 24 hours, or if your Throne bid has been outbid by the time it is approved, we refund you in full.',
       'Refunds. Payments are final, except that we refund you in full automatically when: (a) another payment cleared first and your Throne bid no longer met the minimum; (b) a relegation offer had already been used; (c) your video ad is rejected or not reviewed in time; or (d) the law requires a refund. We may also refund at our discretion.',
       'Results. We show each ad’s reach and clicks as counted by our systems in good faith. These are estimates, not audited figures, and we do not promise any level of traffic, clicks or sales.',
       'Content rules. Your ad must follow the Ad Policy below. Ads are screened automatically before payment, but passing screening is not approval. We may remove any ad at any time, without refund, if it breaks these terms, the Ad Policy or the law. A removed ad keeps its slot, but its content is hidden. We may also pause new ads for a short time (for example during maintenance or abuse).',
       'King of the Day is a title only. It has no cash or prize value.',
       'Liability. The service is provided "as is". We do not endorse any advertiser or the sites they link to, and we are not affiliated with them. Check any business before paying it. To the extent the law allows, our total liability to you is limited to the amount you paid us in the 30 days before the claim. Nothing in these terms limits liability that cannot be limited by law.',
-      'Governing law. These terms are governed by the laws of the Federal Republic of Nigeria, and the courts of Nigeria have jurisdiction. If you use the Global edition as a consumer living outside Nigeria, you also keep the protection of any consumer laws of your country that cannot be excluded by agreement, and you may bring a claim in the courts of your country where those laws allow it.',
+      'Governing law. These terms shall be governed by and construed in accordance with the laws of the Federal Republic of Nigeria, and any disputes shall be resolved in Nigerian courts. If you use the Global edition as a consumer living outside Nigeria, nothing in these terms removes protections that the consumer laws of your country do not allow to be excluded by agreement.',
       `Changes. We may update these terms; the date at the top shows the latest version, and the version in force when you paid applies to that purchase. Questions: ${CONTACT}.`,
     ],
   },
@@ -32,8 +35,8 @@ const SECTIONS = [
     id: 'ad-policy',
     title: 'Ad Policy',
     body: [
-      'Not allowed: scams, phishing, malware or misleading links; false or misleading claims; sexual or adult content; content involving minors in any harmful way; hate, harassment or threats; violence or dangerous activities; illegal goods or services; gambling or betting that is not licensed where it is offered; impersonation of people or brands; content you do not have the rights to use; and political ads.',
-      'Political ads are not allowed. This means any ad for or against a political party, candidate, campaign, election, referendum or ballot measure, and any ad by a government, party or political group asking for votes, support or donations. Why: (1) Throne has no accounts, so we cannot verify who paid for an ad and give voters the "paid for by" transparency that election rules expect; (2) election advertising is tightly regulated, including when, how and by whom it may be run (in Nigeria by the Electoral Act 2022 and the Independent National Electoral Commission, and elsewhere by each country’s own laws), and we cannot check those rules ad by ad, worldwide, in real time; and (3) we want the billboard to stay a neutral space for businesses and creators. Ads about a cause that do not mention a party, candidate or election may be allowed; we decide case by case and may remove them.',
+      'Not allowed: scams, phishing, malware or misleading links; false or misleading claims; sexual or adult content; content involving minors in any harmful way; hate, harassment or threats; violence or dangerous activities; illegal goods or services; gambling or betting that is not licensed where it is offered; impersonation of people or brands; content you do not have the rights to use; and political or advocacy ads.',
+      'Political and advocacy ads are not allowed, without exception. This means any ad for or against a political party, candidate, campaign, election, referendum or ballot measure; any ad by a government, party or political group asking for votes, support or donations; and any advocacy ad that campaigns on a political or social issue, a law or a government policy. Ads are checked for political content automatically before payment, and blocked ads are never charged. Why: (1) Throne has no accounts, so we cannot verify who paid for an ad and give voters the "paid for by" transparency that election rules expect; (2) election advertising is tightly regulated, including when, how and by whom it may be run (in Nigeria by the Electoral Act 2022 and the Independent National Electoral Commission, and elsewhere by each country’s own laws), and we cannot check those rules ad by ad, worldwide, in real time; and (3) we want the billboard to stay a neutral space for businesses and creators.',
       'Links must lead where the ad says they do. Every outbound click shows visitors the destination before they leave.',
       'Anyone can report an ad. Ads reported by several different people may be hidden at once while we review them.',
     ],
@@ -97,6 +100,17 @@ export default function LegalPage() {
             <h1 className="display text-5xl sm:text-7xl">The rules</h1>
             <p className="label mt-3 text-ink/60">Last updated {LAST_UPDATED}</p>
           </div>
+          <section id="company" className="card scroll-mt-8 bg-bh-cream p-6 lg:p-8" aria-label="Company details">
+            <p className="font-black uppercase tracking-tight">
+              © {new Date().getFullYear()} {OPERATOR}. Throne is owned and operated by {OPERATOR}.
+            </p>
+            <p className="mt-2 font-medium text-ink/80">
+              CAC registration number {RC_NUMBER} · Contact:{' '}
+              <a href={`mailto:${CONTACT}`} className="font-bold underline hover:text-bh-red">
+                {CONTACT}
+              </a>
+            </p>
+          </section>
           {SECTIONS.map((s) => (
             <section key={s.id} id={s.id} className="card scroll-mt-8 p-6 lg:p-8">
               <h2 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{s.title}</h2>

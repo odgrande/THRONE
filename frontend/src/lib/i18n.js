@@ -187,6 +187,11 @@ const en = {
   'story.static': "frozen pixels",
   'story.today': "Today · live",
   'story.yourAd': "Your ad",
+  'hold.title': "Paid · being checked",
+  'hold.throne': "Every ad is checked before it goes live in Nigeria. Yours goes up within about {m} minutes, if your bid is still the highest; if not, you are refunded in full.",
+  'hold.booking': "Every ad is checked before it goes live in Nigeria. Yours starts within about {m} minutes, for the days you booked. If it is rejected, you are refunded in full.",
+  'pay.vat': "Price includes {pct}% VAT.",
+  'footer.short': "Paid ads by independent advertisers. Throne does not endorse them.",
 };
 
 const pcm = {
@@ -361,6 +366,11 @@ const pcm = {
   'story.static': "pixels wey no dey move",
   'story.today': "Today · live",
   'story.yourAd': "Your ad",
+  'hold.title': "You don pay · we dey check am",
+  'hold.throne': "We dey check every ad before e go live for Nigeria. Your own go show inside like {m} minutes, if your bid still high pass; if not, you go collect your money back complete.",
+  'hold.booking': "We dey check every ad before e go live for Nigeria. Your own go start inside like {m} minutes, for the days wey you book. If dem reject am, you go collect your money back complete.",
+  'pay.vat': "The price don include {pct}% VAT.",
+  'footer.short': "Na independent advertisers pay for these ads. Throne no dey vouch for dem.",
 };
 
 const yo = {
@@ -535,6 +545,11 @@ const yo = {
   'story.static': "pixel tí kò yí padà",
   'story.today': "Lónìí · láàyè",
   'story.yourAd': "Ìpolówó rẹ",
+  'hold.title': "O ti sanwó · à ń ṣàyẹ̀wò rẹ̀",
+  'hold.throne': "A ń ṣàyẹ̀wò gbogbo ìpolówó kí ó tó hàn ní Nàìjíríà. Tìrẹ yóò hàn láàárín ìṣẹ́jú {m}, tí iye rẹ bá ṣì ga jù; bí bẹ́ẹ̀ kọ́, a ó dá owó rẹ padà ní kíkún.",
+  'hold.booking': "A ń ṣàyẹ̀wò gbogbo ìpolówó kí ó tó hàn ní Nàìjíríà. Tìrẹ yóò bẹ̀rẹ̀ láàárín ìṣẹ́jú {m}, fún ọjọ́ tí o gbà. Tí wọ́n bá kọ̀ ọ́, a ó dá owó rẹ padà ní kíkún.",
+  'pay.vat': "Iye owó náà ní VAT {pct}% nínú.",
+  'footer.short': "Àwọn olùpolówó aládàáni ló sanwó fún ìpolówó wọ̀nyí. Throne kò fọwọ́ sí wọn.",
 };
 
 const ha = {
@@ -709,6 +724,11 @@ const ha = {
   'story.static': "pixel marasa motsi",
   'story.today': "Yau · kai tsaye",
   'story.yourAd': "Tallarka",
+  'hold.title': "An biya · ana dubawa",
+  'hold.throne': "Ana duba kowace talla kafin ta bayyana a Najeriya. Taka za ta bayyana cikin kusan minti {m}, idan biyanka har yanzu shi ne mafi girma; idan ba haka ba, za a mayar maka da kuɗinka gaba ɗaya.",
+  'hold.booking': "Ana duba kowace talla kafin ta bayyana a Najeriya. Taka za ta fara cikin kusan minti {m}, na kwanakin da ka yi booking. Idan aka ƙi, za a mayar maka da kuɗinka gaba ɗaya.",
+  'pay.vat': "Farashin ya haɗa da VAT {pct}%.",
+  'footer.short': "Masu talla masu zaman kansu ne suka biya waɗannan tallace-tallace. Throne ba ya ba su tabbaci.",
 };
 
 const ig = {
@@ -883,6 +903,11 @@ const ig = {
   'story.static': "pixel na-adịghị agbanwe",
   'story.today': "Taa · dị ndụ",
   'story.yourAd': "Mgbasa ozi gị",
+  'hold.title': "Akwụọla · a na-enyocha ya",
+  'hold.throne': "A na-enyocha mgbasa ozi ọ bụla tupu ọ pụta na Naịjirịa. Nke gị ga-apụta n’ime ihe dị ka nkeji {m}, ma ọ bụrụ na ego gị ka kachasị elu; ma ọ bụghị ya, a ga-eweghachiri gị ego gị niile.",
+  'hold.booking': "A na-enyocha mgbasa ozi ọ bụla tupu ọ pụta na Naịjirịa. Nke gị ga-amalite n’ime ihe dị ka nkeji {m}, maka ụbọchị ị debere. Ọ bụrụ na a jụrụ ya, a ga-eweghachiri gị ego gị niile.",
+  'pay.vat': "Ọnụ ahịa a gụnyere VAT {pct}%.",
+  'footer.short': "Ndị na-akpọsa ahịa n’onwe ha kwụrụ ụgwọ mgbasa ozi ndị a. Throne anaghị akwado ha.",
 };
 
 const DICTS = { en, pcm, yo, ha, ig };

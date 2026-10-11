@@ -172,7 +172,7 @@ export default function AdminPage() {
               {[
                 ['treasury', 'Treasury'],
                 ['moderation', 'Moderation'],
-                ['videos', 'Video review'],
+                ['videos', 'Review queue'],
                 ['god', 'God mode'],
               ].map(([key, label]) => (
                 <button
@@ -258,6 +258,7 @@ function RegionFinancials({ id, r }) {
       <div className="card mt-6">
         <dl className="divide-y-2 divide-ink">
           <Row label="Map add-ons" hint="Included in ad revenue" value={money(r.addonCents)} />
+          {r.vatPct > 0 && <Row label={`VAT (${r.vatPct}%)`} hint="Included in ad revenue; owed to the tax authority" value={money(r.vatCents)} />}
           <Row label="Est. processor fees" hint={`${FEE_HINT[r.processor] ?? ''}, incl. refunded charges`} value={`−${money(r.estFeesCents)}`} />
           <Row label="Refunded" hint="Throne race losers and duplicate relegations; the fee is kept" value={money(r.refundedCents)} />
           <Row

@@ -207,9 +207,12 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     if (!pending) return { status: 'missing' };
     const region = pending.region;
 
-    // Video ads never go live on payment alone: they wait for a person to
-    // approve them (approveVideo). A relegated ad was already approved.
-    const needsReview = pending.videoUrl && !pending.relegatedFrom && !approved;
+    // Ads that never go live on payment alone (a relegated ad was already
+    // vetted): videos wait for a person; in an edition with a review hold
+    // (Nigeria, ARCON) every ad waits there first and goes live once the
+    // hold passes unless an admin rejects it.
+    const holdSeconds = rulesOf(region).reviewHoldSeconds ?? 0;
+    const needsReview = (pending.videoUrl || holdSeconds > 0) && !pending.relegatedFrom && !approved;
     if (needsReview && pending.status === 'pending') {
       await store.markReview(bidId, paymentRef);
       return { status: 'review' };
@@ -277,16 +280,22 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     return { status: 'refunded' };
   }
 
-  // Paid video ads nobody reviewed within the window are refunded, so a
-  // buyer's money is never stuck.
+  // The review queue, checked every few seconds:
+  //  - picture ads in an edition with a review hold go live once the hold has
+  //    passed and no admin rejected them;
+  //  - paid videos nobody reviewed within 24 hours are refunded, so a buyer's
+  //    money is never stuck.
   const REVIEW_WINDOW_MS = 24 * 3600_000;
   let reviewsCheckedAt = 0;
   async function expireReviews() {
-    if (Date.now() - reviewsCheckedAt < 60_000) return;
+    if (Date.now() - reviewsCheckedAt < 5_000) return;
     reviewsCheckedAt = Date.now();
     for (const bid of await store.listReviews()) {
-      if (Date.now() - Date.parse(bid.reviewSince) > REVIEW_WINDOW_MS) {
-        await rejectVideo(bid.id, 'Not reviewed within 24 hours (automatic refund)');
+      const waited = Date.now() - Date.parse(bid.reviewSince);
+      if (bid.videoUrl) {
+        if (waited > REVIEW_WINDOW_MS) await rejectVideo(bid.id, 'Not reviewed within 24 hours (automatic refund)');
+      } else if (waited >= (rulesOf(bid.region).reviewHoldSeconds ?? 0) * 1000) {
+        await approveVideo(bid.id);
       }
     }
   }

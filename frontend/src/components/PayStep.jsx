@@ -59,6 +59,7 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
       ) : (
         <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
       )}
+      {checkout.vatPct > 0 && <p className="text-center text-xs text-ink/60">{t('pay.vat', { pct: checkout.vatPct })}</p>}
       {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
       {!settling && (
         <button onClick={onCancel} className="label w-full py-2 text-ink/60 hover:text-bh-red">
