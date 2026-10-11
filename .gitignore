@@ -5,4 +5,5 @@ dist/
 !.env.example
 backend/uploads/
 backend/renders/
+backend/videos/
 *.log
