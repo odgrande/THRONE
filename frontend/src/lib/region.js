@@ -76,4 +76,5 @@ let processor = null;
 export const adoptProcessor = (mode) => {
   processor = mode;
 };
-export const needsEmail = () => processor === 'paystack';
+// Paystack and Flutterwave need a receipt email at checkout; Stripe and the demo do not.
+export const needsEmail = () => processor === 'paystack' || processor === 'flutterwave';

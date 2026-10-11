@@ -75,7 +75,13 @@ This stops attackers from calling `throne-api.onrender.com` directly to skip the
 4. Cloudflare: exclude `/api/webhooks/paystack` from WAF challenges and rate limits (Paystack can't solve a challenge). Optionally allow only Paystack's webhook IPs (listed in Paystack's docs) on that path.
 5. Make sure your Paystack business is fully activated (KYC done), or live payments are refused.
 
-### 7b. Stripe (Global edition, only if `PAYMENTS_GLOBAL=stripe`)
+### 7b. Flutterwave (Global edition, USD)
+1. Flutterwave dashboard → Settings → API Keys: copy the **v3 Secret Key** (`FLWSECK-…` live, `FLWSECK_TEST-…` test). Render → `FLUTTERWAVE_SECRET_KEY`.
+2. Settings → Webhooks: URL `https://api.yourdomain.com/api/webhooks/flutterwave`; set a **Secret hash** (a long random string) and put the same value in Render → `FLUTTERWAVE_WEBHOOK_HASH`. Tick "charge completed" events.
+3. `PAYMENTS_GLOBAL=flutterwave` (the production blueprint sets it). Exclude `/api/webhooks/flutterwave` from Cloudflare challenges.
+4. Buyers pay on Flutterwave's page and come back to `/my-ads`; the ad goes live when the webhook arrives and our server has re-verified the payment with Flutterwave.
+
+### 7c. Stripe (Global alternative, only if `PAYMENTS_GLOBAL=stripe`)
 If Paystack enables USD for your business, you can use `PAYMENTS_GLOBAL=paystack` instead and skip this part.
 1. Stripe → Developers → Webhooks → Add endpoint `https://api.yourdomain.com/api/webhooks/stripe`, event **`payment_intent.succeeded`** → copy the signing secret (`whsec_…`).
 2. Render → api → Environment → set `STRIPE_WEBHOOK_SECRET` → Save (Render redeploys).

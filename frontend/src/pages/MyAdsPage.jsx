@@ -40,6 +40,9 @@ export default function MyAdsPage() {
         <p className="label text-bh-blue">{t('my.kicker')}</p>
         <h1 className="display mt-2 text-5xl sm:text-6xl">{t('my.title')}</h1>
         <p className="mt-3 max-w-2xl font-medium text-ink/75">{t('my.body')}</p>
+        {new URLSearchParams(window.location.search).get('paid') && (
+          <p className="mt-4 border-2 border-ink bg-bh-yellow px-4 py-3 font-bold">{t('my.paidReturn')}</p>
+        )}
 
         {!items ? (
           <p className="label mt-10 flex items-center gap-2">

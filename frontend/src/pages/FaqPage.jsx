@@ -22,7 +22,7 @@ const GROUPS = [
     id: 'payments',
     title: 'Payments and refunds',
     items: [
-      ['How do I pay?', 'Nigeria: card, bank transfer or USSD through Paystack, in Naira (prices include 7.5% VAT). Global: in US dollars through the payment provider shown at checkout.'],
+      ['How do I pay?', 'Nigeria: card, bank transfer or USSD through Paystack, in Naira (prices include 7.5% VAT). Global: card or bank in US dollars through Flutterwave. You pay on their secure page, never on ours.'],
       ['When do I get a refund?', 'Automatically and in full if: someone else’s payment cleared first and yours no longer met the price; your video or Nigerian ad is rejected in review; a video isn’t reviewed within 24 hours; or a relegation offer was already used. Being outbid on the Throne after your ad went live is not a reason for a refund: that is how the auction works.'],
       ['I was outbid. Is there anything I can do?', 'Yes. Within 24 hours you can move the same ad to a Court board for one day at half price, and every dethroned ad is shown free for 24 hours in “Recently dethroned”.'],
       ['Something went wrong with my payment.', 'Contact us with the time of payment and the ad’s name. If you bought from this browser, the ad’s details are on My ads.'],
@@ -41,7 +41,7 @@ const GROUPS = [
     title: 'Safety and your data',
     items: [
       ['Is it safe to click an ad?', 'Every link is checked for malware and phishing before the ad is accepted, and every click first shows you where you are going. Still, we don’t endorse advertisers: check a business before you pay it.'],
-      ['What data do you keep about me?', 'Almost none. No accounts, no passwords, no card details, no tracking cookies, and your receipt email goes to Paystack only. See Safety & security for the full list.'],
+      ['What data do you keep about me?', 'Almost none. No accounts, no passwords, no card details, no tracking cookies, and your receipt email goes to the payment provider only. See Safety & security for the full list.'],
       ['How do I report an ad?', 'Press “Report ad” on it. When several people report the same ad, it is hidden at once until we review it.'],
       ['Who runs Throne?', 'Throne is owned and operated by Odgrande NG Limited (RC1029807). Contact us any time through the contact page.'],
     ],

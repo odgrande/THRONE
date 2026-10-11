@@ -25,7 +25,13 @@ assertProductionConfig('api');
 
 const store = createStore(config);
 const storage = createStorage(config);
-const payments = createPayments({ stripe: config.stripe, paystack: config.paystack, processors: config.processors, regions: config.regions });
+const payments = createPayments({
+  stripe: config.stripe,
+  paystack: config.paystack,
+  flutterwave: { ...config.flutterwave, siteUrl: config.siteUrl.replace(/\/$/, '') },
+  processors: config.processors,
+  regions: config.regions,
+});
 const moderation = createModeration(config.openaiApiKey);
 const links = createLinkChecker(config.webRiskApiKey);
 const turnstile = createTurnstile(config.turnstileSecret);
@@ -127,6 +133,39 @@ app.post('/api/webhooks/paystack', express.raw({ type: 'application/json' }), as
     await game.settle(reference, reference);
   } catch (err) {
     console.error('[webhook] paystack settle failed; Paystack will retry', err);
+    return res.status(500).end();
+  }
+  res.json({ received: true });
+});
+
+// Flutterwave: the verif-hash header must equal our secret hash. Then we ask
+// Flutterwave directly and check status, amount and currency before an ad
+// goes live (the webhook body alone is never trusted).
+app.post('/api/webhooks/flutterwave', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!payments.flutterwave) return res.status(404).end();
+  if (!payments.flutterwave.verifySignature(req.get('verif-hash'))) return res.status(401).send('Bad signature');
+  let event;
+  try {
+    event = JSON.parse(req.body.toString('utf8'));
+  } catch {
+    return res.status(400).send('Bad JSON');
+  }
+  if (event.event !== 'charge.completed') return res.json({ received: true });
+  const reference = event.data?.tx_ref;
+  if (typeof reference !== 'string' || !UUID.test(reference)) return res.json({ received: true });
+  try {
+    const bid = await store.getBid(reference);
+    if (!bid) return res.json({ received: true });
+    const rules = game.rulesOf(bid.region);
+    const expected = bid.amountCents + (bid.addonCents ?? 0);
+    const tx = await payments.flutterwave.verifyTransaction(reference);
+    if (tx.status !== 'successful' || tx.amountCents !== expected || tx.currency !== rules.currency || tx.tx_ref !== reference) {
+      console.error(`[flutterwave] MISMATCH for ad ${reference}: got ${tx.status} ${tx.amountCents} ${tx.currency}, expected ${expected} ${rules.currency}`);
+      return res.json({ received: true });
+    }
+    await game.settle(reference, reference);
+  } catch (err) {
+    console.error('[webhook] flutterwave settle failed; Flutterwave will retry', err);
     return res.status(500).end();
   }
   res.json({ received: true });
@@ -711,7 +750,8 @@ const videoAllowed = (board, rules) => board === 'throne' || !rules.boards[board
 // Paystack needs the buyer's email to send a receipt. We hand it to Paystack
 // and never store it.
 function paymentEmail(req, region) {
-  if (payments.modeFor(region) !== 'paystack') return null;
+  // Paystack and Flutterwave need it for the receipt.
+  if (!['paystack', 'flutterwave'].includes(payments.modeFor(region))) return null;
   const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
   if (email.length > 254 || !EMAIL.test(email)) throw new Reject(400, 'Enter a valid email for your payment receipt.');
   return email;
@@ -953,7 +993,7 @@ app.get(
     const offer = await game.getRelegationOffer(req.params.bidId, ownerToken(req));
     if (!offer.eligible) return res.json({ eligible: false, reason: offer.reason });
     const { region, board, boardName, priceCents, currency, startsAt, expiresAt } = offer;
-    res.json({ eligible: true, region, board, boardName, priceCents, currency, startsAt, expiresAt, needsEmail: payments.modeFor(region) === 'paystack' });
+    res.json({ eligible: true, region, board, boardName, priceCents, currency, startsAt, expiresAt, needsEmail: ['paystack', 'flutterwave'].includes(payments.modeFor(region)) });
   }),
 );
 

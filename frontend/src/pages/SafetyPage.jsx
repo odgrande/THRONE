@@ -6,9 +6,9 @@ import InfoPage, { SectionTitle } from '../components/InfoPage.jsx';
 // Safety & Security: what protects buyers and visitors, stated plainly, with
 // the live status of the protections that depend on outside services.
 const NEVER_STORED = [
-  ['Card numbers and bank details', 'Payments happen on Paystack’s secure checkout (PCI DSS certified). We never see your card or bank details.'],
+  ['Card numbers and bank details', 'You pay on Paystack’s (Nigeria) or Flutterwave’s (Global) own secure checkout, both PCI DSS certified. We never see your card or bank details.'],
   ['Passwords and accounts', 'There are no accounts, so there is no password to steal.'],
-  ['Your receipt email', 'Paystack needs it to send your receipt. We pass it straight to Paystack and do not keep it.'],
+  ['Your receipt email', 'The payment provider needs it to send your receipt. We pass it straight to them and do not keep it.'],
   ['Your IP address', 'For visitor counts we turn it into a scrambled code with a secret that changes every day. The code stays in memory and is never written down.'],
   ['Tracking cookies, ad trackers, analytics', 'None. We do not follow you around the internet or sell anything about you.'],
 ];
@@ -29,7 +29,7 @@ const ANTI_FRAUD = [
   ['Every Nigerian ad is held for review', 'In the Nigeria edition each ad waits about 5 minutes in our review queue before it goes live.'],
   ['A safety page before every click-out', 'Clicking an ad first shows you exactly where you are going, so you are never sent somewhere blindly.'],
   ['Reports act fast', 'Anyone can report an ad. When several different people report one, it is hidden at once until we review it.'],
-  ['Payments cannot be faked', 'An ad only goes live when Paystack itself confirms the payment, with a signed message we check twice.'],
+  ['Payments cannot be faked', 'An ad only goes live when Paystack or Flutterwave itself confirms the payment: we check their signed message, then ask them directly.'],
 ];
 
 const SITE = [

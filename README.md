@@ -7,7 +7,7 @@ Two editions run side by side from one codebase and one database:
 
 | Edition | Currency | Payments | Who lands on it |
 |---|---|---|---|
-| **Global** (`global`) | USD | Stripe (or demo) | Everyone outside Nigeria |
+| **Global** (`global`) | USD | **Flutterwave** (hosted checkout), Stripe optional | Everyone outside Nigeria |
 | **Nigeria** (`ng`) | NGN | **Paystack**: card, bank transfer, USSD | Visitors from Nigeria (Cloudflare's `CF-IPCountry`) |
 
 Each edition has its own throne, boards, King of the Day, archive, leaderboard and revenue. Amounts are never compared across currencies.

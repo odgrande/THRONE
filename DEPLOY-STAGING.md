@@ -83,6 +83,13 @@ Paystack test mode takes test cards and fake bank transfers; no real money moves
 
 The Global edition stays on the demo button in staging. The public key isn't needed: the server starts each payment, and the browser only receives a one-time access code.
 
+## Step 7c: Flutterwave in test mode (Global edition, USD, you, 5 min)
+1. Flutterwave dashboard → switch to **Test mode** → Settings → **API Keys**: copy the **v3 Test Secret Key** (`FLWSECK_TEST-...`). It goes only into Render → Environment as `FLUTTERWAVE_SECRET_KEY`, plus `PAYMENTS_GLOBAL` = `flutterwave`.
+2. Settings → **Webhooks**: URL `https://<your-api>.onrender.com/api/webhooks/flutterwave`, and type a **Secret hash** (any long random text). Put the same text in Render as `FLUTTERWAVE_WEBHOOK_HASH`. Save (Render redeploys).
+3. Open your site with `?region=global`, bid $5, and pay on Flutterwave's page with one of Flutterwave's published test cards. You land on My ads; the ad goes live within seconds.
+
+(The v4 Client ID / Client Secret / Encryption Key are not used: Throne uses Flutterwave's hosted checkout, so card details never touch our servers.)
+
 ## Step 8: Check it works
 Send the two URLs to your developer, who checks: health, CORS, live updates across two browsers, an image upload to Supabase Storage, the archive, the admin page, reports and takedowns. Things to expect:
 - The first load after idle takes ~1 minute (Render free tier waking up).

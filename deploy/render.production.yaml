@@ -42,9 +42,12 @@ services:
         value: paystack
       - key: PAYSTACK_SECRET_KEY
         sync: false
-      # Global edition: "paystack" (USD, once Paystack enables USD on your
-      # account) or "stripe" (then fill the two Stripe keys; else leave them blank).
+      # Global edition (USD): Flutterwave Standard (hosted checkout).
       - key: PAYMENTS_GLOBAL
+        value: flutterwave
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_HASH
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false

@@ -123,11 +123,78 @@ export function paystackProvider({ secretKey, apiBase = 'https://api.paystack.co
   };
 }
 
-export function createPayments({ stripe, paystack, processors, regions }) {
+// Flutterwave Standard (v3): a hosted payment page. Amounts are in MAJOR
+// units (dollars), so we convert from our cents. The reference (tx_ref) is
+// our ad id; refunds need Flutterwave's numeric transaction id, which we look
+// up by reference.
+export function flutterwaveProvider({ secretKey, webhookHash, apiBase = 'https://api.flutterwave.com', siteUrl }) {
+  async function call(method, path, body) {
+    const res = await fetch(`${apiBase}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(10000),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.status !== 'success') {
+      throw new Error(`Flutterwave ${method} ${path} failed (${res.status}): ${json.message ?? 'unknown error'}`);
+    }
+    return json.data;
+  }
+  const major = (cents) => Math.round(cents) / 100;
+
+  const verifyTransaction = async (reference) => {
+    const tx = await call('GET', `/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`);
+    // Normalised for the webhook check: amount back in cents.
+    return { ...tx, amountCents: Math.round(Number(tx.amount) * 100) };
+  };
+
+  return {
+    mode: 'flutterwave',
+
+    // The buyer's email is required by Flutterwave for the receipt; passed
+    // through, not stored. After paying they come back to My ads.
+    async createIntent({ bidId, amountCents, currency, email, description }) {
+      const data = await call('POST', '/v3/payments', {
+        tx_ref: bidId,
+        amount: major(amountCents),
+        currency,
+        redirect_url: `${siteUrl}/my-ads?paid=1`,
+        customer: { email },
+        customizations: { title: 'Throne', description: String(description).slice(0, 120) },
+        meta: { bidId },
+      });
+      return { authorizationUrl: data.link };
+    },
+
+    async refund(paymentRef, amountCents, reason) {
+      const tx = await verifyTransaction(paymentRef);
+      await call('POST', `/v3/transactions/${encodeURIComponent(tx.id)}/refund`, { amount: major(amountCents), comments: reason });
+    },
+
+    // Webhook authenticity: the verif-hash header must equal our secret hash.
+    verifySignature(headerValue) {
+      if (typeof headerValue !== 'string' || !webhookHash) return false;
+      const a = Buffer.from(headerValue);
+      const b = Buffer.from(webhookHash);
+      return a.length === b.length && timingSafeEqual(a, b);
+    },
+
+    verifyTransaction,
+
+    async getBalance(currency) {
+      const data = await call('GET', `/v3/balances/${encodeURIComponent(currency)}`);
+      return data ? { availableCents: Math.round(Number(data.available_balance) * 100), pendingCents: Math.round(Number(data.ledger_balance - data.available_balance || 0) * 100) } : null;
+    },
+  };
+}
+
+export function createPayments({ stripe, paystack, flutterwave, processors, regions }) {
   const providers = {};
   for (const [region, processor] of Object.entries(processors)) {
     if (processor === 'stripe') providers[region] = stripeProvider(stripe);
     else if (processor === 'paystack') providers[region] = paystackProvider(paystack);
+    else if (processor === 'flutterwave') providers[region] = flutterwaveProvider(flutterwave);
     else providers[region] = demoProvider(region);
     console.log(`[payments] ${region}: ${providers[region].mode}${providers[region].mode === 'demo' ? ' (simulated, no real money)' : ''}`);
   }
@@ -145,5 +212,6 @@ export function createPayments({ stripe, paystack, processors, regions }) {
     // Webhook helpers, used only by the matching webhook route.
     stripe: Object.values(providers).find((p) => p.mode === 'stripe') ?? null,
     paystack: Object.values(providers).find((p) => p.mode === 'paystack') ?? null,
+    flutterwave: Object.values(providers).find((p) => p.mode === 'flutterwave') ?? null,
   };
 }

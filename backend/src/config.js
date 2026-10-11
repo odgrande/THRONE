@@ -180,6 +180,16 @@ export const config = {
     // production deploy refuses anything but the real API (checked below).
     apiBase: (process.env.PAYSTACK_API_BASE || 'https://api.paystack.co').replace(/\/$/, ''),
   },
+  flutterwave: {
+    // Flutterwave Standard (v3 hosted checkout): the customer pays on
+    // Flutterwave's own page, so card details never touch our servers.
+    secretKey: process.env.FLUTTERWAVE_SECRET_KEY || '',
+    // The "secret hash" you set in the Flutterwave dashboard (Settings ->
+    // Webhooks); Flutterwave sends it back in the verif-hash header.
+    webhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH || '',
+    // Overridable only so tests can point at a local fake Flutterwave.
+    apiBase: (process.env.FLUTTERWAVE_API_BASE || 'https://api.flutterwave.com').replace(/\/$/, ''),
+  },
   supabase: {
     url: process.env.SUPABASE_URL || '',
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
@@ -206,17 +216,17 @@ if (config.adminToken && config.adminToken.length < 32) {
   throw new Error('ADMIN_TOKEN must be at least 32 characters (try: openssl rand -hex 32)');
 }
 
-// Which processor takes each region's payments: stripe | paystack | demo.
-// Defaults: global → Stripe if keyed, else demo; ng → Paystack if keyed, else
-// demo. Global can use Paystack too (USD needs Paystack's approval on your
-// account): PAYMENTS_GLOBAL=paystack.
+// Which processor takes each region's payments: flutterwave | stripe | paystack | demo.
+// Defaults: global → Flutterwave if keyed (else Stripe if keyed, else demo);
+// ng → Paystack if keyed, else demo.
+const PROCESSORS = ['flutterwave', 'stripe', 'paystack', 'demo'];
 const pick = (name, fallback) => {
   const v = process.env[name] || fallback;
-  if (!['stripe', 'paystack', 'demo'].includes(v)) throw new Error(`${name} must be stripe, paystack or demo`);
+  if (!PROCESSORS.includes(v)) throw new Error(`${name} must be one of ${PROCESSORS.join(', ')}`);
   return v;
 };
 config.processors = {
-  global: pick('PAYMENTS_GLOBAL', config.stripe.secretKey ? 'stripe' : 'demo'),
+  global: pick('PAYMENTS_GLOBAL', config.flutterwave.secretKey ? 'flutterwave' : config.stripe.secretKey ? 'stripe' : 'demo'),
   ng: pick('PAYMENTS_NG', config.paystack.secretKey ? 'paystack' : 'demo'),
 };
 for (const [region, processor] of Object.entries(config.processors)) {
@@ -226,10 +236,16 @@ for (const [region, processor] of Object.entries(config.processors)) {
   if (processor === 'paystack' && !config.paystack.secretKey) {
     throw new Error(`Region ${region} uses Paystack: set PAYSTACK_SECRET_KEY`);
   }
+  if (processor === 'flutterwave' && (!config.flutterwave.secretKey || !config.flutterwave.webhookHash)) {
+    throw new Error(`Region ${region} uses Flutterwave: set FLUTTERWAVE_SECRET_KEY and FLUTTERWAVE_WEBHOOK_HASH`);
+  }
 }
 
 if (production && config.paystack.apiBase !== 'https://api.paystack.co') {
   throw new Error('PAYSTACK_API_BASE may only be overridden outside production (it exists for tests)');
+}
+if (production && config.flutterwave.apiBase !== 'https://api.flutterwave.com') {
+  throw new Error('FLUTTERWAVE_API_BASE may only be overridden outside production (it exists for tests)');
 }
 
 export const REGION_IDS = Object.keys(config.regions);

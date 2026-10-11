@@ -203,6 +203,10 @@ const en = {
   'rules.accept.removal': "Throne may remove an ad that breaks the rules or the law, without a refund.",
   'rules.accept.check': "I have read and accept the",
   'rules.accept.recorded': "Your acceptance is saved with your ad (date and version of the rules).",
+  'flw.waiting': "Finish paying on Flutterwave’s page. This page updates as soon as it is done.",
+  'flw.reopen': "Open the payment page again",
+  'flw.secured': "Card or bank, secured by Flutterwave. Your card details go to Flutterwave, never to us.",
+  'my.paidReturn': "Thanks! Your payment is being confirmed. Your ad appears here in a moment (refresh if it doesn’t).",
 };
 
 const pcm = {
@@ -393,6 +397,10 @@ const pcm = {
   'rules.accept.removal': "Throne fit remove ad wey break the rules or the law, without refund.",
   'rules.accept.check': "I don read and I accept the",
   'rules.accept.recorded': "We go save say you accept with your ad (date and version of the rules).",
+  'flw.waiting': "Finish your payment for Flutterwave page. This page go update once e don finish.",
+  'flw.reopen': "Open the payment page again",
+  'flw.secured': "Card or bank, Flutterwave dey secure am. Your card details dey go Flutterwave, e no dey come meet us.",
+  'my.paidReturn': "Thank you! We dey confirm your payment. Your ad go show here soon (refresh if e no show).",
 };
 
 const yo = {
@@ -583,6 +591,10 @@ const yo = {
   'rules.accept.removal': "Throne lè yọ ìpolówó tó rú òfin kúrò, láìdá owó padà.",
   'rules.accept.check': "Mo ti kà, mo sì gbà",
   'rules.accept.recorded': "A ó tọ́jú ìgbàwọlé rẹ pẹ̀lú ìpolówó rẹ (ọjọ́ àti ẹ̀yà àwọn òfin).",
+  'flw.waiting': "Parí ìsanwó rẹ lórí ojú-ìwé Flutterwave. Ojú-ìwé yìí yóò yí padà ní kété tí ó bá parí.",
+  'flw.reopen': "Ṣí ojú-ìwé ìsanwó lẹ́ẹ̀kan sí i",
+  'flw.secured': "Káàdì tàbí báńkì, nípasẹ̀ Flutterwave. Àlàyé káàdì rẹ ń lọ sí Flutterwave, kì í wá sọ́dọ̀ wa.",
+  'my.paidReturn': "O ṣé! À ń jẹ́rìí sí ìsanwó rẹ. Ìpolówó rẹ yóò hàn níbí láìpẹ́ (tún ojú-ìwé gbé tí kò bá hàn).",
 };
 
 const ha = {
@@ -773,6 +785,10 @@ const ha = {
   'rules.accept.removal': "Throne zai iya cire tallar da ta karya doka, ba tare da mayar da kuɗi ba.",
   'rules.accept.check': "Na karanta kuma na yarda da",
   'rules.accept.recorded': "Ana adana yardarka tare da tallarka (kwanan wata da sigar dokokin).",
+  'flw.waiting': "Ka gama biya a shafin Flutterwave. Wannan shafi zai sabunta da zarar ka gama.",
+  'flw.reopen': "Sake buɗe shafin biya",
+  'flw.secured': "Kati ko banki, ta hannun Flutterwave. Bayanan katinka suna zuwa Flutterwave, ba zuwa gare mu ba.",
+  'my.paidReturn': "Na gode! Ana tabbatar da biyanka. Tallarka za ta bayyana a nan nan ba da jimawa ba (sake loda idan ba ta bayyana ba).",
 };
 
 const ig = {
@@ -963,6 +979,10 @@ const ig = {
   'rules.accept.removal': "Throne nwere ike iwepụ mgbasa ozi mebiri iwu, n’eweghachighị ego.",
   'rules.accept.check': "Agụọla m ma kwenye na",
   'rules.accept.recorded': "A na-echekwa nkwenye gị na mgbasa ozi gị (ụbọchị na ụdị iwu ahụ).",
+  'flw.waiting': "Mechaa ịkwụ ụgwọ na ibe Flutterwave. Ibe a ga-emelite ozugbo ọ gwụchara.",
+  'flw.reopen': "Mepee ibe ịkwụ ụgwọ ọzọ",
+  'flw.secured': "Kaadị ma ọ bụ ụlọ akụ, site na Flutterwave. Nkọwa kaadị gị na-aga Flutterwave, ọ naghị abịakwute anyị.",
+  'my.paidReturn': "Daalụ! A na-akwado ịkwụ ụgwọ gị. Mgbasa ozi gị ga-apụta ebe a n’oge na-adịghị anya (megharịa ibe ma ọ bụrụ na ọ pụtaghị).",
 };
 
 const DICTS = { en, pcm, yo, ha, ig };

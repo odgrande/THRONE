@@ -5,14 +5,15 @@ import { api, formatMoney } from '../lib/api.js';
 const StripeCheckout = lazy(() => import('./StripeCheckout.jsx'));
 import { t } from '../lib/i18n.js';
 import PaystackCheckout from './PaystackCheckout.jsx';
+import FlutterwaveCheckout from './FlutterwaveCheckout.jsx';
 
 // Polls until the payment webhook has settled the ad (usually under a second).
-async function waitForSettlement(bidId) {
+async function waitForSettlement(bidId, tries = 60, everyMs = 500) {
   // Bank transfers and USSD can take a little longer than cards.
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < tries; i++) {
     const result = await api.bidStatus(bidId);
     if (result.status !== 'pending') return result;
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, everyMs));
   }
   return { status: 'pending' };
 }
@@ -50,6 +51,13 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
           </button>
           <p className="text-sm text-ink/60">Test site: payments are simulated. No money moves.</p>
         </>
+      ) : checkout.paymentsMode === 'flutterwave' ? (
+        <FlutterwaveCheckout
+          authorizationUrl={checkout.authorizationUrl}
+          label={t('pay.button', { amount: price })}
+          // The buyer pays in another tab: keep checking for up to 15 minutes.
+          onPaid={() => finish(() => waitForSettlement(checkout.bidId, 300, 3000))}
+        />
       ) : checkout.paymentsMode === 'paystack' ? (
         <PaystackCheckout
           accessCode={checkout.accessCode}
