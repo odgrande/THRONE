@@ -180,6 +180,13 @@ const en = {
   'my.status.removed': "Removed",
   'my.status.ended': "Ended",
   'my.howCounted': "Reach counts each person once per ad per day while your ad was live; clicks count visits through our link-safety page. Your purchases are remembered in this browser only (no account), for 90 days.",
+  'story.kicker': "Our story",
+  'story.title': "From a million pixels to one live throne.",
+  'story.body1': "In 2005, a student sold a million pixels on one web page for $1 each, and the whole internet came to look. It worked because anyone could buy a spot on a page everybody was watching. But once a pixel was sold, it never changed.",
+  'story.body2': "Throne is that idea, alive. The big billboard changes hands the moment someone pays more, every screen updates in real time, and the corner shop sits on the same page as the big brand, with real numbers to show for it.",
+  'story.static': "frozen pixels",
+  'story.today': "Today · live",
+  'story.yourAd': "Your ad",
 };
 
 const pcm = {
@@ -347,6 +354,13 @@ const pcm = {
   'my.status.removed': "Dem remove am",
   'my.status.ended': "E don end",
   'my.howCounted': "Reach dey count each person once per ad per day while your ad dey up; clicks na people wey pass our link-safety page. Na only this browser dey remember wetin you buy (no account), for 90 days.",
+  'story.kicker': "Our story",
+  'story.title': "From one million pixels to one live throne.",
+  'story.body1': "For 2005, one student sell one million pixels for one web page, $1 each, and the whole internet come look am. E work because anybody fit buy space for page wey everybody dey watch. But once dem sell pixel, e no dey change again.",
+  'story.body2': "Throne na that same idea, but e dey alive. The big billboard dey change hand the moment person pay pass, every screen dey update live, and small shop dey the same page with big brand, with real numbers to show.",
+  'story.static': "pixels wey no dey move",
+  'story.today': "Today · live",
+  'story.yourAd': "Your ad",
 };
 
 const yo = {
@@ -514,6 +528,13 @@ const yo = {
   'my.status.removed': "A ti yọ ọ́",
   'my.status.ended': "Ó ti parí",
   'my.howCounted': "A ń ka ènìyàn kọ̀ọ̀kan lẹ́ẹ̀kan fún ìpolówó kọ̀ọ̀kan lójúmọ́ nígbà tí ìpolówó rẹ wà; títẹ̀ ni àbẹ̀wò nípasẹ̀ ojú-ìwé ààbò ìjápọ̀ wa. Ẹ̀rọ yìí nìkan ló ń rántí ohun tí o rà (kò sí àkọọ́lẹ̀), fún ọjọ́ 90.",
+  'story.kicker': "Ìtàn wa",
+  'story.title': "Láti pixel mílíọ̀nù kan sí ìtẹ́ kan tó wà láàyè.",
+  'story.body1': "Ní 2005, akẹ́kọ̀ọ́ kan ta pixel mílíọ̀nù kan lórí ojú-ìwé kan ní $1 ọ̀kọ̀ọ̀kan, gbogbo ayélujára sì wá wò ó. Ó ṣiṣẹ́ nítorí pé ẹnikẹ́ni lè ra àyè lórí ojú-ìwé tí gbogbo ènìyàn ń wò. Ṣùgbọ́n tí wọ́n bá ti ta pixel kan, kò yí padà mọ́.",
+  'story.body2': "Throne ni èrò yẹn, ṣùgbọ́n ó wà láàyè. Pátákó ńlá ń yí ọwọ́ padà ní kété tí ẹnìkan bá san jù, gbogbo ojú-iboju ń yí padà lẹ́sẹ̀kẹsẹ̀, ṣọ́ọ̀bù kékeré sì wà lójú-ìwé kan náà pẹ̀lú ilé-iṣẹ́ ńlá, pẹ̀lú àwọn nọ́ńbà gidi.",
+  'story.static': "pixel tí kò yí padà",
+  'story.today': "Lónìí · láàyè",
+  'story.yourAd': "Ìpolówó rẹ",
 };
 
 const ha = {
@@ -681,6 +702,13 @@ const ha = {
   'my.status.removed': "An cire",
   'my.status.ended': "Ya ƙare",
   'my.howCounted': "Ana ƙirga kowane mutum sau ɗaya ga kowace talla a rana yayin da tallarka ke kai; dannawa ziyara ce ta shafin tsaron hanyar haɗinmu. Wannan burauza kaɗai ke tuna abin da ka saya (babu asusu), na kwana 90.",
+  'story.kicker': "Labarinmu",
+  'story.title': "Daga pixel miliyan ɗaya zuwa karaga ɗaya mai rai.",
+  'story.body1': "A 2005, wani ɗalibi ya sayar da pixel miliyan ɗaya a shafin yanar gizo ɗaya kan $1 kowanne, kuma duk intanet ta zo kallo. Ya yi nasara saboda kowa zai iya sayen wuri a shafin da kowa ke kallo. Amma da zarar an sayar da pixel, ba ya canjawa.",
+  'story.body2': "Throne shi ne wannan ra’ayi, amma mai rai. Babban allo yana canja hannu da zarar wani ya biya fiye, kowane allo yana sabuntawa kai tsaye, kuma ƙaramin shago yana kan shafi ɗaya da babban kamfani, tare da ƙididdiga ta gaske.",
+  'story.static': "pixel marasa motsi",
+  'story.today': "Yau · kai tsaye",
+  'story.yourAd': "Tallarka",
 };
 
 const ig = {
@@ -848,6 +876,13 @@ const ig = {
   'my.status.removed': "Ewepụla ya",
   'my.status.ended': "Ọ gwụla",
   'my.howCounted': "Iru na-agụ onye ọ bụla otu ugboro kwa mgbasa ozi kwa ụbọchị mgbe mgbasa ozi gị dị; ịpị bụ nleta site na ibe nchekwa njikọ anyị. Ọ bụ naanị ihe nchọgharị a na-echeta ihe ị zụrụ (enweghị akaụntụ), maka ụbọchị 90.",
+  'story.kicker': "Akụkọ anyị",
+  'story.title': "Site na otu nde pixel ruo otu oche eze dị ndụ.",
+  'story.body1': "N’afọ 2005, otu nwa akwụkwọ rere otu nde pixel na otu ibe weebụ na $1 nke ọ bụla, ịntanetị niile bịakwara lee ya. Ọ rụrụ ọrụ n’ihi na onye ọ bụla nwere ike ịzụta ebe na ibe onye ọ bụla na-ele. Mana ozugbo e rere pixel, ọ naghị agbanwe ọzọ.",
+  'story.body2': "Throne bụ echiche ahụ, mana ọ dị ndụ. Bọọdụ ukwu na-agbanwe aka ozugbo mmadụ kwụrụ karịa, ihuenyo ọ bụla na-emelite ozugbo, obere ụlọ ahịa nọkwa n’otu ibe ahụ na nnukwu ụlọ ọrụ, ya na ọnụọgụ n’ezie.",
+  'story.static': "pixel na-adịghị agbanwe",
+  'story.today': "Taa · dị ndụ",
+  'story.yourAd': "Mgbasa ozi gị",
 };
 
 const DICTS = { en, pcm, yo, ha, ig };

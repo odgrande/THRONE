@@ -19,6 +19,7 @@ import MapCard from '../components/MapCard.jsx';
 import Showcase from '../components/Showcase.jsx';
 import Ticker from '../components/Ticker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
+import Story from '../components/Story.jsx';
 import LiveAudience from '../components/LiveAudience.jsx';
 import { RecentlyDethroned, RelegationBanner, useRelegationOffer } from '../components/Relegation.jsx';
 
@@ -302,6 +303,8 @@ export default function ThronePage() {
           </a>
         </div>
       </section>
+
+      <Story />
 
       <HowItWorks rules={state.rules} boards={state.boards} />
       <Footer />
