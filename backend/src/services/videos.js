@@ -34,10 +34,45 @@ export function mp4DurationSeconds(buffer) {
   }
 }
 
+// Abuse limits: uploads cost storage, so each IP gets a daily allowance, and a
+// video that never became a paid ad is deleted: after ORPHAN_MS if no ad uses
+// it, after ABANDONED_MS if its checkout was never paid.
+const UPLOADS_PER_IP_PER_DAY = 15;
+const ORPHAN_MS = 2 * 3600_000;
+const ABANDONED_MS = 24 * 3600_000;
+
 export function createVideoUploads({ storage, secret }) {
   const sign = (name) => createHmac('sha256', secret).update(`video:${name}`).digest('base64url');
+  const perIp = new Map(); // ip -> { day, count }
+  const recent = new Map(); // file name -> uploaded at (this instance's uploads)
 
   return {
+    // Counts an upload attempt against the IP's daily allowance.
+    allow(ip) {
+      const day = new Date().toISOString().slice(0, 10);
+      const entry = perIp.get(ip);
+      if (!entry || entry.day !== day) {
+        if (perIp.size > 50_000) perIp.clear();
+        perIp.set(ip, { day, count: 1 });
+        return true;
+      }
+      entry.count += 1;
+      return entry.count <= UPLOADS_PER_IP_PER_DAY;
+    },
+
+    // usageOf(url) -> 'paid' (live, in review or archived), 'unpaid' or 'none'.
+    async sweep(usageOf) {
+      const now = Date.now();
+      for (const [name, at] of recent) {
+        if (now - at < ORPHAN_MS) continue;
+        const url = storage.urlFor('videos', name);
+        const usage = await usageOf(url);
+        if (usage === 'unpaid' && now - at < ABANDONED_MS) continue; // checkout may still complete
+        recent.delete(name);
+        if (usage !== 'paid') await storage.remove(url).catch((err) => console.error('[videos] orphan delete failed', err));
+      }
+    },
+
     // Validates and stores an upload; returns a token for the bid to reference.
     async save(buffer) {
       if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('Choose a video file.');
@@ -48,6 +83,7 @@ export function createVideoUploads({ storage, secret }) {
       if (seconds > MAX_VIDEO_SECONDS + 0.5) throw new Error(`Video must be ${MAX_VIDEO_SECONDS} seconds or shorter.`);
       const name = `${randomUUID()}.mp4`;
       const url = await storage.put('videos', name, buffer, 'video/mp4');
+      recent.set(name, Date.now());
       return { token: `${name}.${sign(name)}`, url, seconds: Math.round(seconds * 10) / 10 };
     },
 

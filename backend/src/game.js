@@ -102,7 +102,7 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
         .map((l) => maskRemoved(l)),
       stats: { takeovers, volumeCents, recordCents, advertisers, ads },
       // Real numbers an advertiser can check before paying (see ad_performance()).
-      performance: await store.getPerformance(region),
+      performance: await performanceOf(region),
       // Public already (every price is shown on the boards); summed per advertiser.
       topAdvertisers,
       crown: { round: publicRound(round), lastKing: maskRemoved(lastKing) ?? null },
@@ -111,6 +111,17 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
       paymentsMode: payments.modeFor(region),
       serverTime: new Date(now).toISOString(),
     };
+  }
+
+  // The proof numbers are a few aggregates: cache them so a burst of page
+  // loads can't turn into a burst of heavy queries.
+  const perfCache = {};
+  async function performanceOf(region) {
+    const hit = perfCache[region];
+    if (hit && Date.now() - hit.at < 60_000) return hit.value;
+    const value = await store.getPerformance(region);
+    perfCache[region] = { at: Date.now(), value };
+    return value;
   }
 
   async function getMinNextBidCents(region) {

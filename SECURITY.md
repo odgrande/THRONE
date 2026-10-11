@@ -70,6 +70,8 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 | Constant-time token comparison (SHA-256 digests + `timingSafeEqual`), 30 req/min limit, `Cache-Control: no-store` | Code: `admin.js`, `server.js` |
 | The `/admin` page is `noindex`, and the token lives in `sessionStorage` (gone when the tab closes) | Code: `AdminPage.jsx` |
 | For extra safety, put `/admin` and `/api/admin/*` behind Cloudflare Access (free for small teams) so only your team's emails reach it | **Config: Cloudflare** |
+| God mode: every admin action is written to `admin_log` (RLS on, no public access) with a before-snapshot. Undo only where it's safe (edit, end, takedown, restore, pause); refunds and permanent deletions are irreversible and need a reason + explicit confirmation. Log ids are validated | Code: `server.js`, `schema.sql` |
+| Per-edition pause switch stops new ads (bids, bookings, relegations) in an emergency without touching the other edition | Code: `server.js` |
 
 ## 6. Reports and takedowns
 
@@ -84,8 +86,29 @@ Stripe ConfirmationToken flow. That's a planned follow-up. Today the UI flag plu
 **Legal duty for some content:** child sexual abuse material must be reported to the authorities (in the US, NCMEC), not just deleted.
 Write that procedure down before launch.
 
+## 7. Video ads
+
+| Defence | Where |
+|---|---|
+| Uploads: MP4/MOV only (file signature checked, not the extension), ≤ 20 MB (rejected by the parser with 413 before storage), ≤ 30 s (duration read from the file itself), 4/min and 15/day per IP | Code: `videos.js`, `server.js` |
+| A bid references a video only by an HMAC-signed token (key: `IP_HASH_SALT`, required on every deploy), so nobody can attach an arbitrary or someone else's URL | Code: `videos.js` |
+| AI screens three sampled frames + text + link **before** payment (blocked = never charged). The browser picks the frames, so this is only a first filter: | Code: `vetAd()` |
+| **Every paid video waits in `review` and is never shown until a person approves it.** Reject = full refund + file deleted; unreviewed for 24 h = automatic refund | Code: `game.js`, `VideoReviews.jsx` |
+| Unused uploads are deleted (2 h; 24 h for an unpaid checkout). Video URLs are unguessable UUIDs; local dev files get a sandbox CSP | Code: `videos.js`, `server.js` |
+| CSP `media-src` allows only our API and media bucket | Code: `vite.config.js` |
+
+## 8. Audience numbers and owner stats
+
+| Defence | Where |
+|---|---|
+| Visitors are counted as a hash of their IP with a random salt replaced daily, kept in memory only; the database stores totals only (`daily_stats`, `bids.views`) | Code: `realtime.js`, `game.js` |
+| The public performance numbers are cached 60 s per edition, so page-load floods can't become database floods | Code: `game.js` |
+| `/my-ads` returns an ad only when the browser presents its 256-bit owner code (only the SHA-256 is stored); 30 req/min | Code: `server.js`, `owners.js` |
+| Body-parser errors (oversized upload, malformed JSON) answer 4xx, never a server error | Code: `server.js` |
+
 ## Known gaps before launch
 - The legal pages (`/legal`) are reviewed and live. A few fields (company name, address, governing law, political ads, global processor, data-rights clause) still need filling in `LegalPage.jsx`.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
 - The schema uses `create table if not exists`. Once a live database exists, later changes need real migrations (e.g. Supabase CLI migrations).
-- Click counts are best-effort and can be inflated. Label them as approximate to advertisers.
+- Click counts and reach are best-effort: one person behind a VPN or several people behind one shared IP (common on Nigerian mobile networks) can skew them. The site describes how they are counted; don't sell them as audited figures.
+- Video review needs a person on duty: set up a phone alert on `GET /api/admin/health` (the review queue) so videos don't wait or get auto-refunded.

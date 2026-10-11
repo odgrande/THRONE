@@ -457,6 +457,11 @@ export function createMemoryStore() {
       }
       return true;
     },
+    async videoUsage(url) {
+      const users = [...bids.values()].filter((b) => b.videoUrl === url);
+      if (users.some((b) => b.status !== 'pending')) return 'paid';
+      return users.length ? 'unpaid' : 'none';
+    },
     async setPaused(region, value) {
       stateOf(region);
       paused[region] = Boolean(value);

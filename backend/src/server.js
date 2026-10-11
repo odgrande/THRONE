@@ -149,7 +149,14 @@ if (storage.kind === 'local') {
     }),
   );
   app.use('/renders', express.static(LOCAL_DIRS.renders, { maxAge: '1d' }));
-  app.use('/videos', express.static(LOCAL_DIRS.videos, { immutable: true, maxAge: '365d' }));
+  app.use(
+    '/videos',
+    express.static(LOCAL_DIRS.videos, {
+      immutable: true,
+      maxAge: '365d',
+      setHeaders: (res) => res.set('Content-Security-Policy', "default-src 'none'; sandbox"),
+    }),
+  );
 }
 
 app.get('/api/health', (_req, res) =>
@@ -202,7 +209,16 @@ if (config.adminToken) {
           balances[region] = null;
         }
       }
-      res.json(assessHealth(financials, balances, config.regions, (r) => payments.modeFor(r)));
+      const health = assessHealth(financials, balances, config.regions, (r) => payments.modeFor(r));
+      // Paid videos waiting for a person: alert after an hour (they auto-refund at 24 h).
+      const reviews = await store.listReviews();
+      const oldest = reviews[0] ? Date.parse(reviews[0].reviewSince) : null;
+      health.reviews = { waiting: reviews.length, oldestSince: reviews[0]?.reviewSince ?? null };
+      if (oldest && Date.now() - oldest > 3600_000) {
+        health.alerts.push({ level: 'amber', message: `${reviews.length} paid video ad(s) waiting for review (oldest over an hour). Open Video review.` });
+        if (health.status === 'green') health.status = 'amber';
+      }
+      res.json(health);
     } catch (err) {
       next(err);
     }
@@ -451,6 +467,7 @@ if (config.adminToken) {
   // Undo one logged action, if it can still be undone.
   admin.post('/log/:id/undo', async (req, res, next) => {
     try {
+      if (!/^\d{1,15}$/.test(req.params.id)) return res.status(404).json({ error: 'Not found.' });
       const entry = await store.getAdminLog(req.params.id);
       if (!entry) return res.status(404).json({ error: 'Not found.' });
       if (!entry.undoable) return res.status(409).json({ error: 'This action cannot be undone.' });
@@ -780,6 +797,7 @@ app.post(
   uploadLimiter,
   express.raw({ type: ['video/mp4', 'video/quicktime'], limit: MAX_VIDEO_BYTES + 1024 }),
   handle(async (req, res) => {
+    if (!videos.allow(req.ip)) throw new Reject(429, 'Daily upload limit reached. Try again tomorrow.');
     try {
       const { token, seconds } = await videos.save(req.body);
       res.status(201).json({ videoToken: token, seconds });
@@ -966,6 +984,13 @@ app.post('/api/bids/:id/demo-pay', async (req, res, next) => {
 });
 
 app.use((err, _req, res, _next) => {
+  // Client mistakes caught by the body parsers (too large, malformed JSON):
+  // answer with their own 4xx, not a server error.
+  const status = err.status ?? err.statusCode;
+  if (status >= 400 && status < 500) {
+    const message = status === 413 ? 'That upload is too large.' : 'Bad request.';
+    return res.status(status).json({ error: message });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong. Please try again.' });
 });
@@ -985,6 +1010,11 @@ setInterval(async () => {
     tickRunning = false;
   }
 }, 1000).unref();
+
+// Uploaded videos that never became a paid ad are deleted after 2 hours.
+setInterval(() => {
+  videos.sweep((url) => store.videoUsage(url)).catch((err) => console.error('[videos] sweep failed', err));
+}, 10 * 60_000).unref();
 
 // Ad reach: credit live viewers to live ads every 15 s.
 setInterval(() => {

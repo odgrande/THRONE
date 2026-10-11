@@ -200,6 +200,11 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       check(await db.from('throne_legends').delete().eq('bid_id', bidId).eq('retired', true).gte('deposed_at', sinceIso));
       return true;
     },
+    async videoUsage(url) {
+      const rows = check(await db.from('bids').select('status').eq('video_url', url));
+      if (rows.some((r) => r.status !== 'pending')) return 'paid';
+      return rows.length ? 'unpaid' : 'none';
+    },
     async setPaused(region, value) {
       check(await db.from('throne').update({ paused: Boolean(value) }).eq('region', region));
     },

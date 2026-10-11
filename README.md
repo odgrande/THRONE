@@ -39,6 +39,8 @@ With no keys set, the backend runs in demo mode: in-memory store, simulated paym
 
 - **The Throne (auction).** Pay at least the minimum and your ad replaces the king instantly. Unchallenged kings retire after **7 days**.
 - **The Court: Prince Board (b2) and Herald Board (b3).** Fixed-price bookings for 1, 3 or 7 days (3 days = 2.5×, 7 days = 5× a day). Guaranteed time: nobody can knock you off.
+- **The Spotlight (p1–p10).** Ten featured spaces, bigger than stalls and cheaper than the Court.
+- **The Market (m1–m12).** Twelve small, low-cost stalls for tight budgets: the Million Dollar Homepage idea, made live. Picture only, no map.
 - **Relegation.** A dethroned king can move the same ad to whichever small board frees up first, for 1 day at **50% off**, within 24 hours.
 - **Recently dethroned.** Every fallen king gets 24 hours in a free strip on the home page.
 - **King of the Day.** Whoever holds the throne when the daily clock hits zero is crowned (midnight UTC for global, **midnight Lagos time** for Nigeria). A takeover in the final 60 s adds 12 s of overtime, up to 10 min. The title is honour only, with no prize.
@@ -53,7 +55,10 @@ With no keys set, the backend runs in demo mode: in-memory store, simulated paym
 | Shield premium | While shielded, the raise is at least 25% | same | `SHIELD_PREMIUM_PCT` |
 | Prince Board / day | $3 | ₦1,500 | `BOARD2_DAY_CENTS` |
 | Herald Board / day | $1.50 | ₦800 | `BOARD3_DAY_CENTS` |
-| Map add-on | $2 | ₦1,000 | `MAP_ADDON_CENTS` |
+| Spotlight / day | $1 | ₦500 | `SPOTLIGHT_DAY_CENTS` |
+| Market stall / day | $0.50 | ₦300 | `MARKET_DAY_CENTS` |
+| Map add-on (Throne, Court) | $2 | ₦1,000 | `MAP_ADDON_CENTS` |
+| Video add-on (Throne, Court, Spotlight) | $5 | ₦2,000 | `VIDEO_ADDON_CENTS` |
 
 Amounts are integers in minor units (cents / kobo). The rules live in `backend/src/rules.js` and `backend/src/config.js`, and `settle_bid()` re-checks them in SQL.
 
@@ -72,6 +77,17 @@ Amounts are integers in minor units (cents / kobo). The rules live in `backend/s
 7. The change is broadcast over SSE, and big takeovers are queued for a hype video.
 
 Webhooks are idempotent: a retried event for a settled ad is a no-op.
+
+## Video ads (reviewed by a person)
+- MP4/MOV, up to 30 s and 20 MB, on the Throne, the Court and the Spotlight, for the video add-on fee.
+- The server checks the file signature and reads the real duration; uploads return a signed token (a bid can only reference a file this server stored). 15 uploads per IP per day; videos never used by a paid ad are deleted (2 h, or 24 h for an unpaid checkout).
+- Before payment, AI screens three sampled frames with the text and link. **After payment the ad waits in "review" and is not shown**. Admin → Video review: approve (it settles normally; a throne bid outbid meanwhile is refunded), or reject (full refund, file deleted). Anything not reviewed within 24 h is refunded automatically.
+
+## Ad performance (real numbers, before and after paying)
+- **Reach:** distinct people on the site while an ad was live, counted every 15 s from live connections. A visitor is a daily-salted hash of their IP, held in memory only; the database stores totals.
+- **Clicks:** visits through the `/go/` link-safety page.
+- **Before paying:** the bid form and booking dialog show the edition's last 7 days (visitors, clicks on ads, a throne ad's typical reach). Hidden until there's traffic; never padded.
+- **Public:** the live throne and History of Kings show reach and clicks. **Private:** `/my-ads` lists the ads bought from this browser (owner codes kept 90 days) with their results.
 
 ## Languages
 The Nigeria edition has a language picker: English, **Nigerian Pidgin, Yorùbá, Hausa, Igbo**. The interface strings are in `frontend/src/lib/i18n.js`. Missing keys fall back to English, and `<html lang>` is set.
@@ -95,11 +111,16 @@ Bots exist **only** here and are labelled. Never add simulated bidders to the re
 A Postgres trigger (`archive_deposed_king`) snapshots every deposed ad into `throne_legends` per edition: price, reign, who toppled them, and whether they survived the shield.
 
 ## Admin (`/admin`)
-Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign in at `/admin`.
+Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign in at `/admin`. Tabs: Treasury, Moderation, **Video review**, **God mode**.
+- **God mode:** search every ad; edit its words or link, end a reign or booking now, take it down or restore it, refund it, and pause new ads per edition. Every action goes to an activity log with a before-snapshot; edits, endings (unless someone has taken the throne since), takedowns, restores and pauses have **Undo**. Refunds and permanent media deletion are irreversible and need a reason and an explicit confirmation.
 - **Treasury:** one block per edition, in its own currency: revenue (throne / boards / map add-ons), estimated processor fees (Paystack: 1.5% + ₦100 over ₦2,500, capped at ₦2,000; Stripe: 30¢ + 2.9%), refunds, and the live processor balance.
 - Also shows stale unpaid ads and failed video renders.
 - **Moderation:** the report queue, with takedown (optionally deleting the image), dismiss and restore. Five distinct reporters auto-hide a live ad pending review.
 - The data comes from `GET /api/admin/health` (Bearer token), which you can also point an uptime monitor at.
+
+## Notices
+- A one-time notice (with the cookie line): every ad is a paid placement by an independent advertiser; Throne isn't affiliated with or endorsing any of them; never send money to anyone claiming to be Throne. The same text is in the footer, and a short version sits under the logo on the preloader.
+- Every ad unit (throne, Court, Spotlight, Market, Recently dethroned, archive) is labelled **Paid ad** and has **Report**.
 
 ## Legal (`/legal`)
 Terms, Ad Policy, Privacy Policy and Copyright & Takedowns. They have been reviewed by counsel and are live (last updated 10 October 2026). Contact: **therone@gmail.com**.

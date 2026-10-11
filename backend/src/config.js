@@ -248,6 +248,11 @@ export function assertProductionConfig(role) {
     throw new Error(`Deploy (${role}) requires SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY`);
   }
   if (role !== 'api') return;
+  // Hashes reporter IPs and signs video upload tokens: must be stable across
+  // restarts and instances, and secret. The Render blueprints generate it.
+  if (!process.env.IP_HASH_SALT || process.env.IP_HASH_SALT.length < 16) {
+    throw new Error('Deploy (api) requires IP_HASH_SALT (16+ random characters)');
+  }
 
   const optional = [];
   for (const [region, processor] of Object.entries(config.processors)) {
