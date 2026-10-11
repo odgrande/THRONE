@@ -514,7 +514,7 @@ export function createMemoryStore() {
 
     // --- Ads Game: wallets and coins ---
     async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null }) {
-      const w = { id: randomUUID(), region, banned: false, banReason: null, backedUpAt: null, tokenHash, balance: 0, playerName: null, referralCode, referredBy, referralPaid: false, createdIpHash: ipHash, createdDeviceHash: deviceHash, lastDailyAt: null, createdAt: new Date().toISOString() };
+      const w = { id: randomUUID(), region, banned: false, banReason: null, backedUpAt: null, tokenHash, balance: 0, streakDays: 0, playerName: null, referralCode, referredBy, referralPaid: false, createdIpHash: ipHash, createdDeviceHash: deviceHash, lastDailyAt: null, createdAt: new Date().toISOString() };
       wallets.set(w.id, w);
       return { ...w };
     },
@@ -583,11 +583,16 @@ export function createMemoryStore() {
       ledger.push({ walletId, delta, reason, ref, balanceAfter: w.balance, at: new Date().toISOString() });
       return w.balance;
     },
+    // Mirrors claim_daily(): 20 h apart; within 48 h keeps the streak going.
     async claimDaily(walletId, coins) {
       const w = wallets.get(walletId);
-      if (w.lastDailyAt && Date.now() - Date.parse(w.lastDailyAt) < 20 * 3600_000) return -1;
+      const since = w.lastDailyAt ? Date.now() - Date.parse(w.lastDailyAt) : Infinity;
+      if (since < 20 * 3600_000) return { balance: -1 };
+      w.streakDays = since < 48 * 3600_000 ? (w.streakDays ?? 0) + 1 : 1;
+      const paid = coins + Math.floor((coins * (Math.min(w.streakDays, 7) - 1)) / 6);
       w.lastDailyAt = new Date().toISOString();
-      return this.applyCoins(walletId, coins, 'daily', w.lastDailyAt.slice(0, 10));
+      const balance = await this.applyCoins(walletId, paid, 'daily', w.lastDailyAt);
+      return { balance, coins: paid, streak: w.streakDays };
     },
     async listLedger(walletId, limit) {
       return ledger.filter((l) => l.walletId === walletId).slice(-limit).reverse();

@@ -33,6 +33,7 @@ const REASONS = {
   commission: 'Invite commission',
   adtime: 'Free ad time (invites)',
   purchase: 'Coin pack',
+  solve: 'Puzzle solved',
   ad: 'Ad booked',
   refund: 'Refund (coins)',
   shield: 'Crown Shield',
@@ -68,7 +69,7 @@ function Backup({ wallet }) {
     return (
       <div className="flex items-center justify-between gap-3 border-2 border-ink bg-bh-green/40 p-3">
         <p className="flex items-center gap-2 text-sm font-bold">
-          <ShieldCheck className="h-4 w-4" strokeWidth={3} /> Wallet saved: your backup code opens it on any browser or phone.
+          <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={3} /> Wallet saved: your backup code opens it on any browser or phone.
         </p>
         <button type="button" className="label shrink-0 underline hover:text-bh-red" onClick={() => setShow(true)}>
           Show code
@@ -136,7 +137,12 @@ function Daily({ wallet }) {
         <p className="label flex items-center gap-1.5">
           <Gift className="h-4 w-4" strokeWidth={3} /> Daily coins
         </p>
-        <p className="text-sm text-ink/70">{msg ?? `+${coinFmt(wallet.dailyCoins)} every day you come back.`}</p>
+        <p className="text-sm text-ink/70">
+          {msg ??
+            (wallet.streak > 0
+              ? `🔥 ${wallet.streak}-day streak. Next: +${coinFmt(wallet.nextDailyCoins)} (come back daily: up to double).`
+              : `+${coinFmt(wallet.nextDailyCoins ?? wallet.dailyCoins)} today. Come back every day to build a streak: up to double.`)}
+        </p>
       </div>
       <button
         type="button"
@@ -146,7 +152,7 @@ function Daily({ wallet }) {
           setBusy(true);
           try {
             const r = await walletApi.claimDaily();
-            setMsg(`+${coinFmt(r.coins)} coins claimed!`);
+            setMsg(`+${coinFmt(r.coins)} coins claimed! 🔥 ${r.streak}-day streak.`);
           } catch (err) {
             setMsg(err.message);
           }
@@ -169,6 +175,8 @@ function BuyCoins({ wallet }) {
   const [botToken, setBotToken] = useState(null);
   const turnstileRef = useRef(null);
   const packs = wallet.coins?.packs ?? [];
+  // Coin shop switched off: coins are earned, never bought.
+  if (!packs.length) return null;
 
   const order = async (e) => {
     e.preventDefault();
@@ -402,6 +410,26 @@ export default function WalletPanel() {
           </div>
         ))}
       </div>
+
+      {wallet.badges?.length > 0 && (
+        <div>
+          <p className="label mb-2">
+            Badges · {wallet.badges.filter((b) => b.earned).length}/{wallet.badges.length}
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {wallet.badges.map((b) => (
+              <li
+                key={b.id}
+                className={`border-2 border-ink px-2 py-1 text-xs font-bold uppercase tracking-wide ${b.earned ? 'bg-bh-yellow' : 'bg-paper text-ink/35'}`}
+                title={b.earned ? 'Earned' : 'Not yet'}
+              >
+                {b.earned ? '★ ' : ''}
+                {b.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <a href="/invite" className="flex items-center justify-between gap-3 border-2 border-ink bg-bh-blue p-3 text-white hover:opacity-90">
         <span className="flex items-center gap-2 font-bold">

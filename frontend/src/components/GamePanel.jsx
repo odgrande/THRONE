@@ -11,6 +11,7 @@ const GameDialog = lazy(() => import('./GameDialog.jsx'));
 
 const clock = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
   return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
 };
 
@@ -95,7 +96,7 @@ export function Leaderboard({ board, compact = false }) {
 }
 
 // The home page's main panel in game mode: play for the Throne.
-export default function GamePanel({ now, refreshKey, onChanged }) {
+export default function GamePanel({ now, refreshKey, onChanged, feed = [] }) {
   const { wallet } = useWallet();
   const [board, setBoard] = useState(null);
   const [status, setStatus] = useState(null);
@@ -190,6 +191,16 @@ export default function GamePanel({ now, refreshKey, onChanged }) {
         </button>
       )}
 
+      {board?.roundEndsAt && (
+        <p className="text-xs font-bold uppercase tracking-wider text-bh-yellow">Today’s race ends in {clock(Date.parse(board.roundEndsAt) - now)}: fastest then is King of the Day</p>
+      )}
+      {wallet && (wallet.records?.bestMs || wallet.streak > 0) && (
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-bold">
+          {wallet.records?.bestMs ? <span>Your best: {formatMs(wallet.records.bestMs)}</span> : null}
+          {wallet.streak > 0 && <span>🔥 {wallet.streak}-day streak</span>}
+        </p>
+      )}
+
       {wallet && status && (
         <p className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-white/85">
           <span className="flex items-center gap-1">
@@ -243,6 +254,20 @@ export default function GamePanel({ now, refreshKey, onChanged }) {
           </div>
           {shieldMsg && <p className="text-sm font-bold">{shieldMsg}</p>}
         </div>
+      )}
+
+      {feed.length > 0 && (
+        <ul className="space-y-1 border-2 border-ink bg-onyx/50 px-3 py-2 text-sm" aria-live="polite" aria-label="Live solves">
+          {feed.slice(0, 4).map((e) => (
+            <li key={e.at} className="flex justify-between gap-2">
+              <span className="truncate">
+                {e.crowned ? '👑 ' : '⚡ '}
+                {e.name} {e.crowned ? 'took the Throne' : 'solved'}
+              </span>
+              <span className="shrink-0 font-black tabular-nums">{formatMs(e.ms)}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       <Leaderboard board={board} compact />

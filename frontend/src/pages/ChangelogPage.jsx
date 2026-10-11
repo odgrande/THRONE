@@ -9,7 +9,7 @@ const RELEASES = [
     title: 'The Throne is now a free game',
     items: [
       'Win the big billboard by solving the daily 3D puzzle fastest. Free tries every day, no signup.',
-      'Coins: welcome and daily coins, coins for wins and invites, or coin packs. Coins have no cash value and can’t be cashed out.',
+      'Coins are pure play money: earned by playing, daily bonuses and invites, never bought, never cashed out.',
       'Your wallet lives in your browser with a backup code; the Saved badge shows when it’s safe. The same code opens it on any phone or computer.',
       'Crown Shield: kings can spend coins so challengers must be 10% faster.',
       'Book the Court, the Spotlight and the Market with coins or money.',

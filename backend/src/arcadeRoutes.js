@@ -218,6 +218,7 @@ export function mountArcade(app, deps) {
     '/api/coins/orders',
     limiter(6, 'Too many orders. Wait a minute.'),
     play(async (req, res) => {
+      if (!config.coinPacks) throw new Reject(404, 'Coins can’t be bought. Earn them by playing, daily bonuses and invites.');
       const w = await needWallet(req);
       const pack = arcade.packOf(w.region, req.body?.pack);
       if (!pack) throw new Reject(400, 'Unknown coin pack.');
@@ -265,7 +266,6 @@ export function mountArcade(app, deps) {
     }),
   );
 
-  void config;
 }
 
 // --- Admin: moderate everything in the game ---

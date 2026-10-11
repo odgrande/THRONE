@@ -291,19 +291,30 @@ begin
 end;
 $$;
 
--- The daily bonus: at most once every 20 hours.
-create or replace function claim_daily(p_wallet uuid, p_coins integer) returns bigint
+-- The daily bonus: at most once every 20 hours. Coming back within 48 hours
+-- keeps a streak going, and the bonus grows with it (day 7 and on = double).
+alter table wallets add column if not exists streak_days integer not null default 0;
+drop function if exists claim_daily(uuid, integer);
+create function claim_daily(p_wallet uuid, p_coins integer) returns json
 language plpgsql
 as $$
 declare
   v_last timestamptz;
+  v_streak integer;
+  v_coins integer;
+  v_balance bigint;
 begin
-  select last_daily_at into v_last from wallets where id = p_wallet for update;
+  select last_daily_at, streak_days into v_last, v_streak from wallets where id = p_wallet for update;
   if v_last is not null and v_last > now() - interval '20 hours' then
-    return -1;
+    return json_build_object('balance', -1);
   end if;
-  update wallets set last_daily_at = now() where id = p_wallet;
-  return apply_coins(p_wallet, p_coins, 'daily', to_char(now() at time zone 'utc', 'YYYY-MM-DD'));
+  v_streak := case when v_last is not null and v_last > now() - interval '48 hours' then v_streak + 1 else 1 end;
+  v_coins := p_coins + (p_coins * (least(v_streak, 7) - 1)) / 6;
+  update wallets set last_daily_at = now(), streak_days = v_streak where id = p_wallet;
+  -- One ledger ref per claim (the 20-hour row lock above stops doubles; a
+  -- date ref would swallow a second claim that lands on the same UTC date).
+  v_balance := apply_coins(p_wallet, v_coins, 'daily', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US'));
+  return json_build_object('balance', v_balance, 'coins', v_coins, 'streak', v_streak);
 end;
 $$;
 

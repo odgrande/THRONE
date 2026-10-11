@@ -46,6 +46,8 @@ export default function ThronePage() {
   const [dethronedBidId, setDethronedBidId] = useState(null);
   // Bumped on live game events so the game panel refetches its leaderboard.
   const [gameKey, setGameKey] = useState(0);
+  // The last few solves, live ("Ada solved in 48.2s").
+  const [feed, setFeed] = useState([]);
   const [offer, dismissOffer] = useRelegationOffer(dethronedBidId);
   const page = useRef(null);
   const bannerRef = useRef(null);
@@ -114,7 +116,12 @@ export default function ThronePage() {
       sfx.booked();
     });
     // The Ads Game: a solve moves the leaderboard; a shield changes the time to beat.
-    events.addEventListener('solve', (e) => ours(e) && setGameKey((k) => k + 1));
+    events.addEventListener('solve', (e) => {
+      const data = ours(e);
+      if (!data) return;
+      setGameKey((k) => k + 1);
+      setFeed((f) => [{ ...data, at: Date.now() }, ...f].slice(0, 6));
+    });
     events.addEventListener('shield', (e) => {
       const data = ours(e);
       if (!data) return;
@@ -282,7 +289,7 @@ export default function ThronePage() {
             <Shape kind="square" color="red" className="hero-shape intro-pop absolute -bottom-12 -left-12 [animation-delay:120ms] h-32 w-32 rotate-45 border-4 border-ink" />
             <div className="bid-panel intro-slide relative">
               {gameMode ? (
-                <GamePanel now={now} refreshKey={gameKey} onChanged={refresh} />
+                <GamePanel now={now} refreshKey={gameKey} onChanged={refresh} feed={feed} />
               ) : (
                 <BidForm minNextBidCents={minNext} rules={state.rules} performance={state.performance} onPriceChange={refresh} />
               )}

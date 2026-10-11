@@ -32,6 +32,7 @@ export default function GameDialog({ toBeatMs, onClose, onFinished, onNeedCard }
   const [waitUntil, setWaitUntil] = useState(null);
   const [payCoins, setPayCoins] = useState(null);
   const finishing = useRef(false);
+  const [newBadges, setNewBadges] = useState([]);
   // The parent re-renders every tick; keep its callbacks in refs so the deal
   // happens exactly once per Play press.
   const onNeedCardRef = useRef(onNeedCard);
@@ -103,13 +104,16 @@ export default function GameDialog({ toBeatMs, onClose, onFinished, onNeedCard }
       finishing.current = true;
       setPhase('finishing');
       try {
+        const before = new Set((wallet?.badges ?? []).filter((b) => b.earned).map((b) => b.id));
         const r = await walletApi.finish(game.attemptId, allMoves);
         clearProgress();
         rememberGame(r);
         setResult(r);
         setPhase('result');
         if (r.crowned) sfx.takeover();
-        refreshWallet();
+        else sfx.booked?.();
+        const after = await refreshWallet();
+        setNewBadges((after?.badges ?? []).filter((b) => b.earned && !before.has(b.id)).map((b) => b.label));
         onFinishedRef.current?.(r);
       } catch (err) {
         clearProgress();
@@ -119,7 +123,7 @@ export default function GameDialog({ toBeatMs, onClose, onFinished, onNeedCard }
         onFinishedRef.current?.(null);
       }
     },
-    [game],
+    [game, wallet],
   );
 
   const move = useCallback(
@@ -224,17 +228,27 @@ export default function GameDialog({ toBeatMs, onClose, onFinished, onNeedCard }
                 <>
                   <Crown className="mx-auto h-12 w-12" strokeWidth={2.5} />
                   <p className="display text-3xl">You took the Throne!</p>
-                  <p className="mt-1 font-medium">Your ad is live on the big billboard right now. +{result.takeoverCoins} coins.</p>
+                  <p className="mt-1 font-medium">Your ad is live on the big billboard right now. +{result.takeoverCoins + (result.solveCoins ?? 0)} coins.</p>
                 </>
               ) : (
                 <>
                   <p className="display text-3xl">Solved!</p>
-                  <p className="mt-1 font-medium">{result.rank ? `You're #${result.rank} today.` : 'Nice run.'} {result.cardApproved ? 'Beat the king to take the Throne.' : ''}</p>
+                  <p className="mt-1 font-medium">{result.rank ? `You're #${result.rank} today.` : 'Nice run.'} {result.solveCoins ? `+${result.solveCoins} coins. ` : ''}{result.cardApproved ? 'Beat the king to take the Throne.' : ''}</p>
                 </>
               )}
               <p className="mt-3 text-5xl font-black tabular-nums">{formatMs(result.durationMs)}</p>
               <p className="label text-ink/60">{result.moves} moves</p>
+              {result.personalBest && <p className="mt-2 inline-block border-2 border-ink bg-bh-red px-2 py-0.5 text-sm font-black uppercase text-white">New personal best!</p>}
+              {!result.personalBest && result.previousBestMs && <p className="mt-2 text-sm font-bold">Your best: {formatMs(result.previousBestMs)}</p>}
+              {result.gapMs > 0 && (
+                <p className="mt-2 text-lg font-black">
+                  So close! {formatMs(result.gapMs)} off the Throne.
+                </p>
+              )}
             </div>
+            {newBadges.length > 0 && (
+              <p className="border-2 border-ink bg-bh-yellow px-3 py-2 font-black uppercase">★ New badge: {newBadges.join(', ')}</p>
+            )}
             <ShareButtons ms={result.durationMs} crowned={result.crowned} rank={result.rank} referralCode={wallet?.referralCode} />
             <button type="button" className="btn w-full bg-bh-red text-white" onClick={() => begin(false)}>
               Play again

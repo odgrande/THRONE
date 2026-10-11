@@ -55,6 +55,8 @@ const SHARED_RULES = {
     // Crown Shield: bought in 10-minute blocks, at most this long at once.
     shieldBlockMinutes: 10,
     shieldMaxMinutes: int('GAME_SHIELD_MAX_MINUTES', 60),
+    // Coin rewards for solving: only the first few solves a day pay.
+    rewardedSolvesPerDay: int('GAME_REWARDED_SOLVES', 3),
     // Invites: a share of the coins an invited friend spends on ads, and free
     // ad time for every few friends who really play.
     commissionPct: int('GAME_COMMISSION_PCT', 10),
@@ -108,6 +110,7 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
         kingOfDay: defaults.coins.kingOfDay,
         referral: defaults.coins.referral,
         extraAttempt: defaults.coins.extraAttempt,
+        solve: defaults.coins.solve,
         shieldBlock: defaults.coins.shieldBlock,
         // Coin packs sold through the edition's payment processor.
         packs: defaults.coins.packs,
@@ -161,6 +164,10 @@ export const config = {
   // 'game' (default): the Throne is won in the puzzle race. 'auction' brings
   // back paid Throne bids.
   throneMode: process.env.THRONE_MODE === 'auction' ? 'auction' : 'game',
+  // Coin packs (buying coins with real money). Off by default: coins are
+  // pure play money, earned only by playing, daily bonuses and invites.
+  // COIN_PACKS=on turns the shop back on.
+  coinPacks: process.env.COIN_PACKS === 'on',
 
   // Two separate thrones in one database: Global (USD) and Nigeria (NGN).
   // Each has its own currency, prices and daily cutoff; the game mechanics are
@@ -189,6 +196,8 @@ export const config = {
         takeover: 50,
         kingOfDay: 500,
         referral: 100,
+        // Every solved puzzle (first few a day): earn coins just by playing.
+        solve: 10,
         extraAttempt: 10,
         shieldBlock: 100,
         packs: [
@@ -223,6 +232,7 @@ export const config = {
         takeover: 300,
         kingOfDay: 3000,
         referral: 600,
+        solve: 60,
         extraAttempt: 60,
         shieldBlock: 600,
         packs: [

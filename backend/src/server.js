@@ -41,7 +41,7 @@ const turnstile = createTurnstile(config.turnstileSecret);
 const realtime = createRealtime({ regions: REGION_IDS, regionOf: (req) => regionOf(req) });
 const hype = createHypeQueue({ store });
 const game = createGame({ store, payments, realtime, hype, regions: config.regions, storage });
-const arcade = createArcade({ store, game, realtime, regions: config.regions, salt: config.reports.ipHashSalt });
+const arcade = createArcade({ store, game, realtime, regions: config.regions, salt: config.reports.ipHashSalt, coinPacks: config.coinPacks });
 const videos = createVideoUploads({ storage, secret: config.reports.ipHashSalt });
 
 // Which region a request is about. An explicit choice (?region= or the
@@ -244,7 +244,9 @@ app.get('/api/geo', (req, res) => {
 
 app.get('/api/state', async (req, res, next) => {
   try {
-    res.json({ ...(await game.getState(regionOf(req))), throneMode: config.throneMode });
+    const state = await game.getState(regionOf(req));
+    if (!config.coinPacks) state.rules = { ...state.rules, coins: { ...state.rules.coins, packs: [] } };
+    res.json({ ...state, throneMode: config.throneMode, coinPacks: config.coinPacks });
   } catch (err) {
     next(err);
   }

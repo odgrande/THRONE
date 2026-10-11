@@ -274,7 +274,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
                       Get free coins to book with
                     </button>
                   ) : shortCoins ? (
-                    <span className="font-bold text-bh-red">You have {wallet.balance.toLocaleString()} coins. Win the daily race, invite friends or top up.</span>
+                    <span className="font-bold text-bh-red">You have {wallet.balance.toLocaleString()} coins. Solve puzzles, claim daily coins or invite friends.</span>
                   ) : (
                     `You have ${wallet.balance.toLocaleString()} coins. Refused or not placed = coins back.`
                   )}

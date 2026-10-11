@@ -113,6 +113,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       banReason: r.ban_reason,
       backedUpAt: r.backed_up_at,
       lastDailyAt: r.last_daily_at,
+      streakDays: r.streak_days ?? 0,
       createdAt: r.created_at,
     };
   const orderFrom = (r) =>
@@ -364,7 +365,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       return Number(check(await db.rpc('apply_coins', { p_wallet: walletId, p_delta: delta, p_reason: reason, p_ref: ref })));
     },
     async claimDaily(walletId, coins) {
-      return Number(check(await db.rpc('claim_daily', { p_wallet: walletId, p_coins: coins })));
+      const r = check(await db.rpc('claim_daily', { p_wallet: walletId, p_coins: coins }));
+      return { balance: Number(r.balance), coins: r.coins, streak: r.streak };
     },
     async listLedger(walletId, limit) {
       const rows = check(await db.from('coin_ledger').select('*').eq('wallet_id', walletId).order('id', { ascending: false }).limit(limit));

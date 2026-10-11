@@ -22,10 +22,11 @@ import { bookingPriceCents } from './rules.js';
 //     or a double click can never pay twice; balances can't go below zero.
 //  7. Wallets are bound to their edition; admins can ban a wallet, adjust
 //     coins with a logged reason, and void any result.
-export function createArcade({ store, game, realtime, regions, salt }) {
+export function createArcade({ store, game, realtime, regions, salt, coinPacks = false }) {
   const rulesOf = (region) => game.rulesOf(region);
   const G = (region) => rulesOf(region).game;
-  const C = (region) => rulesOf(region).coins;
+  // Without the shop, the coin rules sent to browsers list no packs.
+  const C = (region) => (coinPacks ? rulesOf(region).coins : { ...rulesOf(region).coins, packs: [] });
 
   const sha = (v) => createHash('sha256').update(v).digest('hex');
   const hashToken = (token) => sha(`wallet:${token}`);
@@ -97,10 +98,33 @@ export function createArcade({ store, game, realtime, regions, salt }) {
     return { token, wallet: await store.getWallet(wallet.id), welcome: welcome ? C(region).welcome : 0 };
   }
 
+  // The streak is alive if the last daily claim was under 48 hours ago.
+  const liveStreak = (w) => (w.lastDailyAt && Date.now() - Date.parse(w.lastDailyAt) < 48 * 3600_000 ? w.streakDays ?? 0 : 0);
+  const dailyFor = (region, streak) => C(region).daily + Math.floor((C(region).daily * (Math.min(streak, 7) - 1)) / 6);
+
+  // Badges, worked out from the record (nothing extra to store or fake).
+  const BADGES = [
+    ['first-solve', 'First solve', (r) => r.solves >= 1],
+    ['ten-solves', '10 solves', (r) => r.solves >= 10],
+    ['sub-60', 'Under 60s', (r) => r.bestMs && r.bestMs < 60_000],
+    ['sub-45', 'Under 45s', (r) => r.bestMs && r.bestMs < 45_000],
+    ['sub-30', 'Under 30s', (r) => r.bestMs && r.bestMs < 30_000],
+    ['king', 'Took the Throne', (r) => r.reigns >= 1],
+    ['king-of-day', 'King of the Day', (r) => r.kingOfDay >= 1],
+    ['streak-3', '3-day streak', (r) => r.bestStreak >= 3],
+    ['streak-7', '7-day streak', (r) => r.bestStreak >= 7],
+    ['inviter', 'Brought a friend', (r) => r.qualified >= 1],
+    ['ambassador', '5 friends playing', (r) => r.qualified >= 5],
+  ];
+
   async function walletView(w) {
     const region = w.region;
-    const [records, invites, card] = await Promise.all([store.walletRecords(w.id), store.listReferrals(w.id), store.getCard(w.id)]);
+    const [records, invites, card, ledger] = await Promise.all([store.walletRecords(w.id), store.listReferrals(w.id), store.getCard(w.id), store.listLedger(w.id, 1000)]);
     const dailyAt = w.lastDailyAt ? Date.parse(w.lastDailyAt) + 20 * 3600_000 : 0;
+    const streak = liveStreak(w);
+    const qualified = invites.filter((i) => i.referralPaid).length;
+    const facts = { ...records, kingOfDay: ledger.filter((l) => l.reason === 'king-of-day').length, bestStreak: w.streakDays ?? 0, qualified };
+    const badges = BADGES.map(([id, label, test]) => ({ id, label, earned: Boolean(test(facts)) }));
     return {
       id: w.id,
       region,
@@ -113,8 +137,12 @@ export function createArcade({ store, game, realtime, regions, salt }) {
       backedUp: Boolean(w.backedUpAt),
       dailyReadyAt: new Date(Math.max(Date.now(), dailyAt)).toISOString(),
       dailyCoins: C(region).daily,
-      records,
-      invites: { total: invites.length, qualified: invites.filter((i) => i.referralPaid).length },
+      // What the next daily claim pays (the streak grows it, up to double on day 7).
+      streak,
+      nextDailyCoins: dailyFor(region, Date.parse(w.lastDailyAt ?? 0) + 48 * 3600_000 > Math.max(Date.now(), dailyAt) ? streak + 1 : 1),
+      badges,
+      records: { ...records, kingOfDay: facts.kingOfDay },
+      invites: { total: invites.length, qualified },
       card: card && cardView(card),
       coins: { ...C(region), marketDayCoins: marketDayCoins(region) },
       game: G(region),
@@ -130,9 +158,9 @@ export function createArcade({ store, game, realtime, regions, salt }) {
 
   async function claimDaily(w) {
     requireActive(w);
-    const balance = await store.claimDaily(w.id, C(w.region).daily);
-    if (balance < 0) throw new GameError(429, 'Your daily coins are already claimed. Come back tomorrow.');
-    return { balance, coins: C(w.region).daily };
+    const r = await store.claimDaily(w.id, C(w.region).daily);
+    if (r.balance < 0) throw new GameError(429, 'Your daily coins are already claimed. Come back tomorrow.');
+    return { balance: r.balance, coins: r.coins, streak: r.streak };
   }
 
   // --- Invites: rewards both sides once the friend really plays ---
@@ -330,7 +358,7 @@ export function createArcade({ store, game, realtime, regions, salt }) {
       try {
         await store.applyCoins(w.id, -paidCoins, 'attempt', id);
       } catch (err) {
-        if (/insufficient/.test(err.message)) throw new GameError(402, 'Not enough coins. Claim your daily coins, invite friends or top up.', { needsCoins: true });
+        if (/insufficient/.test(err.message)) throw new GameError(402, 'Not enough coins. Solve puzzles, claim your daily coins or invite friends.', { needsCoins: true });
         throw err;
       }
     }
@@ -376,11 +404,21 @@ export function createArcade({ store, game, realtime, regions, salt }) {
       console.warn(`[arcade] too-fast solve by wallet ${w.id}: ${result.moves} moves in ${durationMs} ms`);
       throw new GameError(422, 'That was faster than humanly possible, so it was not ranked.');
     }
+    // Personal best: compare with the record before this solve counts.
+    const prevBest = (await store.walletRecords(w.id)).bestMs;
     // Atomic: only the first finish of a started attempt counts.
     if (!(await fin('solved', { moves: result.moves }))) throw new GameError(409, 'This game is already over.');
 
     const region = a.region;
     await qualifyReferral(w).catch((err) => console.error('[arcade] referral', err));
+
+    // Earn by playing: coins for each of the first few solves of the day.
+    let solveCoins = 0;
+    const solvedToday = (await store.listAttemptsAdmin({ walletId: w.id, status: 'solved', limit: 50 })).filter((x) => x.roundId === a.roundId).length;
+    if (solvedToday <= G(a.region).rewardedSolvesPerDay) {
+      solveCoins = C(a.region).solve;
+      await store.applyCoins(w.id, solveCoins, 'solve', a.id).catch(() => (solveCoins = 0));
+    }
 
     // Enter the Throne race when this time can win right now (the locked SQL
     // settlement decides races between simultaneous solves).
@@ -415,7 +453,21 @@ export function createArcade({ store, game, realtime, regions, salt }) {
     const rank = board.findIndex((e) => e.walletId === w.id) + 1 || null;
     realtime.broadcast('solve', { region, name: displayName(w), ms: durationMs, crowned, rank });
     const balance = (await store.getWallet(w.id)).balance;
-    return { status: 'solved', durationMs, moves: result.moves, crowned, rank, balance, takeoverCoins: crowned ? C(region).takeover : 0, cardApproved: card?.status === 'approved' };
+    return {
+      status: 'solved',
+      durationMs,
+      moves: result.moves,
+      crowned,
+      rank,
+      balance,
+      solveCoins,
+      personalBest: !prevBest || durationMs < prevBest,
+      previousBestMs: prevBest ?? null,
+      // How close a non-winning time came to the Throne.
+      gapMs: !crowned && sameRound && king?.toBeatMs ? durationMs - king.toBeatMs : null,
+      takeoverCoins: crowned ? C(region).takeover : 0,
+      cardApproved: card?.status === 'approved',
+    };
   }
 
   async function leaderboard(region, viewer) {
@@ -469,6 +521,7 @@ export function createArcade({ store, game, realtime, regions, salt }) {
 
   // --- Coin packs (real money in; coins out; never the other way) ---
   function packOf(region, id) {
+    if (!coinPacks) return null;
     return C(region).packs.find((p) => p.id === id) ?? null;
   }
   async function settleCoinOrder(order, paymentRef) {

@@ -9,9 +9,9 @@ const GROUPS = [
     title: 'The free game and coins',
     items: [
       ['How do I win the Throne?', 'Play the free daily puzzle race. Slide the tiles into order, 1 to 15, as fast as you can. If your time beats the king’s, your ad takes the big billboard straight away, live on every screen, until someone is faster. The fastest time when the daily race closes is King of the Day.'],
-      ['Is it really free?', 'Yes. You get free tries every day and welcome coins to start. No signup and no card needed. Extra tries and some extras cost coins, which you can earn or buy.'],
+      ['Is it really free?', 'Yes. You get free tries every day and welcome coins to start. No signup, no card, no money. Extra tries and some extras cost coins, which you earn by playing.'],
       ['What are coins?', 'Play money for Throne. Use them for extra tries, the Crown Shield and ad time on the Court, the Spotlight and the Market. Coins have no cash value and can never be cashed out, sold or transferred.'],
-      ['How do I get coins?', 'Welcome coins, daily coins every day you come back, coins for taking the Throne and for King of the Day, coins for inviting friends who play, or a coin pack from the wallet.'],
+      ['How do I get coins?', 'By playing: welcome coins, coins for your first solves each day, daily coins every day you come back, coins for taking the Throne and for King of the Day, and coins for inviting friends who play. Coins can’t be bought.'],
       ['Why do I have to wait between tries?', 'Fair play. There is a short reset timer after every try and a longer one after several unfinished tries in a row, and free tries are counted per wallet, device and network. Switching browser, phone or wallet does not give extra tries.'],
       ['What is the “Saved” badge?', 'It shows your wallet is backed up. Your wallet has a secret backup code: save it (copy it or download the file) and you can open the same wallet, with all your coins and records, on any browser or phone. Until then the badge says “Back up”. Keep the code private, and never share it: we will never ask for it.'],
       ['What is the Crown Shield?', 'If you are king, you can spend coins to shield your crown for a while. During the shield, challengers must beat your time by 10%.'],
