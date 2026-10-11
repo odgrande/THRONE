@@ -1,5 +1,5 @@
 import { Crown, Timer } from 'lucide-react';
-import { formatClock, formatMoney } from '../lib/api.js';
+import { adValue, formatClock } from '../lib/api.js';
 import Shape from './Shape.jsx';
 import { t } from '../lib/i18n.js';
 
@@ -43,7 +43,7 @@ export default function CrownBand({ crown, rules, now }) {
             <p className="text-sm">
               <span className="label block text-white/60">{t('crown.last')}</span>
               <span className="font-bold">
-                {lastKing.name} · {formatMoney(lastKing.amountCents)}
+                {lastKing.name} · {adValue(lastKing)}
               </span>
             </p>
           )}

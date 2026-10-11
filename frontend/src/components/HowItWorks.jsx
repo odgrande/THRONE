@@ -2,20 +2,23 @@ import { formatMoney } from '../lib/api.js';
 import Shape from './Shape.jsx';
 import { t } from '../lib/i18n.js';
 
-export default function HowItWorks({ rules, boards = [] }) {
+export default function HowItWorks({ rules, boards = [], game = false }) {
   const termDays = Math.round(rules.throneTermSeconds / 86400);
   // The Court boards only; the Market stalls have their own section.
   const cheapestDay = Math.min(...boards.filter((b) => b.tier !== 'market').map((b) => b.prices[7] / 7));
-  const steps = [
-    { title: t('how.1t'), body: t('how.1b') },
-    { title: t('how.2t'), body: t('how.2b', { pct: rules.shieldPremiumPct, days: termDays }) },
-    {
-      title: t('how.3t'),
-      body: t('how.3b', { from: Number.isFinite(cheapestDay) ? t('how.3from', { amount: formatMoney(Math.ceil(cheapestDay)) }) : '' }),
-    },
-    { title: t('how.4t'), body: t('how.4b', { pct: rules.relegationDiscountPct }) },
-    { title: t('how.5t'), body: t('how.5b', { s: rules.crownExtensionSeconds }) },
-  ];
+  const from = Number.isFinite(cheapestDay) ? t('how.3from', { amount: formatMoney(Math.ceil(cheapestDay)) }) : '';
+  const steps = game
+    ? [1, 2, 3, 4, 5].map((n) => ({ title: t(`how.g${n}t`), body: t(`how.g${n}b`, { from }) }))
+    : [
+        { title: t('how.1t'), body: t('how.1b') },
+        { title: t('how.2t'), body: t('how.2b', { pct: rules.shieldPremiumPct, days: termDays }) },
+        {
+          title: t('how.3t'),
+          body: t('how.3b', { from: Number.isFinite(cheapestDay) ? t('how.3from', { amount: formatMoney(Math.ceil(cheapestDay)) }) : '' }),
+        },
+        { title: t('how.4t'), body: t('how.4b', { pct: rules.relegationDiscountPct }) },
+        { title: t('how.5t'), body: t('how.5b', { s: rules.crownExtensionSeconds }) },
+      ];
 
   return (
     <section className="relative overflow-hidden border-b-4 border-ink bg-bh-red text-white">
@@ -29,7 +32,7 @@ export default function HowItWorks({ rules, boards = [] }) {
           <br />
           {t('how.title2')}
         </h2>
-        <p className="mt-4 text-lg font-medium text-white/85">{t('how.start', { amount: formatMoney(rules.startingPriceCents) })}</p>
+        <p className="mt-4 text-lg font-medium text-white/85">{game ? t('how.gstart') : t('how.start', { amount: formatMoney(rules.startingPriceCents) })}</p>
 
         <ol className="mt-12 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-8">
           {steps.map((step, i) => (

@@ -7,6 +7,7 @@ import Inbox from '../components/Inbox.jsx';
 import Logo from '../components/Logo.jsx';
 import Shape from '../components/Shape.jsx';
 import ModerationQueue from '../components/ModerationQueue.jsx';
+import GameAdmin from '../components/GameAdmin.jsx';
 
 const TOKEN_KEY = 'throne.adminToken';
 const REFRESH_MS = 30_000;
@@ -174,6 +175,7 @@ export default function AdminPage() {
                 ['treasury', 'Treasury'],
                 ['moderation', 'Moderation'],
                 ['videos', 'Review queue'],
+                ['game', 'Game & wallets'],
                 ['god', 'God mode'],
               ].map(([key, label]) => (
                 <button
@@ -186,7 +188,7 @@ export default function AdminPage() {
                 </button>
               ))}
             </nav>
-            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : tab === 'god' ? <GodMode token={token} /> : tab === 'inbox' ? <Inbox token={token} /> : <ModerationQueue token={token} />}
+            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : tab === 'god' ? <GodMode token={token} /> : tab === 'game' ? <GameAdmin token={token} /> : tab === 'inbox' ? <Inbox token={token} /> : <ModerationQueue token={token} />}
           </>
         )}
       </main>
@@ -251,13 +253,15 @@ function RegionFinancials({ id, r }) {
         {r.name} · {r.currency} · {r.processor}
       </h2>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Ad revenue" value={money(r.grossCents)} note={`${(r.wonBids ?? 0).toLocaleString()} paid ads`} />
+        <Metric label="Sales" value={money(r.salesCents ?? r.grossCents)} note={`${(r.wonBids ?? 0).toLocaleString()} paid ads · ${(r.coinPacks ?? 0).toLocaleString()} coin packs`} />
         <Metric label="Net after fees" value={money(r.netCents)} note="Minus estimated processor fees" tone="bg-bh-yellow" />
         <Metric label="The Throne" value={money(r.throneGrossCents)} note="Auction revenue" tone="bg-bh-blue text-white" />
         <Metric label="The Court" value={money(r.boardsGrossCents)} note={`${r.bookings ?? 0} bookings · ${r.relegations ?? 0} relegations`} tone="bg-onyx text-white" />
       </div>
       <div className="card mt-6">
         <dl className="divide-y-2 divide-ink">
+          <Row label="Coin packs" hint="Real money in; coins have no cash value and are never paid out" value={money(r.coinPacksCents)} />
+          <Row label="Ads paid with coins" hint="Not revenue: play money" value={(r.coinAds ?? 0).toLocaleString()} />
           <Row label="Map add-ons" hint="Included in ad revenue" value={money(r.addonCents)} />
           {r.vatPct > 0 && <Row label={`VAT (${r.vatPct}%)`} hint="Included in ad revenue; owed to the tax authority" value={money(r.vatCents)} />}
           <Row label="Est. processor fees" hint={`${FEE_HINT[r.processor] ?? ''}, incl. refunded charges`} value={`−${money(r.estFeesCents)}`} />

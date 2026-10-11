@@ -16,6 +16,8 @@ import Shape from './Shape.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 import { LegalNote } from './BidForm.jsx';
 import { t } from '../lib/i18n.js';
+import { coinsFor, refreshWallet, useWallet, walletApi } from '../lib/wallet.js';
+import { WalletDialog } from './WalletChip.jsx';
 
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const when = (iso, now) => (Date.parse(iso) <= now + 60_000 ? 'now' : dayFmt.format(new Date(iso)));
@@ -139,12 +141,29 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
   const turnstileRef = useRef(null);
   const waitingForBotCheck = Boolean(TURNSTILE_SITE_KEY) && !botToken;
   const perDay = (d) => board.prices[d] / d;
+  // Pay with coins (the free game's play money) or with money.
+  const { wallet } = useWallet();
+  const [payWith, setPayWith] = useState('coins');
+  const [walletOpen, setWalletOpen] = useState(false);
+  const priceCents = board.prices[days] + (ad.withMap ? mapAddonCents : 0) + (ad.withVideo && board.tier !== 'market' ? videoAddonCents : 0);
+  const priceCoins = coinsFor(priceCents);
+  const shortCoins = payWith === 'coins' && wallet && priceCoins != null && wallet.balance < priceCoins;
 
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
+    if (payWith === 'coins' && !wallet) return setWalletOpen(true);
     setStep('submitting');
     try {
+      if (payWith === 'coins') {
+        const res = await walletApi.bookWithCoins({ board: board.id, days, ...(await adPayload(ad)), acceptedTerms: termsVersion(), turnstileToken: botToken });
+        rememberOwnedAd(res);
+        refreshWallet();
+        setCheckout(res);
+        setResult({ status: res.status, startsAt: res.startsAt, endsAt: res.endsAt });
+        setStep('done');
+        return;
+      }
       const res = await api.createBooking({ board: board.id, days, ...(await adPayload(ad)), acceptedTerms: termsVersion(), turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
@@ -235,28 +254,59 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
               </p>
             </fieldset>
 
+            <fieldset>
+              <legend className="label mb-2">Pay with</legend>
+              <div className="grid grid-cols-2 border-2 border-ink" role="radiogroup">
+                {[
+                  ['coins', `Coins${priceCoins != null ? ` · ${priceCoins.toLocaleString()}` : ''}`],
+                  ['card', `Money · ${formatMoney(priceCents)}`],
+                ].map(([k, label]) => (
+                  <label key={k} className={`cursor-pointer px-3 py-2 text-center text-sm font-bold uppercase ${payWith === k ? 'bg-ink text-paper' : 'bg-paper hover:bg-bh-cream'}`}>
+                    <input type="radio" name={`pay-${board.id}`} className="sr-only" checked={payWith === k} onChange={() => setPayWith(k)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {payWith === 'coins' && (
+                <p className="mt-1.5 text-xs text-ink/70">
+                  {!wallet ? (
+                    <button type="button" className="font-bold underline" onClick={() => setWalletOpen(true)}>
+                      Get free coins to book with
+                    </button>
+                  ) : shortCoins ? (
+                    <span className="font-bold text-bh-red">You have {wallet.balance.toLocaleString()} coins. Win the daily race, invite friends or top up.</span>
+                  ) : (
+                    `You have ${wallet.balance.toLocaleString()} coins. Refused or not placed = coins back.`
+                  )}
+                </p>
+              )}
+            </fieldset>
+
             <AdFields ad={ad} onChange={setAd} onError={setError} idPrefix={`book-${board.id}`} mapAddonCents={mapAddonCents} videoAddonCents={board.tier === 'market' ? 0 : videoAddonCents} />
-            {needsEmail() && <EmailField value={email} onChange={setEmail} idPrefix={`book-${board.id}`} />}
+            {payWith === 'card' && needsEmail() && <EmailField value={email} onChange={setEmail} idPrefix={`book-${board.id}`} />}
 
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
             <Turnstile ref={turnstileRef} onToken={setBotToken} />
 
             <AcceptRules kind="booking" checked={accepted} onChange={setAccepted} idPrefix={`book-${board.id}`} />
-            <button type="submit" disabled={step === 'submitting' || waitingForBotCheck || !accepted} className="btn-blue w-full text-lg">
+            <button type="submit" disabled={step === 'submitting' || waitingForBotCheck || !accepted || shortCoins} className="btn-blue w-full text-lg">
               {step === 'submitting' ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> Checking your ad
                 </>
               ) : waitingForBotCheck ? (
                 'Checking you are human…'
+              ) : payWith === 'coins' ? (
+                `Book ${PACKAGE_COPY[days]} · ${priceCoins?.toLocaleString() ?? ''} coins`
               ) : (
-                `Book ${PACKAGE_COPY[days]} · ${formatMoney(board.prices[days] + (ad.withMap ? mapAddonCents : 0) + (ad.withVideo && board.tier !== 'market' ? videoAddonCents : 0))}`
+                `Book ${PACKAGE_COPY[days]} · ${formatMoney(priceCents)}`
               )}
             </button>
             <LegalNote />
           </form>
         )}
       </div>
+      {walletOpen && <WalletDialog onClose={() => setWalletOpen(false)} />}
     </dialog>
   );
 }

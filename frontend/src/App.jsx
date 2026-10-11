@@ -19,6 +19,8 @@ const FaqPage = lazy(() => import('./pages/FaqPage.jsx'));
 const ContactPage = lazy(() => import('./pages/ContactPage.jsx'));
 const PartnersPage = lazy(() => import('./pages/PartnersPage.jsx'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage.jsx'));
+const InvitePage = lazy(() => import('./pages/InvitePage.jsx'));
+const WalletPage = lazy(() => import('./pages/WalletPage.jsx'));
 
 const ROUTES = {
   '/kings': KingsPage,
@@ -31,6 +33,8 @@ const ROUTES = {
   '/contact': ContactPage,
   '/partners': PartnersPage,
   '/changelog': ChangelogPage,
+  '/invite': InvitePage,
+  '/wallet': WalletPage,
 };
 
 // A handful of pages, so plain path matching instead of a router dependency.

@@ -33,10 +33,12 @@ export function assessHealth(financials, balances, regions, modeFor) {
       currency: region.currency,
       locale: region.locale,
       processor: modeFor(id),
-      netCents: f.grossCents - f.estFeesCents,
+      // Real money in: ad sales plus coin packs (coin-paid ads carry no money).
+      salesCents: f.grossCents + (f.coinPacksCents ?? 0),
+      netCents: f.grossCents + (f.coinPacksCents ?? 0) - f.estFeesCents - (f.coinPacksFeesCents ?? 0),
       // VAT included in the prices (Nigeria 7.5%): the part of revenue owed as VAT.
       vatPct: region.rules.vatPct ?? 0,
-      vatCents: region.rules.vatPct ? Math.round((f.grossCents * region.rules.vatPct) / (100 + region.rules.vatPct)) : 0,
+      vatCents: region.rules.vatPct ? Math.round(((f.grossCents + (f.coinPacksCents ?? 0)) * region.rules.vatPct) / (100 + region.rules.vatPct)) : 0,
       balance: balances[id] ?? null,
     };
   }

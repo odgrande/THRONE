@@ -25,6 +25,8 @@ export default {
           blue: '#1040C0',
           yellow: '#F0C020',
           cream: '#FFF9C4',
+          // "Saved" / secured state (wallet backed up).
+          green: '#3CB371',
         },
       },
       fontFamily: {

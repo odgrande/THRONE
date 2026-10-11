@@ -20,6 +20,8 @@ import { newOwnerToken } from './services/owners.js';
 import { BOARD_IDS, BOOKING_DAYS, bookingPriceCents } from './rules.js';
 import { createGame, maskRemoved } from './game.js';
 import { assessHealth, requireAdmin } from './admin.js';
+import { createArcade } from './arcade.js';
+import { mountArcade, mountArcadeAdmin } from './arcadeRoutes.js';
 
 assertProductionConfig('api');
 
@@ -39,6 +41,7 @@ const turnstile = createTurnstile(config.turnstileSecret);
 const realtime = createRealtime({ regions: REGION_IDS, regionOf: (req) => regionOf(req) });
 const hype = createHypeQueue({ store });
 const game = createGame({ store, payments, realtime, hype, regions: config.regions, storage });
+const arcade = createArcade({ store, game, realtime, regions: config.regions, salt: config.reports.ipHashSalt });
 const videos = createVideoUploads({ storage, secret: config.reports.ipHashSalt });
 
 // Which region a request is about. An explicit choice (?region= or the
@@ -92,7 +95,9 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
   if (event.type === 'payment_intent.succeeded') {
     const intent = event.data.object;
     try {
-      await game.settle(intent.metadata.bidId, intent.id);
+      const order = UUID.test(intent.metadata.bidId ?? '') ? await store.getCoinOrder(intent.metadata.bidId) : null;
+      if (order) await arcade.settleCoinOrder(order, intent.id);
+      else await game.settle(intent.metadata.bidId, intent.id);
     } catch (err) {
       console.error('[webhook] settle failed; Stripe will retry', err);
       return res.status(500).end();
@@ -100,6 +105,20 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
   }
   res.json({ received: true });
 });
+
+// Coin packs share the webhooks: the reference is a coin order id instead of
+// an ad id. Same rule: ask the processor, check amount and currency, then
+// credit once (pay_coin_order is idempotent).
+async function settleCoinWebhook(processor, reference, ok) {
+  const order = await store.getCoinOrder(reference);
+  if (!order) return;
+  const tx = await payments[processor].verifyTransaction(reference);
+  if (!ok(tx, order) || tx.currency !== game.rulesOf(order.region).currency) {
+    console.error(`[${processor}] MISMATCH for coin order ${reference}: got ${tx.status} ${tx.amount ?? tx.amountCents} ${tx.currency}, expected ${order.amountCents}`);
+    return;
+  }
+  await arcade.settleCoinOrder(order, reference);
+}
 
 // Paystack: HMAC-SHA512 signature over the raw body. We also check the amount
 // and currency against our own record of the ad, and confirm the transaction
@@ -122,7 +141,10 @@ app.post('/api/webhooks/paystack', express.raw({ type: 'application/json' }), as
   if (typeof reference !== 'string' || !UUID.test(reference)) return res.json({ received: true });
   try {
     const bid = await store.getBid(reference);
-    if (!bid) return res.json({ received: true });
+    if (!bid) {
+      await settleCoinWebhook('paystack', reference, (tx, order) => tx.status === 'success' && tx.amount === order.amountCents);
+      return res.json({ received: true });
+    }
     const rules = game.rulesOf(bid.region);
     const expected = bid.amountCents + (bid.addonCents ?? 0);
     const tx = await payments.paystack.verifyTransaction(reference);
@@ -155,7 +177,10 @@ app.post('/api/webhooks/flutterwave', express.raw({ type: 'application/json' }),
   if (typeof reference !== 'string' || !UUID.test(reference)) return res.json({ received: true });
   try {
     const bid = await store.getBid(reference);
-    if (!bid) return res.json({ received: true });
+    if (!bid) {
+      await settleCoinWebhook('flutterwave', reference, (tx, order) => tx.status === 'successful' && tx.amountCents === order.amountCents && tx.tx_ref === reference);
+      return res.json({ received: true });
+    }
     const rules = game.rulesOf(bid.region);
     const expected = bid.amountCents + (bid.addonCents ?? 0);
     const tx = await payments.flutterwave.verifyTransaction(reference);
@@ -219,7 +244,7 @@ app.get('/api/geo', (req, res) => {
 
 app.get('/api/state', async (req, res, next) => {
   try {
-    res.json(await game.getState(regionOf(req)));
+    res.json({ ...(await game.getState(regionOf(req))), throneMode: config.throneMode });
   } catch (err) {
     next(err);
   }
@@ -235,6 +260,9 @@ if (config.adminToken) {
     res.set('Cache-Control', 'no-store');
     next();
   });
+
+  // The Ads Game: wallets, coins, bans, ad cards, games, orders, invites.
+  mountArcadeAdmin(admin, { arcade, store, game, realtime });
 
   // Revenue per region (each in its own currency) plus operational alerts.
   admin.get('/health', async (_req, res, next) => {
@@ -950,11 +978,96 @@ app.post(
   }),
 );
 
+// --- The Ads Game: wallet, game, coins, invites ---
+mountArcade(app, {
+  arcade,
+  store,
+  game,
+  payments,
+  config,
+  limiter,
+  handle,
+  Reject,
+  requireHuman,
+  vetAd,
+  validateBid,
+  paymentEmail,
+  regionOf,
+  UUID,
+  politicalMatch,
+  moderation,
+});
+
+// --- Boards paid with coins ---
+// Same checks as a money booking (rules accepted, bot check, link safety,
+// moderation, political filter, review hold in Nigeria). The coins are taken
+// first; if the ad cannot be placed they go straight back.
+app.post(
+  '/api/bookings/coins',
+  bidLimiter,
+  handle(async (req, res) => {
+    const w = await arcade.walletFromToken(req.get('x-wallet'));
+    try {
+      arcade.requireActive(w);
+    } catch (err) {
+      throw new Reject(err.status, err.message, err.extra);
+    }
+    const board = req.body?.board;
+    const days = req.body?.days;
+    if (!BOARD_IDS.includes(board)) throw new Reject(400, 'Unknown board.');
+    if (!BOOKING_DAYS.includes(days)) throw new Reject(400, 'Pick 1, 3 or 7 days.');
+    const region = w.region;
+    if (await store.isPaused(region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
+    const rules = game.rulesOf(region);
+    const isStall = Boolean(rules.boards[board].tier);
+    if (isStall && req.body?.withMap) throw new Reject(400, 'Spotlight spaces and Market stalls do not include a map.');
+    if (req.body?.withVideo && !videoAllowed(board, rules)) throw new Reject(400, 'Market stalls take a picture, not a video.');
+    const priceCents = bookingPriceCents(board, days, rules);
+    const input = validateBid({ ...req.body, amountCents: priceCents }, rules);
+    if (input.error) throw new Reject(400, input.error, input.needsTerms ? { needsTerms: true } : {});
+    await requireHuman(req);
+    const { tooFar } = await game.bookingStartEstimate(region, board);
+    if (tooFar) throw new Reject(409, `This ${isStall ? 'stall' : 'board'} is booked more than ${rules.maxBookingAheadDays} days ahead. Try another one.`);
+    const coins = arcade.coinsFor(priceCents + input.addonCents, region);
+    if (w.balance < coins) throw new Reject(402, `Not enough coins: this needs ${coins.toLocaleString()} coins.`, { needsCoins: true, coins });
+
+    const imageUrl = await vetAd(req, input);
+    const { videoName: _v, amountCents: _a, addonCents: _ad, ...fields } = input;
+    const owner = newOwnerToken();
+    const bid = await store.createBid({ ...fields, region, board, days, amountCents: 0, addonCents: 0, coins, walletId: w.id, imageUrl, videoUrl: videoUrlOf(input), ownerHash: owner.hash });
+    try {
+      await arcade.spendForAd(w, coins, `bid:${bid.id}`);
+    } catch (err) {
+      await store.setStatus(bid.id, 'void');
+      if (err instanceof arcade.GameError) throw new Reject(err.status, err.message, err.extra);
+      throw err;
+    }
+    const result = await game.settle(bid.id, `coins:${w.id}`);
+    await arcade.payCommission(w, coins, `bid:${bid.id}`).catch((err) => console.error('[arcade] commission', err));
+    const after = await store.getBid(bid.id);
+    res.status(201).json({
+      bidId: bid.id,
+      board,
+      coins,
+      status: after.status,
+      startsAt: after.startsAt,
+      endsAt: after.endsAt,
+      settled: result.status,
+      ownerToken: owner.token,
+      balance: (await store.getWallet(w.id)).balance,
+      needsReview: after.status === 'review',
+      reviewKind: after.videoUrl ? 'video' : after.status === 'review' ? 'hold' : null,
+      holdMinutes: Math.ceil((rules.reviewHoldSeconds ?? 0) / 60),
+    });
+  }),
+);
+
 // --- The Throne: auction ---
 app.post(
   '/api/bids',
   bidLimiter,
   handle(async (req, res) => {
+    if (config.throneMode === 'game') throw new Reject(410, 'The Throne is now won by playing the daily puzzle race, not by bidding.');
     const region = regionOf(req);
     if (await store.isPaused(region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
     const rules = game.rulesOf(region);
@@ -1151,12 +1264,19 @@ setInterval(async () => {
   try {
     await game.tick();
     await game.expireReviews();
+    await arcade.expireCardReviews();
   } catch (err) {
     console.error('[throne] tick failed', err);
   } finally {
     tickRunning = false;
   }
 }, 1000).unref();
+
+// Privacy: network/device hashes on game records are only needed for the
+// anti-cheat window; after 30 days they are erased.
+setInterval(() => {
+  store.purgeAttemptHashes(new Date(Date.now() - 30 * 86400_000).toISOString()).catch((err) => console.error('[arcade] hash purge failed', err));
+}, 6 * 3600_000).unref();
 
 // Uploaded videos that never became a paid ad are deleted after 2 hours.
 setInterval(() => {

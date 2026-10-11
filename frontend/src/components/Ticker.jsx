@@ -1,9 +1,9 @@
-import { formatDuration, formatMoney } from '../lib/api.js';
+import { adValue, formatDuration } from '../lib/api.js';
 import Shape from './Shape.jsx';
 
 // Square = reigning, circle = survived the shield, triangle = shield broken,
 // rotated square = retired at the end of the term.
-function Row({ marker, name, outcome, amountCents }) {
+function Row({ marker, name, outcome, ad }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 lg:px-6">
       <span className="flex min-w-0 items-center gap-3">
@@ -12,7 +12,7 @@ function Row({ marker, name, outcome, amountCents }) {
       </span>
       <span className="flex items-center gap-4 text-sm">
         {outcome}
-        <span className="text-lg font-black tabular-nums">{formatMoney(amountCents)}</span>
+        <span className="text-lg font-black tabular-nums">{adValue(ad)}</span>
       </span>
     </li>
   );
@@ -46,14 +46,14 @@ export default function Ticker({ throne, legends, now }) {
             <Row
               marker={<Shape kind="square" color="yellow" className="h-3.5 w-3.5 border-2 border-ink" />}
               name={throne.name}
-              amountCents={throne.amountCents}
+              ad={throne}
               outcome={<span className="label">Reigning {formatDuration(now - Date.parse(throne.startedAt))}</span>}
             />
           ) : (
             <li className="px-4 py-3 font-bold uppercase tracking-tight text-bh-red lg:px-6">The throne is empty: claim it</li>
           )}
           {legends.map((l) => (
-            <Row key={l.id} marker={legendMarker(l)} name={l.name} amountCents={l.amountCents} outcome={<span className="text-ink/70">{legendOutcome(l)}</span>} />
+            <Row key={l.id} marker={legendMarker(l)} name={l.name} ad={l} outcome={<span className="text-ink/70">{legendOutcome(l)}</span>} />
           ))}
         </ul>
       )}

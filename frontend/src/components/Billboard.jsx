@@ -1,5 +1,5 @@
 import { ArrowUpRight } from 'lucide-react';
-import { formatMoney, formatMoneyShort } from '../lib/api.js';
+import { adValue, formatMoney, formatMoneyShort } from '../lib/api.js';
 import CountUp from './CountUp.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
@@ -139,12 +139,19 @@ function ShieldRing({ throne, now, accent }) {
 }
 
 // Total pool · Highest bid · Takeovers, right under the board.
-export function BillboardStats({ stats }) {
-  const cells = [
-    { label: 'Total pool', value: <CountUp value={stats?.volumeCents ?? 0} format={(n) => formatMoneyShort(Math.round(n))} /> },
-    { label: 'Highest bid', value: <CountUp value={stats?.recordCents ?? 0} format={(n) => formatMoney(Math.round(n))} /> },
-    { label: 'Takeovers', value: <CountUp value={stats?.takeovers ?? 0} /> },
-  ];
+export function BillboardStats({ stats, game = false }) {
+  // Ads Game: the Throne is won, not bought, so show the race instead of money.
+  const cells = game
+    ? [
+        { label: 'Takeovers', value: <CountUp value={stats?.takeovers ?? 0} /> },
+        { label: 'Advertisers', value: <CountUp value={stats?.advertisers ?? 0} /> },
+        { label: 'Ads shown', value: <CountUp value={stats?.ads ?? 0} /> },
+      ]
+    : [
+        { label: 'Total pool', value: <CountUp value={stats?.volumeCents ?? 0} format={(n) => formatMoneyShort(Math.round(n))} /> },
+        { label: 'Highest bid', value: <CountUp value={stats?.recordCents ?? 0} format={(n) => formatMoney(Math.round(n))} /> },
+        { label: 'Takeovers', value: <CountUp value={stats?.takeovers ?? 0} /> },
+      ];
   return (
     <dl className="mt-6 grid grid-cols-3 gap-1 border-2 border-ink bg-ink lg:border-4">
       {cells.map((c) => (
@@ -236,8 +243,8 @@ export default function Billboard({ throne, now = Date.now(), practice = false }
               </div>
             )}
             <div className="flex flex-1 items-center justify-end gap-3 border-l-2 border-ink bg-bh-yellow px-5 py-3 sm:flex-none lg:border-l-4">
-              <span className="label">Paid</span>
-              <span className="text-2xl font-black tabular-nums sm:text-3xl">{formatMoney(throne.amountCents)}</span>
+              <span className="label">{throne.scoreMs != null ? 'Time' : 'Paid'}</span>
+              <span className="text-2xl font-black tabular-nums sm:text-3xl">{adValue(throne)}</span>
             </div>
           </div>
         </section>

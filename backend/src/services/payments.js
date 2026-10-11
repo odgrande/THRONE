@@ -154,12 +154,12 @@ export function flutterwaveProvider({ secretKey, webhookHash, apiBase = 'https:/
 
     // The buyer's email is required by Flutterwave for the receipt; passed
     // through, not stored. After paying they come back to My ads.
-    async createIntent({ bidId, amountCents, currency, email, description }) {
+    async createIntent({ bidId, amountCents, currency, email, description, returnPath = '/my-ads?paid=1' }) {
       const data = await call('POST', '/v3/payments', {
         tx_ref: bidId,
         amount: major(amountCents),
         currency,
-        redirect_url: `${siteUrl}/my-ads?paid=1`,
+        redirect_url: `${siteUrl}${returnPath}`,
         customer: { email },
         customizations: { title: 'Throne', description: String(description).slice(0, 120) },
         meta: { bidId },

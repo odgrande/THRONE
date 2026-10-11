@@ -43,6 +43,9 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
       videoUrl: b.videoUrl ?? null,
       targetUrl: b.targetUrl,
       amountCents: b.amountCents,
+      // Ads Game: the winning time, and coin-paid ads.
+      scoreMs: b.scoreMs ?? null,
+      paidWithCoins: (b.coins ?? 0) > 0,
       // Only ads that paid for the map add-on carry an address.
       address: b.addonCents > 0 || b.relegatedFrom ? b.address : null,
       clicks: b.clicks,
@@ -143,9 +146,26 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
   const dueAt = Object.fromEntries(REGION_IDS.map((r) => [r, 0]));
   const checkedAt = Object.fromEntries(REGION_IDS.map((r) => [r, 0]));
 
+  // Hooks for the Ads Game (King of the Day reward). Set by the arcade.
+  const hooks = { onCrowned: null };
+
+  // Gives back what an ad was paid with: nothing for a game entry (it was
+  // won, not bought), coins for a coin-paid ad, money otherwise.
+  async function refundAd(bid, key) {
+    const ref = bid.paymentRef ?? '';
+    if (ref.startsWith('game:')) return;
+    if (ref.startsWith('coins:')) {
+      await store.applyCoins(bid.walletId, bid.coins, 'refund', bid.id);
+      return;
+    }
+    await payments.refund(bid.region, ref, bid.amountCents + (bid.addonCents ?? 0), key);
+  }
+
   async function announce(region, { crowned, retired }) {
     if (crowned?.bidId) {
-      const king = maskRemoved(await store.getBid(crowned.bidId));
+      const raw = await store.getBid(crowned.bidId);
+      if (hooks.onCrowned) await hooks.onCrowned(raw, crowned).catch((err) => console.error('[game] crown hook failed', err));
+      const king = maskRemoved(raw);
       realtime.broadcast('crowned', { region, roundId: crowned.roundId, name: king.name, amountCents: king.amountCents });
     }
     if (retired?.bidId) {
@@ -212,7 +232,10 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     // (Nigeria, ARCON) every ad waits there first and goes live once the
     // hold passes unless an admin rejects it.
     const holdSeconds = rulesOf(region).reviewHoldSeconds ?? 0;
-    const needsReview = (pending.videoUrl || holdSeconds > 0) && !pending.relegatedFrom && !approved;
+    // A game entry carries the player's ad card, which was already screened
+    // (and held for review in Nigeria) when it was saved.
+    const isGameEntry = pending.scoreMs !== null && pending.scoreMs !== undefined;
+    const needsReview = (pending.videoUrl || holdSeconds > 0) && !pending.relegatedFrom && !isGameEntry && !approved;
     if (needsReview && pending.status === 'pending') {
       await store.markReview(bidId, paymentRef);
       return { status: 'review' };
@@ -227,9 +250,7 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     if (result.status === 'outbid' || result.status === 'void') {
       try {
         // Refund everything that was charged, including any map add-on.
-        if (paymentRef) {
-          await payments.refund(region, paymentRef, result.bid.amountCents + (result.bid.addonCents ?? 0), `${result.status}-${bidId}`);
-        }
+        if (paymentRef) await refundAd({ ...result.bid, paymentRef }, `${result.status}-${bidId}`);
         await store.setStatus(bidId, 'refunded');
       } catch (err) {
         // Stays 'outbid'/'void' = refund owed; retryRefunds() keeps trying.
@@ -272,7 +293,7 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     if (!bid || bid.status !== 'review') return { status: bid?.status ?? 'missing' };
     if (!(await store.rejectReview(bidId, reason))) return { status: 'changed' };
     try {
-      await payments.refund(bid.region, bid.paymentRef, bid.amountCents + (bid.addonCents ?? 0), `rejected-${bidId}`);
+      await refundAd(bid, `rejected-${bidId}`);
     } catch (err) {
       // Mark it owed ('void'); retryRefunds() keeps trying until it succeeds.
       await store.setStatus(bidId, 'void');
@@ -345,7 +366,7 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     const owed = await store.listRefundsOwed(new Date(Date.now() - 2 * 60_000).toISOString());
     for (const bid of owed) {
       try {
-        await payments.refund(bid.region, bid.paymentRef, bid.amountCents + (bid.addonCents ?? 0), `retry-${bid.id}`);
+        await refundAd(bid, `retry-${bid.id}`);
         await store.setStatus(bid.id, 'refunded');
         console.log(`[game] owed refund paid for ad ${bid.id}`);
       } catch (err) {
@@ -356,6 +377,8 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
   }
 
   return {
+    hooks,
+    publicBid,
     retryRefunds,
     trackReach,
     approveVideo,

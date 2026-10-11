@@ -35,6 +35,31 @@ const SHARED_RULES = {
   crownOvertimeWindowSeconds: int('CROWN_OVERTIME_WINDOW_SECONDS', 60),
   crownExtensionSeconds: int('CROWN_EXTENSION_SECONDS', 12),
   crownMaxOvertimeSeconds: int('CROWN_MAX_OVERTIME_SECONDS', 600),
+  // --- The Ads Game: fair-play limits (enforced on the server, per wallet AND
+  // per device AND per network, so a new browser or PC gives no extra tries) ---
+  game: {
+    freeAttemptsPerDay: int('GAME_FREE_ATTEMPTS', 5),
+    // Shared networks (offices, campuses) get more, but not unlimited.
+    networkAttemptsPerDay: int('GAME_NETWORK_ATTEMPTS', 40),
+    paidAttemptsPerDay: int('GAME_PAID_ATTEMPTS', 20),
+    // The reset timer: a short wait after every try, and a longer lock after
+    // several unfinished or failed tries in a row.
+    cooldownSeconds: int('GAME_COOLDOWN_SECONDS', 15),
+    failStreak: int('GAME_FAIL_STREAK', 3),
+    lockSeconds: int('GAME_LOCK_SECONDS', 180),
+    // An attempt left open longer than this counts as failed.
+    attemptTtlSeconds: int('GAME_ATTEMPT_TTL_SECONDS', 600),
+    // Welcome coins: only the first few new wallets per network / device a day.
+    welcomePerNetworkPerDay: int('GAME_WELCOME_PER_NETWORK', 3),
+    welcomePerDevicePerDay: int('GAME_WELCOME_PER_DEVICE', 1),
+    // Crown Shield: bought in 10-minute blocks, at most this long at once.
+    shieldBlockMinutes: 10,
+    shieldMaxMinutes: int('GAME_SHIELD_MAX_MINUTES', 60),
+    // Invites: a share of the coins an invited friend spends on ads, and free
+    // ad time for every few friends who really play.
+    commissionPct: int('GAME_COMMISSION_PCT', 10),
+    milestoneInvites: int('GAME_MILESTONE_INVITES', 5),
+  },
 };
 
 // A region's full rule set: shared mechanics + its own prices, each price
@@ -72,6 +97,21 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
       // The rules version a buyer must accept before paying (stored with the ad).
       // Change it whenever the Terms or Ad Policy change.
       termsVersion: TERMS_VERSION,
+      // Coins: play money with no cash value (never paid out). Ads are priced
+      // in coins at centsPerCoin; rewards are scaled so the welcome bonus buys
+      // the same ad time in every edition.
+      coins: {
+        centsPerCoin: defaults.coins.centsPerCoin,
+        welcome: defaults.coins.welcome,
+        daily: defaults.coins.daily,
+        takeover: defaults.coins.takeover,
+        kingOfDay: defaults.coins.kingOfDay,
+        referral: defaults.coins.referral,
+        extraAttempt: defaults.coins.extraAttempt,
+        shieldBlock: defaults.coins.shieldBlock,
+        // Coin packs sold through the edition's payment processor.
+        packs: defaults.coins.packs,
+      },
       crownCutoffHourUtc: p('CROWN_CUTOFF_HOUR_UTC', defaults.crownCutoffHourUtc),
       // Render a takeover video only for bids at or above this amount.
       hypeMinCents: p('HYPE_MIN_CENTS', defaults.hypeMinCents),
@@ -118,6 +158,9 @@ export const config = {
   trustProxy: int('TRUST_PROXY', production ? 1 : 0),
   // Per-IP bid submissions per minute (each one can cost a moderation call).
   bidsPerMinute: int('BIDS_PER_MINUTE', 6),
+  // 'game' (default): the Throne is won in the puzzle race. 'auction' brings
+  // back paid Throne bids.
+  throneMode: process.env.THRONE_MODE === 'auction' ? 'auction' : 'game',
 
   // Two separate thrones in one database: Global (USD) and Nigeria (NGN).
   // Each has its own currency, prices and daily cutoff; the game mechanics are
@@ -138,6 +181,22 @@ export const config = {
       mapAddonCents: 200,
       crownCutoffHourUtc: 0, // midnight UTC
       hypeMinCents: 2000,
+      // 1 coin = $0.01 of ad time. Welcome = 6 Market stall days.
+      coins: {
+        centsPerCoin: 1,
+        welcome: 300,
+        daily: 50,
+        takeover: 50,
+        kingOfDay: 500,
+        referral: 100,
+        extraAttempt: 10,
+        shieldBlock: 100,
+        packs: [
+          { id: 'starter', coins: 500, priceCents: 499 },
+          { id: 'pro', coins: 1500, priceCents: 1299 },
+          { id: 'royal', coins: 5000, priceCents: 3999 },
+        ],
+      },
       bumpCents: [500, 2000], // quick "+5 / +20" buttons
       sliderStepCents: 50,
     } }),
@@ -156,6 +215,22 @@ export const config = {
       mapAddonCents: 100000, // ₦1,000
       crownCutoffHourUtc: 23, // midnight in Lagos (WAT = UTC+1)
       hypeMinCents: 1000000, // ₦10,000
+      // 1 coin = ₦1 of ad time. Welcome = 6 Market stall days.
+      coins: {
+        centsPerCoin: 100,
+        welcome: 1800,
+        daily: 300,
+        takeover: 300,
+        kingOfDay: 3000,
+        referral: 600,
+        extraAttempt: 60,
+        shieldBlock: 600,
+        packs: [
+          { id: 'starter', coins: 1000, priceCents: 100000 },
+          { id: 'pro', coins: 3000, priceCents: 270000 },
+          { id: 'royal', coins: 10000, priceCents: 850000 },
+        ],
+      },
       bumpCents: [100000, 500000], // "+₦1,000 / +₦5,000"
       sliderStepCents: 5000,
     } }),

@@ -36,6 +36,10 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       reviewSince: r.review_since,
       termsVersion: r.terms_version,
       termsAcceptedAt: r.terms_accepted_at,
+      scoreMs: r.score_ms,
+      gameRoundId: r.game_round_id,
+      walletId: r.wallet_id,
+      coins: r.coins ?? 0,
       targetUrl: r.target_url,
       paymentRef: r.payment_ref,
       clicks: r.clicks,
@@ -65,6 +69,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     clicks: r.bid?.clicks ?? 0,
     views: r.bid?.views ?? 0,
     removedAt: r.bid?.removed_at ?? null,
+    scoreMs: r.bid?.score_ms ?? null,
   });
 
   const contactFromRow = (r) =>
@@ -92,15 +97,59 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     return count === undefined || count === null ? data : { data, count };
   };
 
+  const walletFrom = (r) =>
+    r && {
+      id: r.id,
+      tokenHash: r.token_hash,
+      balance: Number(r.balance),
+      playerName: r.player_name,
+      referralCode: r.referral_code,
+      referredBy: r.referred_by,
+      referralPaid: r.referral_paid,
+      createdIpHash: r.created_ip_hash,
+      createdDeviceHash: r.created_device_hash,
+      region: r.region,
+      banned: r.banned,
+      banReason: r.ban_reason,
+      backedUpAt: r.backed_up_at,
+      lastDailyAt: r.last_daily_at,
+      createdAt: r.created_at,
+    };
+  const orderFrom = (r) =>
+    r && { id: r.id, walletId: r.wallet_id, region: r.region, pack: r.pack, coins: r.coins, amountCents: r.amount_cents, status: r.status, paymentRef: r.payment_ref, createdAt: r.created_at, paidAt: r.paid_at };
+  const CARD_COLS = { region: 'region', name: 'name', tagline: 'tagline', targetUrl: 'target_url', imageUrl: 'image_url', status: 'status', reason: 'reason', termsVersion: 'terms_version', reviewSince: 'review_since' };
+  const cardFrom = (r) => {
+    if (!r) return null;
+    const c = { walletId: r.wallet_id, updatedAt: r.updated_at };
+    for (const [k, col] of Object.entries(CARD_COLS)) c[k] = r[col];
+    return c;
+  };
+  const attemptFrom = (r) =>
+    r && {
+      id: r.id,
+      walletId: r.wallet_id,
+      region: r.region,
+      roundId: r.round_id === null ? null : Number(r.round_id),
+      seed: r.seed,
+      status: r.status,
+      paidCoins: r.paid_coins,
+      ipHash: r.ip_hash,
+      deviceHash: r.device_hash,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+      moves: r.moves,
+      durationMs: r.duration_ms,
+    };
+
   const getBid = async (id) => fromRow(check(await db.from('bids').select('*').eq('id', id).maybeSingle()));
   // Two FKs point at bids (bid_id, deposed_by), so name the one we join on.
-  const LEGEND_SELECT = '*, bid:bids!throne_legends_bid_id_fkey(clicks, views, removed_at)';
+  const LEGEND_SELECT = '*, bid:bids!throne_legends_bid_id_fkey(clicks, views, removed_at, score_ms)';
 
   return {
     kind: 'supabase',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null, scoreMs = null, walletId = null, coins = 0 }) {
       const row = check(
         await db
           .from('bids')
@@ -121,6 +170,9 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
             target_url: targetUrl,
             terms_version: termsVersion,
             terms_accepted_at: termsVersion ? new Date().toISOString() : null,
+            score_ms: scoreMs,
+            wallet_id: walletId,
+            coins,
           })
           .select()
           .single(),
@@ -231,6 +283,180 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     // Paid ads that were not placed and still need their money back.
     async listRefundsOwed(beforeIso) {
       return check(await db.from('bids').select('*').in('status', ['outbid', 'void']).not('payment_ref', 'is', null).lte('created_at', beforeIso).limit(100)).map(fromRow);
+    },
+
+    // --- Ads Game: wallets and coins (see apply_coins & co. in schema.sql) ---
+    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null }) {
+      return walletFrom(
+        check(
+          await db
+            .from('wallets')
+            .insert({ region, token_hash: tokenHash, referral_code: referralCode, referred_by: referredBy, created_ip_hash: ipHash, created_device_hash: deviceHash })
+            .select()
+            .single(),
+        ),
+      );
+    },
+    async getWalletByHash(tokenHash) {
+      return walletFrom(check(await db.from('wallets').select('*').eq('token_hash', tokenHash).maybeSingle()));
+    },
+    async getWallet(id) {
+      return walletFrom(check(await db.from('wallets').select('*').eq('id', id).maybeSingle()));
+    },
+    async getWalletByReferral(code) {
+      return walletFrom(check(await db.from('wallets').select('*').eq('referral_code', code).maybeSingle()));
+    },
+    async countWalletsByIp(ipHash, sinceIso, deviceHash = null) {
+      let q = db.from('wallets').select('id', { count: 'exact', head: true }).gte('created_at', sinceIso);
+      q = deviceHash ? q.or(`created_ip_hash.eq.${ipHash},created_device_hash.eq.${deviceHash}`) : q.eq('created_ip_hash', ipHash);
+      const { count, error } = await q;
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async countWalletsByDevice(deviceHash, sinceIso) {
+      const { count, error } = await db.from('wallets').select('id', { count: 'exact', head: true }).eq('created_device_hash', deviceHash).gte('created_at', sinceIso);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async listReferrals(walletId) {
+      const rows = check(await db.from('wallets').select('id, player_name, created_at, referral_paid, banned').eq('referred_by', walletId).order('created_at', { ascending: false }).limit(1000));
+      return rows.map((w) => ({ id: w.id, playerName: w.player_name, createdAt: w.created_at, referralPaid: w.referral_paid, banned: w.banned }));
+    },
+    async searchWallets(q, limit = 50) {
+      const needle = (q ?? '').trim();
+      let query = db.from('wallets').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (/^[0-9a-f-]{36}$/i.test(needle)) query = query.eq('id', needle);
+      else if (/^[A-Z0-9]{8}$/i.test(needle)) query = query.or(`referral_code.eq.${needle.toUpperCase()},player_name.ilike.%${needle}%`);
+      else if (needle) query = query.ilike('player_name', `%${needle.replace(/[%_\\,()]/g, '')}%`);
+      return check(await query).map(walletFrom);
+    },
+    async listAttemptsAdmin({ region = null, walletId = null, status = null, limit = 100 }) {
+      let q = db.from('game_attempts').select('*, wallet:wallets(player_name)').order('started_at', { ascending: false }).limit(limit);
+      if (region) q = q.eq('region', region);
+      if (walletId) q = q.eq('wallet_id', walletId);
+      if (status) q = q.eq('status', status);
+      return check(await q).map((r) => ({ ...attemptFrom(r), playerName: r.wallet?.player_name ?? null }));
+    },
+    async listCoinOrders({ walletId = null, limit = 100 }) {
+      let q = db.from('coin_orders').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (walletId) q = q.eq('wallet_id', walletId);
+      return check(await q).map(orderFrom);
+    },
+    async purgeAttemptHashes(beforeIso) {
+      check(await db.from('game_attempts').update({ ip_hash: null, device_hash: null }).lt('started_at', beforeIso).not('ip_hash', 'is', null));
+    },
+    async countReferrals(walletId) {
+      const { count, error } = await db.from('wallets').select('id', { count: 'exact', head: true }).eq('referred_by', walletId).eq('referral_paid', true);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async setWalletFields(id, fields) {
+      const row = {};
+      if ('playerName' in fields) row.player_name = fields.playerName;
+      if ('referralPaid' in fields) row.referral_paid = fields.referralPaid;
+      if ('tokenHash' in fields) row.token_hash = fields.tokenHash;
+      if ('banned' in fields) row.banned = fields.banned;
+      if ('banReason' in fields) row.ban_reason = fields.banReason;
+      if ('backedUpAt' in fields) row.backed_up_at = fields.backedUpAt;
+      check(await db.from('wallets').update(row).eq('id', id));
+    },
+    async applyCoins(walletId, delta, reason, ref = null) {
+      return Number(check(await db.rpc('apply_coins', { p_wallet: walletId, p_delta: delta, p_reason: reason, p_ref: ref })));
+    },
+    async claimDaily(walletId, coins) {
+      return Number(check(await db.rpc('claim_daily', { p_wallet: walletId, p_coins: coins })));
+    },
+    async listLedger(walletId, limit) {
+      const rows = check(await db.from('coin_ledger').select('*').eq('wallet_id', walletId).order('id', { ascending: false }).limit(limit));
+      return rows.map((l) => ({ walletId: l.wallet_id, delta: l.delta, reason: l.reason, ref: l.ref, balanceAfter: Number(l.balance_after), at: l.at }));
+    },
+    async createCoinOrder({ walletId, region, pack, coins, amountCents }) {
+      return orderFrom(check(await db.from('coin_orders').insert({ wallet_id: walletId, region, pack, coins, amount_cents: amountCents }).select().single()));
+    },
+    async getCoinOrder(id) {
+      return orderFrom(check(await db.from('coin_orders').select('*').eq('id', id).maybeSingle()));
+    },
+    async payCoinOrder(id, paymentRef) {
+      return check(await db.rpc('pay_coin_order', { p_order: id, p_payment_ref: paymentRef }));
+    },
+    async upsertCard(walletId, card) {
+      const row = { wallet_id: walletId, updated_at: new Date().toISOString() };
+      for (const [k, col] of Object.entries(CARD_COLS)) if (k in card) row[col] = card[k];
+      return cardFrom(check(await db.from('ad_cards').upsert(row).select().single()));
+    },
+    async getCard(walletId) {
+      return cardFrom(check(await db.from('ad_cards').select('*').eq('wallet_id', walletId).maybeSingle()));
+    },
+    async listCardReviews() {
+      return check(await db.from('ad_cards').select('*').eq('status', 'review').order('review_since')).map(cardFrom);
+    },
+    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null }) {
+      return attemptFrom(
+        check(
+          await db
+            .from('game_attempts')
+            .insert({ wallet_id: walletId, region, round_id: roundId, seed, paid_coins: paidCoins, ip_hash: ipHash, device_hash: deviceHash })
+            .select()
+            .single(),
+        ),
+      );
+    },
+    async getAttempt(id) {
+      return attemptFrom(check(await db.from('game_attempts').select('*').eq('id', id).maybeSingle()));
+    },
+    // Only a 'started' attempt can be finished, once (the status filter makes
+    // two simultaneous finishes race safely).
+    async finishAttempt(id, fields) {
+      const row = {};
+      if ('status' in fields) row.status = fields.status;
+      if ('finishedAt' in fields) row.finished_at = fields.finishedAt;
+      if ('moves' in fields) row.moves = fields.moves;
+      if ('durationMs' in fields) row.duration_ms = fields.durationMs;
+      return check(await db.from('game_attempts').update(row).eq('id', id).eq('status', 'started').select('id')).length > 0;
+    },
+    async countAttempts({ walletId = null, ipHash = null, deviceHash = null, sinceIso, paid = null }) {
+      let q = db.from('game_attempts').select('id', { count: 'exact', head: true }).gte('started_at', sinceIso);
+      if (walletId) q = q.eq('wallet_id', walletId);
+      if (ipHash) q = q.eq('ip_hash', ipHash);
+      if (deviceHash) q = q.eq('device_hash', deviceHash);
+      if (paid === true) q = q.gt('paid_coins', 0);
+      if (paid === false) q = q.eq('paid_coins', 0);
+      const { count, error } = await q;
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, limit = 10 }) {
+      const ors = [];
+      if (walletId) ors.push(`wallet_id.eq.${walletId}`);
+      if (ipHash) ors.push(`ip_hash.eq.${ipHash}`);
+      if (deviceHash) ors.push(`device_hash.eq.${deviceHash}`);
+      if (!ors.length) return [];
+      return check(await db.from('game_attempts').select('*').or(ors.join(',')).order('started_at', { ascending: false }).limit(limit)).map(attemptFrom);
+    },
+    async voidAttempt(id) {
+      check(await db.from('game_attempts').update({ status: 'failed' }).eq('id', id));
+    },
+    async countSolves(walletId) {
+      const { count, error } = await db.from('game_attempts').select('id', { count: 'exact', head: true }).eq('wallet_id', walletId).eq('status', 'solved');
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+    async walletRecords(walletId) {
+      const all = check(await db.from('game_attempts').select('status, duration_ms').eq('wallet_id', walletId).limit(5000));
+      const solved = all.filter((a) => a.status === 'solved');
+      const { count } = await db.from('bids').select('id', { count: 'exact', head: true }).eq('wallet_id', walletId).not('score_ms', 'is', null).eq('status', 'won');
+      return { games: all.length, solves: solved.length, bestMs: solved.length ? Math.min(...solved.map((a) => a.duration_ms)) : null, reigns: count ?? 0 };
+    },
+    async gameLeaderboard(region, roundId, limit) {
+      const rows = check(await db.rpc('game_leaderboard', { p_region: region, p_round: roundId, p_limit: limit }));
+      return rows.map((r) => ({ walletId: r.wallet_id, playerName: r.player_name, bestMs: r.best_ms, solves: Number(r.solves) }));
+    },
+    async gameStats(region, roundId) {
+      const rows = check(await db.from('game_attempts').select('wallet_id, status').eq('region', region).eq('round_id', roundId).limit(20000));
+      return { games: rows.length, solves: rows.filter((r) => r.status === 'solved').length, players: new Set(rows.map((r) => r.wallet_id)).size };
+    },
+    async setShield(bidId, untilIso) {
+      check(await db.from('bids').update({ shield_ends_at: untilIso }).eq('id', bidId));
     },
 
     async videoUsage(url) {
@@ -358,7 +584,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       const rows = check(
         await db
           .from('crown_rounds')
-          .select('id, closed_at, takeovers, bid:bids!crown_rounds_winner_bid_id_fkey(id, name, tagline, image_url, amount_cents, removed_at)')
+          .select('id, closed_at, takeovers, bid:bids!crown_rounds_winner_bid_id_fkey(id, name, tagline, image_url, amount_cents, removed_at, score_ms)')
           .eq('region', region)
           .not('winner_bid_id', 'is', null)
           .order('closed_at', { ascending: false })
@@ -373,6 +599,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
         tagline: r.bid.tagline,
         imageUrl: r.bid.image_url,
         amountCents: r.bid.amount_cents,
+        scoreMs: r.bid.score_ms ?? null,
         removedAt: r.bid.removed_at,
       }));
     },
@@ -490,6 +717,10 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
           relegations: Number(r.relegations),
           estFeesCents: Number(r.est_fees_cents),
           refundedCents: Number(r.refunded_cents),
+          coinPacks: Number(r.coin_packs ?? 0),
+          coinPacksCents: Number(r.coin_packs_cents ?? 0),
+          coinPacksFeesCents: Number(r.coin_packs_fees_cents ?? 0),
+          coinAds: Number(r.coin_ads ?? 0),
         };
       }
       return { regions, stalePending: Number(f.stale_pending), hype: f.hype ?? {} };

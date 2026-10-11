@@ -1,7 +1,8 @@
 # Project Throne
 
-A live ad billboard. Anyone can take the big board by paying more than the current ad, or book a smaller board for a fixed time.
-No signup: upload, link, pay, and you're live on every screen instantly. This is an **ads product**: there are no wallets, credits, dividends or payouts.
+A live ad billboard. The big board (the Throne) is won in a **free daily 3D puzzle race**: the fastest time puts its ad on every screen until someone beats it. The smaller boards are booked for a fixed time, paid with **coins** or money.
+No signup. This is an **ads product**: coins are play money with no cash value, and there are **no cash-outs, dividends or payouts** of any kind.
+(`THRONE_MODE=auction` switches the Throne back to paid bids.)
 
 Two editions run side by side from one codebase and one database:
 
@@ -11,7 +12,7 @@ Two editions run side by side from one codebase and one database:
 | **Nigeria** (`ng`) | NGN | **Paystack**: card, bank transfer, USSD | Visitors from Nigeria (Cloudflare's `CF-IPCountry`) |
 
 Each edition has its own throne, boards, King of the Day, archive, leaderboard and revenue. Amounts are never compared across currencies.
-Visitors can switch with the 🌍 $ / 🇳🇬 ₦ toggle in the header, and the choice is remembered.
+The edition is picked by location only (no switch); a `?region=` link overrides it for one page view (testing/support).
 
 ## Run it locally (no API keys needed)
 
@@ -103,14 +104,24 @@ The Nigeria edition has a language picker: English, **Nigerian Pidgin, Yorùbá,
 - **Light/dark:** light by default; dark only when the visitor picks it.
 - **Cookie notice:** small. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
 
+## The Ads Game (the Throne Race)
+- **Wallet, no signup.** `POST /api/wallet` makes a wallet; the browser keeps a 256-bit key (`X-Wallet` header) that is also the **backup code**. The server stores only its SHA-256. Restoring = entering the code on any browser/PC (`POST /api/wallet/restore`). The header shows coins and a **Saved / Back up** badge on every page.
+- **Coins** (`wallets`, `coin_ledger`): welcome, daily (20 h), takeover, King of the Day, invites, coin packs (`coin_orders`, Paystack/Flutterwave, same webhooks as ads). Spent on extra tries, the Crown Shield and coin bookings (`POST /api/bookings/coins`). No cash value, never paid out. Every movement is a ledger row with a unique `(wallet, reason, ref)` so nothing is ever credited twice; balances can't go negative (`apply_coins()`).
+- **The race** (`backend/src/arcade.js`, `services/puzzle.js`): each try gets a server-made 15-puzzle in a fixed difficulty band; the browser sends its move list; the server replays it and times it. A winning time creates a Throne entry with `score_ms`, settled by the same locked `settle_bid()` (fastest wins; 10% faster during a Crown Shield; any time beats yesterday's king).
+- **Ad card**: what the Throne shows for a winner; screened like an ad; held for review in Nigeria (ARCON) and auto-approved after the hold.
+- **Invites** (`/invite`): coins for both once the friend plays (not from the same device/network), a free Market stall day every 5 such friends, and 10% of the coins they spend on ads.
+- **3D**: `Puzzle3D.jsx` (three.js, lazy-loaded, flat fallback without WebGL). The browser keeps the moves of an unfinished game so a reload resumes it.
+- **Fair play**: see SECURITY.md §10.
+
 ## Practice mode (`/practice`)
-A private in-browser simulation with play money ($500 or ₦200,000) and computer rivals. It sends nothing to the server.
-Bots exist **only** here and are labelled. Never add simulated bidders to the real throne: that's shill bidding.
+The same 3D puzzle, unranked and unlimited, with boards made in the browser. It sends nothing to the server.
+Never add simulated players to the real race.
 
 ## History of Kings (`/kings`)
 A Postgres trigger (`archive_deposed_king`) snapshots every deposed ad into `throne_legends` per edition: price, reign, who toppled them, and whether they survived the shield.
 
 ## Admin (`/admin`)
+- **Game & wallets** tab: ad-card review queue (approve/reject), game results (flagged too-fast solves, void a result = it leaves the leaderboard and ends that reign), wallet search and full detail (ledger, games, orders, card, invites), adjust coins with a reason, ban/unban, reset a player name, coin pack orders. Every action goes to the admin log.
 Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign in at `/admin`. Tabs: Treasury, Moderation, **Video review**, **God mode**.
 - **God mode:** search every ad; edit its words or link, end a reign or booking now, take it down or restore it, refund it, and pause new ads per edition. Every action goes to an activity log with a before-snapshot; edits, endings (unless someone has taken the throne since), takedowns, restores and pauses have **Undo**. Refunds and permanent media deletion are irreversible and need a reason and an explicit confirmation.
 - **Treasury:** one block per edition, in its own currency: revenue (throne / boards / map add-ons), estimated processor fees (Paystack: 1.5% + ₦100 over ₦2,500, capped at ₦2,000; Stripe: 30¢ + 2.9%), refunds, and the live processor balance.

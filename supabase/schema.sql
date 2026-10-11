@@ -19,7 +19,7 @@ create table if not exists bids (
   board          text not null default 'throne' check (board in ('throne', 'b2', 'b3', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12')),
   status         text not null default 'pending'
                  check (status in ('pending', 'won', 'outbid', 'void', 'refunded')),
-  amount_cents   integer not null check (amount_cents > 0),
+  amount_cents   integer not null check (amount_cents >= 0),
   -- Throne only.
   shield_seconds integer not null default 0 check (shield_seconds >= 0),
   shield_ends_at timestamptz,
@@ -151,6 +151,200 @@ alter table bids add constraint bids_status_check check (status in ('pending', '
 -- Political ads are not allowed: visitors can report them.
 alter table reports drop constraint if exists reports_reason_check;
 alter table reports add constraint reports_reason_check check (reason in ('scam', 'adult', 'hate', 'violence', 'copyright', 'impersonation', 'political', 'other'));
+
+-- ============================================================
+-- The Ads Game: coins (no cash value, no cash-out), wallets with no signup,
+-- ad cards, and the Throne puzzle race.
+-- ============================================================
+
+-- A player's wallet. The browser keeps a random secret code; we store only
+-- its SHA-256. Balance can never go below zero.
+create table if not exists wallets (
+  id               uuid primary key default gen_random_uuid(),
+  token_hash       text not null unique,
+  balance          bigint not null default 0 check (balance >= 0),
+  player_name      text check (char_length(player_name) between 2 and 24),
+  referral_code    text not null unique,
+  referred_by      uuid references wallets (id),
+  referral_paid    boolean not null default false,
+  created_ip_hash  text,
+  last_daily_at    timestamptz,
+  created_at       timestamptz not null default now()
+);
+create index if not exists wallets_ip_idx on wallets (created_ip_hash, created_at);
+alter table wallets enable row level security;
+
+-- Every coin in and out. (wallet, reason, ref) is unique when ref is set, so
+-- a retried payment webhook or reward can never credit twice.
+create table if not exists coin_ledger (
+  id             bigint generated always as identity primary key,
+  wallet_id      uuid not null references wallets (id),
+  delta          integer not null,
+  reason         text not null,
+  ref            text,
+  balance_after  bigint not null,
+  at             timestamptz not null default now()
+);
+create unique index if not exists coin_ledger_once_idx on coin_ledger (wallet_id, reason, ref) where ref is not null;
+create index if not exists coin_ledger_wallet_idx on coin_ledger (wallet_id, at desc);
+alter table coin_ledger enable row level security;
+
+-- Coin packs bought with real money (Paystack / Flutterwave). Paid once.
+create table if not exists coin_orders (
+  id            uuid primary key default gen_random_uuid(),
+  wallet_id     uuid not null references wallets (id),
+  region        text not null check (region in ('global', 'ng')),
+  pack          text not null,
+  coins         integer not null check (coins > 0),
+  amount_cents  integer not null check (amount_cents > 0),
+  status        text not null default 'pending' check (status in ('pending', 'paid')),
+  payment_ref   text,
+  created_at    timestamptz not null default now(),
+  paid_at       timestamptz
+);
+alter table coin_orders enable row level security;
+
+-- The ad a player shows on the Throne when they win. Screened like any ad;
+-- in the Nigeria edition it waits in the review queue (ARCON) first.
+create table if not exists ad_cards (
+  wallet_id     uuid primary key references wallets (id),
+  region        text not null check (region in ('global', 'ng')),
+  name          text not null check (char_length(name) between 1 and 40),
+  tagline       text check (char_length(tagline) <= 100),
+  target_url    text not null,
+  image_url     text,
+  status        text not null default 'review' check (status in ('review', 'approved', 'rejected')),
+  reason        text,
+  terms_version text,
+  review_since  timestamptz,
+  updated_at    timestamptz not null default now()
+);
+alter table ad_cards enable row level security;
+
+-- One row per puzzle attempt. The seed (and so the board) is server-side;
+-- times are measured by the server.
+create table if not exists game_attempts (
+  id           uuid primary key default gen_random_uuid(),
+  wallet_id    uuid not null references wallets (id),
+  region       text not null check (region in ('global', 'ng')),
+  round_id     bigint,
+  seed         text not null,
+  status       text not null default 'started' check (status in ('started', 'solved', 'failed', 'too_fast')),
+  paid_coins   integer not null default 0,
+  ip_hash      text,
+  started_at   timestamptz not null default now(),
+  finished_at  timestamptz,
+  moves        integer,
+  duration_ms  integer
+);
+create index if not exists game_attempts_board_idx on game_attempts (region, round_id, duration_ms) where status = 'solved';
+create index if not exists game_attempts_wallet_idx on game_attempts (wallet_id, started_at desc);
+create index if not exists game_attempts_ip_idx on game_attempts (ip_hash, started_at desc);
+alter table game_attempts enable row level security;
+
+-- Throne entries won in the game carry a time instead of a price (amount 0).
+alter table bids drop constraint if exists bids_amount_cents_check;
+alter table bids add constraint bids_amount_cents_check check (amount_cents >= 0);
+alter table bids add column if not exists score_ms integer;
+alter table bids add column if not exists game_round_id bigint;
+alter table bids add column if not exists wallet_id uuid references wallets (id);
+
+-- Anti-farming: a hashed device id (from the browser, salted daily on the
+-- server) so caps hold across fresh wallets, private windows and restores.
+alter table wallets add column if not exists created_device_hash text;
+alter table game_attempts add column if not exists device_hash text;
+create index if not exists game_attempts_device_idx on game_attempts (device_hash, started_at desc);
+create index if not exists wallets_device_idx on wallets (created_device_hash, created_at);
+-- Moderation and the "Saved" badge.
+alter table wallets add column if not exists banned boolean not null default false;
+alter table wallets add column if not exists ban_reason text;
+alter table wallets add column if not exists backed_up_at timestamptz;
+create index if not exists wallets_referred_idx on wallets (referred_by);
+-- A wallet belongs to the edition it was made in (coins are priced per
+-- edition, so they never cross over).
+alter table wallets add column if not exists region text not null default 'global' check (region in ('global', 'ng'));
+-- Ads paid with coins: amount_cents stays 0 (no money), the coins are here.
+alter table bids add column if not exists coins integer not null default 0;
+
+-- Adds or spends coins atomically. Returns the new balance; raises
+-- 'insufficient coins' rather than going below zero. A repeated
+-- (wallet, reason, ref) is a no-op that returns the current balance.
+create or replace function apply_coins(p_wallet uuid, p_delta integer, p_reason text, p_ref text) returns bigint
+language plpgsql
+as $$
+declare
+  v_balance bigint;
+begin
+  select balance into v_balance from wallets where id = p_wallet for update;
+  if not found then
+    raise exception 'unknown wallet';
+  end if;
+  if p_ref is not null and exists (select 1 from coin_ledger where wallet_id = p_wallet and reason = p_reason and ref = p_ref) then
+    return v_balance;
+  end if;
+  if v_balance + p_delta < 0 then
+    raise exception 'insufficient coins';
+  end if;
+  update wallets set balance = balance + p_delta where id = p_wallet returning balance into v_balance;
+  insert into coin_ledger (wallet_id, delta, reason, ref, balance_after) values (p_wallet, p_delta, p_reason, p_ref, v_balance);
+  return v_balance;
+end;
+$$;
+
+-- The daily bonus: at most once every 20 hours.
+create or replace function claim_daily(p_wallet uuid, p_coins integer) returns bigint
+language plpgsql
+as $$
+declare
+  v_last timestamptz;
+begin
+  select last_daily_at into v_last from wallets where id = p_wallet for update;
+  if v_last is not null and v_last > now() - interval '20 hours' then
+    return -1;
+  end if;
+  update wallets set last_daily_at = now() where id = p_wallet;
+  return apply_coins(p_wallet, p_coins, 'daily', to_char(now() at time zone 'utc', 'YYYY-MM-DD'));
+end;
+$$;
+
+-- Marks a coin order paid and credits it, once.
+create or replace function pay_coin_order(p_order uuid, p_payment_ref text) returns json
+language plpgsql
+as $$
+declare
+  v_order coin_orders%rowtype;
+  v_balance bigint;
+begin
+  select * into v_order from coin_orders where id = p_order for update;
+  if not found then
+    return json_build_object('status', 'missing');
+  end if;
+  if v_order.status = 'paid' then
+    return json_build_object('status', 'duplicate');
+  end if;
+  update coin_orders set status = 'paid', payment_ref = p_payment_ref, paid_at = now() where id = p_order;
+  v_balance := apply_coins(v_order.wallet_id, v_order.coins, 'purchase', p_order::text);
+  return json_build_object('status', 'paid', 'balance', v_balance, 'coins', v_order.coins);
+end;
+$$;
+
+-- Today's leaderboard: each player's best solve in this round.
+create or replace function game_leaderboard(p_region text, p_round bigint, p_limit integer) returns table (wallet_id uuid, player_name text, best_ms integer, solves bigint)
+language sql
+stable
+as $$
+  select a.wallet_id, w.player_name, min(a.duration_ms)::integer, count(*)
+    from game_attempts a join wallets w on w.id = a.wallet_id
+   where a.region = p_region and a.round_id = p_round and a.status = 'solved'
+   group by a.wallet_id, w.player_name
+   order by min(a.duration_ms)
+   limit p_limit;
+$$;
+
+revoke execute on function apply_coins(uuid, integer, text, text) from public, anon, authenticated;
+revoke execute on function claim_daily(uuid, integer) from public, anon, authenticated;
+revoke execute on function pay_coin_order(uuid, text) from public, anon, authenticated;
+revoke execute on function game_leaderboard(text, bigint, integer) from public, anon, authenticated;
 
 -- Upgrade path for databases created before the Market stalls existed.
 alter table bids drop constraint if exists bids_board_check;
@@ -405,7 +599,24 @@ begin
   v_round_id := (v_tick->'round'->>'id')::bigint;
   select * into v_throne from throne where region = v_bid.region;
 
-  if v_throne.bid_id is null then
+  -- Game entries (score_ms set): the fastest time today wins. A king from an
+  -- earlier day is beaten by any time today. During a Crown Shield the
+  -- challenger must be 10% faster.
+  if v_bid.score_ms is not null then
+    if v_throne.bid_id is not null then
+      select * into v_king from bids where id = v_throne.bid_id;
+      -- Time to beat (10% faster while the king's Crown Shield is up).
+      v_step := v_king.score_ms;
+      if now() < v_king.shield_ends_at then
+        v_step := floor(v_king.score_ms * 0.9)::integer;
+      end if;
+      if v_king.score_ms is not null and v_king.game_round_id = v_round_id and v_bid.score_ms >= v_step then
+        update bids set status = 'outbid', settled_at = now() where id = p_bid_id;
+        return json_build_object('status', 'outbid', 'crowned', v_tick->'crowned', 'retired', v_tick->'retired');
+      end if;
+    end if;
+    v_min := 0;
+  elsif v_throne.bid_id is null then
     v_min := (p_rules->>'startingPriceCents')::integer;
   else
     select * into v_king from bids where id = v_throne.bid_id;
@@ -426,6 +637,7 @@ begin
      set status = 'won',
          payment_ref = p_payment_ref,
          settled_at = now(),
+         game_round_id = case when score_ms is not null then v_round_id else game_round_id end,
          shield_ends_at = now() + make_interval(secs => shield_seconds)
    where id = p_bid_id;
 
@@ -619,7 +831,12 @@ as $$
         'relegations',        (select count(*) from bids where region = r.region and status = 'won' and relegated_from is not null),
         'est_fees_cents',     (select coalesce(sum(est_fee(region, amount_cents + addon_cents)), 0)
                                  from bids where region = r.region and status in ('won', 'refunded') and payment_ref not like 'demo_%'),
-        'refunded_cents',     (select coalesce(sum(amount_cents + addon_cents), 0) from bids where region = r.region and status = 'refunded')
+        'refunded_cents',     (select coalesce(sum(amount_cents + addon_cents), 0) from bids where region = r.region and status = 'refunded'),
+        'coin_packs',         (select count(*) from coin_orders where region = r.region and status = 'paid'),
+        'coin_packs_cents',   (select coalesce(sum(amount_cents), 0) from coin_orders where region = r.region and status = 'paid'),
+        'coin_packs_fees_cents', (select coalesce(sum(est_fee(region, amount_cents)), 0) from coin_orders
+                                    where region = r.region and status = 'paid' and payment_ref not like 'demo_%'),
+        'coin_ads',           (select count(*) from bids where region = r.region and status = 'won' and coins > 0)
       ))
       from throne r
     ),

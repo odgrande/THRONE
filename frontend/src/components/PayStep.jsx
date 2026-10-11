@@ -21,7 +21,10 @@ async function waitForSettlement(bidId, tries = 60, everyMs = 500) {
 // The payment step shared by throne bids, board bookings and relegations.
 // `checkout` is the server's reply to creating the ad; onDone receives the
 // settled status ({ status, startsAt, endsAt }).
-export default function PayStep({ checkout, intro, onDone, onCancel }) {
+// Coin packs reuse it with their own demoPay / waitFor (an order, not an ad).
+export default function PayStep({ checkout, intro, onDone, onCancel, demoPay, waitFor, nonRefundable }) {
+  const demo = demoPay ?? (() => api.demoPay(checkout.bidId));
+  const wait = waitFor ?? ((tries, everyMs) => waitForSettlement(checkout.bidId, tries, everyMs));
   const [settling, setSettling] = useState(false);
   const [error, setError] = useState(null);
   const price = formatMoney(checkout.amountCents, checkout.region);
@@ -46,7 +49,7 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
         </p>
       ) : checkout.paymentsMode === 'demo' ? (
         <>
-          <button onClick={() => finish(() => api.demoPay(checkout.bidId))} className="btn w-full bg-onyx text-white hover:bg-onyx/90">
+          <button onClick={() => finish(demo)} className="btn w-full bg-onyx text-white hover:bg-onyx/90">
             Pay {price} (demo)
           </button>
           <p className="text-sm text-ink/60">Test site: payments are simulated. No money moves.</p>
@@ -56,22 +59,22 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
           authorizationUrl={checkout.authorizationUrl}
           label={t('pay.button', { amount: price })}
           // The buyer pays in another tab: keep checking for up to 15 minutes.
-          onPaid={() => finish(() => waitForSettlement(checkout.bidId, 300, 3000))}
+          onPaid={() => finish(() => wait(300, 3000))}
         />
       ) : checkout.paymentsMode === 'paystack' ? (
         <PaystackCheckout
           accessCode={checkout.accessCode}
           authorizationUrl={checkout.authorizationUrl}
           label={t('pay.button', { amount: price })}
-          onPaid={() => finish(() => waitForSettlement(checkout.bidId))}
+          onPaid={() => finish(() => wait())}
         />
       ) : (
         <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" strokeWidth={3} />}>
-          <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
+          <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => wait())} />
         </Suspense>
       )}
       <p className="text-center text-xs font-bold">
-        {t('pay.nonRefundable')}{' '}
+        {nonRefundable ?? t('pay.nonRefundable')}{' '}
         <a href="/legal#terms" target="_blank" rel="noopener" className="underline hover:text-bh-red">
           {t('pay.refundRules')}
         </a>

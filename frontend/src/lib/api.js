@@ -58,6 +58,9 @@ export const api = {
   // The live feed counts each viewer in the edition they watch (for ad reach).
   eventsUrl: () => `${API_URL}/api/events${requestRegion() ? `?region=${requestRegion()}` : ''}`,
   myAds: (ads) => request('/api/my-ads', { method: 'POST', body: JSON.stringify({ ads }) }),
+  // Admin: the Ads Game (wallets, coins, bans, cards, games, orders).
+  adminGame: (token, path, body) =>
+    request(`/api/admin/game${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}` }, ...(body ? { body: JSON.stringify(body) } : {}) }),
 };
 
 // Money is in minor units (cents / kobo). Naira shows whole amounts (₦2,500);
@@ -107,6 +110,9 @@ export function amountToText(cents, region) {
   return regionInfo(region).currency === 'NGN' ? String(Math.ceil(cents / 100)) : (cents / 100).toFixed(2);
 }
 export const textToCents = (text) => Math.round(Number(text) * 100) || 0;
+
+// What an ad "paid": a winning time for Ads Game kings, money otherwise.
+export const adValue = (ad) => (ad?.scoreMs != null ? `⏱ ${(ad.scoreMs / 1000).toFixed(2)}s` : formatMoney(ad?.amountCents ?? 0));
 
 // Compact money for big totals: $1,240 / $12.4k / ₦1.2M.
 export function formatMoneyShort(cents, region) {

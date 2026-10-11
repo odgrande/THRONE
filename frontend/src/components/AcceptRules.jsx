@@ -12,12 +12,12 @@ export const termsVersion = () => version;
 // What the buyer is getting into, in plain words, plus a required checkbox.
 // The server refuses any ad without acceptance of the current version and
 // saves the version and time with the ad.
-// kind: 'throne' | 'booking' | 'relegation'
+// kind: 'throne' | 'booking' | 'relegation' | 'game' (the player's ad card)
 export default function AcceptRules({ kind, checked, onChange, idPrefix = 'rules' }) {
   const points = [
     t('rules.accept.age'),
     t('rules.accept.policy'),
-    kind === 'throne' ? t('rules.accept.throne') : t('rules.accept.booking'),
+    ...(kind === 'game' ? [t('rules.accept.game'), t('rules.accept.fair')] : [kind === 'throne' ? t('rules.accept.throne') : t('rules.accept.booking')]),
     activeRegion() === 'ng' ? t('rules.accept.reviewNg') : t('rules.accept.reviewVideo'),
     t('rules.accept.results'),
     t('rules.accept.removal'),
@@ -27,7 +27,7 @@ export default function AcceptRules({ kind, checked, onChange, idPrefix = 'rules
       <p className="label flex items-center gap-1.5 border-b-2 border-ink bg-bh-yellow px-3 py-2 text-ink">
         <ShieldCheck className="h-4 w-4" strokeWidth={3} /> {t('rules.accept.title')}
       </p>
-      <p className="border-b-2 border-ink bg-bh-red px-3 py-2 text-xs font-black uppercase tracking-wide text-white">{t('rules.accept.nonRefundable')}</p>
+      <p className="border-b-2 border-ink bg-bh-red px-3 py-2 text-xs font-black uppercase tracking-wide text-white">{kind === 'game' ? t('rules.accept.gameBanner') : t('rules.accept.nonRefundable')}</p>
       <ul className="space-y-1 px-3 py-2.5 text-xs font-medium leading-snug">
         {points.map((p) => (
           <li key={p} className="flex gap-2">

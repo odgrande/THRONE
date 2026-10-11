@@ -114,7 +114,25 @@ Write that procedure down before launch.
 | Every purchase requires acceptance of the current rules version; the version and time are stored on the ad | Code: `validateBid()`, `AcceptRules.jsx` |
 | No third-party trackers: Stripe's script is lazy-loaded only for a Stripe checkout; no analytics or ad pixels anywhere (checked by the test suite) | Code: `PayStep.jsx` |
 
+## 10. The Ads Game: coins, wallets and fair play
+
+| Threat | Defence | Where |
+|---|---|---|
+| Stealing a wallet | 256-bit random key; only its SHA-256 is stored; restore attempts limited to 5/min per IP; the key is never in a URL | `arcade.js`, `arcadeRoutes.js` |
+| Minting or double-spending coins | Coins change only in `apply_coins()` (row lock, never below zero, unique `(wallet, reason, ref)`); no public route takes an amount; coin packs credited only after the processor confirms amount + currency (`pay_coin_order()` is idempotent) | `schema.sql`, `server.js` webhooks |
+| Bots / scripts solving the puzzle | Server-dealt shuffle per try (no shared solutions), server replays every move, server clock only, solves faster than `max(6 s, 140 ms × moves)` are not ranked and flagged for admins | `services/puzzle.js`, `arcade.js` |
+| "Reroll until easy" | One open try per wallet; reload resumes the same board with the clock running; unfinished tries count as failed | `arcade.js` |
+| Spamming tries / switching browser, PC or wallet | Reset timer after every try and a longer lock after 3 unfinished/failed tries in a row, checked per wallet **and per device**; daily free tries counted per wallet **and** device **and** network; extra tries cost coins and are capped | `arcade.js` `playStatus()` |
+| Farming welcome coins with new wallets | Welcome coins only for the first 3 wallets per network and 1 per device per day; wallet creation is bot-checked (Turnstile) and limited to 5/min per IP | `arcade.js` `createWallet()` |
+| Self-invites / invite farming | Invites from the inviter's own network or device don't count; rewards only after the friend's first real solve; banned wallets earn nothing | `arcade.js` `qualifyReferral()` |
+| Cross-edition arbitrage | A wallet belongs to the edition it was made in; all its coins are spent there | `wallets.region` |
+| Abusive names / ad cards | Names: whitelist pattern + political filter + AI moderation. Ad cards: same screening as paid ads; Nigeria cards held for review | `arcadeRoutes.js` |
+| Moderation | Admin can ban wallets, adjust coins (with reason), void results (dethrones), reject cards; all logged | `/admin` → Game & wallets |
+| Privacy | Network/device identifiers stored only as salted hashes and erased after 30 days | `purgeAttemptHashes()` |
+
 ## Known gaps before launch
+- Device limits rely on a random id in browser storage plus the network: a determined cheater who clears storage AND changes network can get a few more free tries per day (still capped by cooldowns, coin costs and the bot check). Turn on Turnstile (`TURNSTILE_SECRET_KEY`) before launch.
+- Have counsel check the coin/game terms (no cash value, no cash-out, skill game, invite rewards) for Nigeria (incl. the National Lottery Regulatory Commission's view of prize promotions) and the main Global markets.
 - The legal pages are live. Clauses added on 11 October 2026 (owner, governing law, political ads, data rights, video ads, results disclaimer) should be checked by counsel. Check whether the company's CAC registration number (and registered office) must appear on the site.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).
 - The schema uses `create table if not exists`. Once a live database exists, later changes need real migrations (e.g. Supabase CLI migrations).

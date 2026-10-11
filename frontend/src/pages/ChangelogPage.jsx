@@ -4,6 +4,21 @@ import InfoPage from '../components/InfoPage.jsx';
 // notice; keep it in plain words.
 const RELEASES = [
   {
+    version: '0.7',
+    date: '11 October 2026',
+    title: 'The Throne is now a free game',
+    items: [
+      'Win the big billboard by solving the daily 3D puzzle fastest. Free tries every day, no signup.',
+      'Coins: welcome and daily coins, coins for wins and invites, or coin packs. Coins have no cash value and can’t be cashed out.',
+      'Your wallet lives in your browser with a backup code; the Saved badge shows when it’s safe. The same code opens it on any phone or computer.',
+      'Crown Shield: kings can spend coins so challengers must be 10% faster.',
+      'Book the Court, the Spotlight and the Market with coins or money.',
+      'Invite friends: coins for you both, free ad time, and a share of the coins they spend. New Invite page to follow your friends.',
+      'Fair play built in: server-dealt puzzles and server timing, a reset timer between tries, and daily limits that follow your wallet, device and network.',
+      'Practice is now the same 3D puzzle, unranked and unlimited.',
+    ],
+  },
+  {
     version: '0.6',
     date: '11 October 2026',
     title: 'Clearer, safer, simpler',

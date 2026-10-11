@@ -129,6 +129,11 @@ const effectsOn = () => prefs.effects && ctx && ctx.state === 'running';
 
 // --- Effects, timed to the GSAP animations they accompany ---
 export const sfx = {
+  // A puzzle tile slides.
+  tick() {
+    if (!effectsOn()) return;
+    tone({ freq: 660, to: 520, dur: 0.035, vol: 0.03 });
+  },
   // Every button and link press.
   click() {
     if (!effectsOn()) return;

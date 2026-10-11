@@ -28,6 +28,13 @@ export function createMemoryStore() {
   const reports = [];
   const adminLog = [];
   const contacts = [];
+  // --- Ads Game (mirrors the wallets / coin_ledger / coin_orders / ad_cards /
+  // game_attempts tables and their SQL functions) ---
+  const wallets = new Map(); // id -> wallet
+  const ledger = [];
+  const coinOrders = new Map();
+  const cards = new Map(); // wallet id -> card
+  const attempts = new Map();
   const paused = Object.fromEntries(REGIONS.map((r) => [r, false]));
   const regionState = Object.fromEntries(
     REGIONS.map((r) => [r, { throneBidId: null, takeovers: 0, volumeCents: 0, boardsBookedUntil: Object.fromEntries(BOARD_IDS.map((id) => [id, null])) }]),
@@ -49,6 +56,7 @@ export function createMemoryStore() {
       imageUrl: deposed.imageUrl,
       targetUrl: deposed.targetUrl,
       amountCents: deposed.amountCents,
+      scoreMs: deposed.scoreMs ?? null,
       crownedAt: deposed.settledAt,
       deposedAt: nowIso,
       deposedByName: winner?.name ?? null,
@@ -95,7 +103,7 @@ export function createMemoryStore() {
     kind: 'memory',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null, scoreMs = null, walletId = null, coins = 0 }) {
       stateOf(region);
       const bid = {
         id: randomUUID(),
@@ -118,6 +126,10 @@ export function createMemoryStore() {
         videoUrl,
         termsVersion,
         termsAcceptedAt: termsVersion ? new Date().toISOString() : null,
+        scoreMs,
+        gameRoundId: null,
+        walletId,
+        coins,
         reviewSince: null,
         targetUrl,
         paymentRef: null,
@@ -172,7 +184,18 @@ export function createMemoryStore() {
       const { round, crowned, retired } = tick(bid.region, rules, now);
       const previous = s.throneBidId ? bids.get(s.throneBidId) : null;
 
-      if (bid.amountCents < minNextBidCents(previous, now, rules)) {
+      // Game entries: the fastest time today wins (10% faster during a Crown
+      // Shield); a king from an earlier day is beaten by any time today.
+      if (bid.scoreMs !== null && bid.scoreMs !== undefined) {
+        if (previous && previous.scoreMs != null && previous.gameRoundId === round.id) {
+          const toBeat = now < Date.parse(previous.shieldEndsAt ?? 0) ? Math.floor(previous.scoreMs * 0.9) : previous.scoreMs;
+          if (bid.scoreMs >= toBeat) {
+            bid.status = 'outbid';
+            return { status: 'outbid', bid: { ...bid }, crowned, retired };
+          }
+        }
+        bid.gameRoundId = round.id;
+      } else if (bid.amountCents < minNextBidCents(previous, now, rules)) {
         bid.status = 'outbid';
         return { status: 'outbid', bid: { ...bid }, crowned, retired };
       }
@@ -324,6 +347,7 @@ export function createMemoryStore() {
             tagline: bid.tagline,
             imageUrl: bid.imageUrl,
             amountCents: bid.amountCents,
+            scoreMs: bid.scoreMs ?? null,
             removedAt: bid.removedAt,
           };
         });
@@ -488,6 +512,191 @@ export function createMemoryStore() {
       return [...bids.values()].filter((b) => ['outbid', 'void'].includes(b.status) && b.paymentRef && (b.settledAt ?? b.createdAt) <= beforeIso).map((b) => ({ ...b }));
     },
 
+    // --- Ads Game: wallets and coins ---
+    async createWallet({ region = 'global', tokenHash, referralCode, referredBy = null, ipHash = null, deviceHash = null }) {
+      const w = { id: randomUUID(), region, banned: false, banReason: null, backedUpAt: null, tokenHash, balance: 0, playerName: null, referralCode, referredBy, referralPaid: false, createdIpHash: ipHash, createdDeviceHash: deviceHash, lastDailyAt: null, createdAt: new Date().toISOString() };
+      wallets.set(w.id, w);
+      return { ...w };
+    },
+    async getWalletByHash(tokenHash) {
+      for (const w of wallets.values()) if (w.tokenHash === tokenHash) return { ...w };
+      return null;
+    },
+    async getWallet(id) {
+      const w = wallets.get(id);
+      return w ? { ...w } : null;
+    },
+    async getWalletByReferral(code) {
+      for (const w of wallets.values()) if (w.referralCode === code) return { ...w };
+      return null;
+    },
+    async countWalletsByIp(ipHash, sinceIso, deviceHash = null) {
+      return [...wallets.values()].filter((w) => (w.createdIpHash === ipHash || (deviceHash && w.createdDeviceHash === deviceHash)) && w.createdAt >= sinceIso).length;
+    },
+    async countWalletsByDevice(deviceHash, sinceIso) {
+      return [...wallets.values()].filter((w) => w.createdDeviceHash === deviceHash && w.createdAt >= sinceIso).length;
+    },
+    async listReferrals(walletId) {
+      return [...wallets.values()].filter((w) => w.referredBy === walletId).map((w) => ({ id: w.id, playerName: w.playerName, createdAt: w.createdAt, referralPaid: w.referralPaid, banned: w.banned }));
+    },
+    // Admin: find wallets by id, referral code or player name.
+    async searchWallets(q, limit = 50) {
+      const needle = (q ?? '').trim().toLowerCase();
+      return [...wallets.values()]
+        .filter((w) => !needle || w.id === needle || w.referralCode.toLowerCase() === needle || (w.playerName ?? '').toLowerCase().includes(needle))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .slice(0, limit)
+        .map((w) => ({ ...w }));
+    },
+    async listAttemptsAdmin({ region = null, walletId = null, status = null, limit = 100 }) {
+      return [...attempts.values()]
+        .filter((a) => (!region || a.region === region) && (!walletId || a.walletId === walletId) && (!status || a.status === status))
+        .sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))
+        .slice(0, limit)
+        .map((a) => ({ ...a, playerName: wallets.get(a.walletId)?.playerName ?? null }));
+    },
+    async listCoinOrders({ walletId = null, limit = 100 }) {
+      return [...coinOrders.values()]
+        .filter((o) => !walletId || o.walletId === walletId)
+        .sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1))
+        .slice(0, limit)
+        .map((o) => ({ ...o }));
+    },
+    // Privacy: network/device hashes are only kept for the anti-cheat window.
+    async purgeAttemptHashes(beforeIso) {
+      for (const a of attempts.values()) if (a.startedAt < beforeIso) Object.assign(a, { ipHash: null, deviceHash: null });
+    },
+    async countReferrals(walletId) {
+      return [...wallets.values()].filter((w) => w.referredBy === walletId && w.referralPaid).length;
+    },
+    async setWalletFields(id, fields) {
+      const w = wallets.get(id);
+      if (w) Object.assign(w, fields);
+    },
+    // Mirrors apply_coins(): never below zero; a repeated (reason, ref) is a no-op.
+    async applyCoins(walletId, delta, reason, ref = null) {
+      const w = wallets.get(walletId);
+      if (!w) throw new Error('unknown wallet');
+      if (ref !== null && ledger.some((l) => l.walletId === walletId && l.reason === reason && l.ref === ref)) return w.balance;
+      if (w.balance + delta < 0) throw new Error('insufficient coins');
+      w.balance += delta;
+      ledger.push({ walletId, delta, reason, ref, balanceAfter: w.balance, at: new Date().toISOString() });
+      return w.balance;
+    },
+    async claimDaily(walletId, coins) {
+      const w = wallets.get(walletId);
+      if (w.lastDailyAt && Date.now() - Date.parse(w.lastDailyAt) < 20 * 3600_000) return -1;
+      w.lastDailyAt = new Date().toISOString();
+      return this.applyCoins(walletId, coins, 'daily', w.lastDailyAt.slice(0, 10));
+    },
+    async listLedger(walletId, limit) {
+      return ledger.filter((l) => l.walletId === walletId).slice(-limit).reverse();
+    },
+    // --- Coin packs ---
+    async createCoinOrder({ walletId, region, pack, coins, amountCents }) {
+      const o = { id: randomUUID(), walletId, region, pack, coins, amountCents, status: 'pending', paymentRef: null, createdAt: new Date().toISOString(), paidAt: null };
+      coinOrders.set(o.id, o);
+      return { ...o };
+    },
+    async getCoinOrder(id) {
+      const o = coinOrders.get(id);
+      return o ? { ...o } : null;
+    },
+    async payCoinOrder(id, paymentRef) {
+      const o = coinOrders.get(id);
+      if (!o) return { status: 'missing' };
+      if (o.status === 'paid') return { status: 'duplicate' };
+      Object.assign(o, { status: 'paid', paymentRef, paidAt: new Date().toISOString() });
+      const balance = await this.applyCoins(o.walletId, o.coins, 'purchase', o.id);
+      return { status: 'paid', balance, coins: o.coins };
+    },
+    // --- Ad cards ---
+    async upsertCard(walletId, card) {
+      cards.set(walletId, { walletId, ...cards.get(walletId), ...card, updatedAt: new Date().toISOString() });
+      return { ...cards.get(walletId) };
+    },
+    async getCard(walletId) {
+      const c = cards.get(walletId);
+      return c ? { ...c } : null;
+    },
+    async listCardReviews() {
+      return [...cards.values()].filter((c) => c.status === 'review').map((c) => ({ ...c }));
+    },
+    // --- Game attempts ---
+    async createAttempt({ walletId, region, roundId, seed, paidCoins = 0, ipHash = null, deviceHash = null }) {
+      const a = { id: randomUUID(), walletId, region, roundId, seed, status: 'started', paidCoins, ipHash, deviceHash, startedAt: new Date().toISOString(), finishedAt: null, moves: null, durationMs: null };
+      attempts.set(a.id, a);
+      return { ...a };
+    },
+    async getAttempt(id) {
+      const a = attempts.get(id);
+      return a ? { ...a } : null;
+    },
+    // Only a 'started' attempt can be finished (once).
+    async finishAttempt(id, fields) {
+      const a = attempts.get(id);
+      if (!a || a.status !== 'started') return false;
+      Object.assign(a, fields);
+      return true;
+    },
+    async countAttempts({ walletId = null, ipHash = null, deviceHash = null, sinceIso, paid = null }) {
+      return [...attempts.values()].filter(
+        (a) =>
+          a.startedAt >= sinceIso &&
+          (walletId === null || a.walletId === walletId) &&
+          (ipHash === null || a.ipHash === ipHash) &&
+          (deviceHash === null || a.deviceHash === deviceHash) &&
+          (paid === null || (paid ? a.paidCoins > 0 : a.paidCoins === 0)),
+      ).length;
+    },
+    // Newest attempts first, for one wallet / IP / device (cooldowns).
+    async recentAttempts({ walletId = null, ipHash = null, deviceHash = null, limit = 10 }) {
+      return [...attempts.values()]
+        .filter((a) => (walletId !== null && a.walletId === walletId) || (ipHash !== null && a.ipHash === ipHash) || (deviceHash !== null && a.deviceHash === deviceHash))
+        .sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))
+        .slice(0, limit)
+        .map((a) => ({ ...a }));
+    },
+    async walletRecords(walletId) {
+      const mine = [...attempts.values()].filter((a) => a.walletId === walletId);
+      const solved = mine.filter((a) => a.status === 'solved');
+      return {
+        games: mine.length,
+        solves: solved.length,
+        bestMs: solved.length ? Math.min(...solved.map((a) => a.durationMs)) : null,
+        reigns: [...bids.values()].filter((b) => b.walletId === walletId && b.scoreMs != null && b.status === 'won').length,
+      };
+    },
+    async voidAttempt(id) {
+      const a = attempts.get(id);
+      if (a) a.status = 'failed';
+    },
+    async countSolves(walletId) {
+      return [...attempts.values()].filter((a) => a.walletId === walletId && a.status === 'solved').length;
+    },
+    // Mirrors game_leaderboard(): each player's best solve this round.
+    async gameLeaderboard(region, roundId, limit) {
+      const best = new Map();
+      for (const a of attempts.values()) {
+        if (a.region !== region || a.roundId !== roundId || a.status !== 'solved') continue;
+        const cur = best.get(a.walletId);
+        if (!cur || a.durationMs < cur.bestMs) best.set(a.walletId, { walletId: a.walletId, bestMs: a.durationMs, solves: (cur?.solves ?? 0) + 1 });
+        else cur.solves += 1;
+      }
+      return [...best.values()]
+        .sort((x, y) => x.bestMs - y.bestMs)
+        .slice(0, limit)
+        .map((e) => ({ ...e, playerName: wallets.get(e.walletId)?.playerName ?? null }));
+    },
+    async gameStats(region, roundId) {
+      const today = [...attempts.values()].filter((a) => a.region === region && a.roundId === roundId);
+      return { games: today.length, solves: today.filter((a) => a.status === 'solved').length, players: new Set(today.map((a) => a.walletId)).size };
+    },
+    async setShield(bidId, untilIso) {
+      const b = bids.get(bidId);
+      if (b) b.shieldEndsAt = untilIso;
+    },
+
     async videoUsage(url) {
       const users = [...bids.values()].filter((b) => b.videoUrl === url);
       if (users.some((b) => b.status !== 'pending')) return 'paid';
@@ -543,6 +752,7 @@ export function createMemoryStore() {
     // --- Admin: mirrors admin_financials() in schema.sql (one entry per region,
     // never summed across currencies) ---
     async getFinancials() {
+      const paidPacks = (region) => [...coinOrders.values()].filter((o) => o.region === region && o.status === 'paid');
       const all = [...bids.values()];
       const hourAgo = iso(Date.now() - 3600_000);
       const hype = {};
@@ -566,6 +776,12 @@ export function createMemoryStore() {
             .filter((b) => b.paymentRef && !b.paymentRef.startsWith('demo_'))
             .reduce((s, b) => s + estFee(region, b.amountCents + b.addonCents), 0),
           refundedCents: total(refunded),
+          coinPacks: paidPacks(region).length,
+          coinPacksCents: paidPacks(region).reduce((s, o) => s + o.amountCents, 0),
+          coinPacksFeesCents: paidPacks(region)
+            .filter((o) => !String(o.paymentRef).startsWith('demo_'))
+            .reduce((s, o) => s + estFee(region, o.amountCents), 0),
+          coinAds: won.filter((b) => b.coins > 0).length,
         };
       }
       return {

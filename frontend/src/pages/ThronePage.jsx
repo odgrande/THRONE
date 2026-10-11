@@ -14,6 +14,8 @@ import Footer from '../components/Footer.jsx';
 import Shape from '../components/Shape.jsx';
 import Billboard, { BillboardStats } from '../components/Billboard.jsx';
 import BidForm from '../components/BidForm.jsx';
+import GamePanel from '../components/GamePanel.jsx';
+import { formatMs, setCoinRules } from '../lib/wallet.js';
 import StatsStrip from '../components/StatsStrip.jsx';
 import Court, { Market, Spotlight } from '../components/Court.jsx';
 import MapCard from '../components/MapCard.jsx';
@@ -42,6 +44,8 @@ export default function ThronePage() {
   const [audience, setAudience] = useState({ visitsToday: 0, peakToday: 0 });
   const [banner, setBanner] = useState(null);
   const [dethronedBidId, setDethronedBidId] = useState(null);
+  // Bumped on live game events so the game panel refetches its leaderboard.
+  const [gameKey, setGameKey] = useState(0);
   const [offer, dismissOffer] = useRelegationOffer(dethronedBidId);
   const page = useRef(null);
   const bannerRef = useRef(null);
@@ -54,6 +58,7 @@ export default function ThronePage() {
       adoptRegion(next.region);
       adoptProcessor(next.paymentsMode);
       setTermsVersion(next.rules?.termsVersion);
+      setCoinRules(next.rules?.coins, next.rules?.game);
       setOffsetMs(Date.parse(next.serverTime) - Date.now());
       setState(next);
       setLoadError(null);
@@ -78,12 +83,14 @@ export default function ThronePage() {
       refresh();
       // If this browser owned the dethroned ad, it gets the relegation offer.
       if (data.previousBidId) setDethronedBidId(data.previousBidId);
-      const price = formatMoney(data.throne.amountCents);
+      // Ads Game kings win with a time, not a price.
+      const price = data.throne.scoreMs != null ? `in ${formatMs(data.throne.scoreMs)}` : `for ${formatMoney(data.throne.amountCents)}`;
       setBanner(
         data.previousName
-          ? `${data.throne.name} knocked ${data.previousName} off the throne for ${price}!`
-          : `${data.throne.name} claimed the throne for ${price}!`,
+          ? `${data.throne.name} knocked ${data.previousName} off the throne ${price}!`
+          : `${data.throne.name} claimed the throne ${price}!`,
       );
+      setGameKey((k) => k + 1);
       // Crash + stamp, in time with the billboard drop animation (no-op if sound is off).
       announceTakeover(data, price);
     });
@@ -105,6 +112,15 @@ export default function ThronePage() {
       if (!ours(e)) return;
       refresh();
       sfx.booked();
+    });
+    // The Ads Game: a solve moves the leaderboard; a shield changes the time to beat.
+    events.addEventListener('solve', (e) => ours(e) && setGameKey((k) => k + 1));
+    events.addEventListener('shield', (e) => {
+      const data = ours(e);
+      if (!data) return;
+      refresh();
+      setGameKey((k) => k + 1);
+      setBanner(`🛡 ${data.name} raised a Crown Shield!`);
     });
     // A takedown or a restore: refetch so every screen updates.
     events.addEventListener('removed', (e) => ours(e) && refresh());
@@ -190,6 +206,7 @@ export default function ThronePage() {
   }
 
   const minNext = payableMinimum(minNextBidCents(state.throne, now, state.rules));
+  const gameMode = state.throneMode === 'game';
 
   return (
     <div ref={page} className="min-h-screen overflow-x-clip bg-canvas">
@@ -221,7 +238,15 @@ export default function ThronePage() {
             <h1 className="display text-2xl sm:text-4xl">
               <span className="block overflow-hidden">
                 <span className="hero-line intro-rise block">
-                  {t('hero.one')} <span className="text-bh-red">{t('hero.outbid')}</span> {t('hero.king')}
+                  {gameMode ? (
+                    <>
+                      {t('hero.game.one')} <span className="text-bh-red">{t('hero.game.fast')}</span> {t('hero.game.king')}
+                    </>
+                  ) : (
+                    <>
+                      {t('hero.one')} <span className="text-bh-red">{t('hero.outbid')}</span> {t('hero.king')}
+                    </>
+                  )}
                 </span>
               </span>
             </h1>
@@ -230,7 +255,7 @@ export default function ThronePage() {
           <p className="max-w-2xl text-sm font-medium leading-snug text-ink/75 sm:text-base">
             {(() => {
               // "{book}" in the sentence becomes a link to the fixed-price boards.
-              const [before, after = ''] = t('hero.sub').split('{book}');
+              const [before, after = ''] = t(gameMode ? 'hero.game.sub' : 'hero.sub').split('{book}');
               return (
                 <>
                   {before}
@@ -248,7 +273,7 @@ export default function ThronePage() {
               the page scrolls through the bid form beside it. */}
           <div className="px-4 pb-8 pt-4 sm:px-6 lg:sticky lg:top-0 lg:col-span-8 lg:self-start lg:px-8 lg:pb-12 lg:pt-6">
             <Billboard throne={state.throne} now={now} />
-            <BillboardStats stats={state.stats} />
+            <BillboardStats stats={state.stats} game={gameMode} />
             {state.throne && !state.throne.removed && <MapCard ad={state.throne} addonCents={state.rules.mapAddonCents} />}
           </div>
 
@@ -256,7 +281,11 @@ export default function ThronePage() {
             <Shape kind="circle" color="yellow" className="hero-shape intro-pop absolute -right-16 -top-16 h-48 w-48 border-4 border-ink" />
             <Shape kind="square" color="red" className="hero-shape intro-pop absolute -bottom-12 -left-12 [animation-delay:120ms] h-32 w-32 rotate-45 border-4 border-ink" />
             <div className="bid-panel intro-slide relative">
-              <BidForm minNextBidCents={minNext} rules={state.rules} performance={state.performance} onPriceChange={refresh} />
+              {gameMode ? (
+                <GamePanel now={now} refreshKey={gameKey} onChanged={refresh} />
+              ) : (
+                <BidForm minNextBidCents={minNext} rules={state.rules} performance={state.performance} onPriceChange={refresh} />
+              )}
             </div>
           </aside>
         </div>
@@ -264,7 +293,7 @@ export default function ThronePage() {
 
       <CrownBand crown={state.crown} rules={state.rules} now={now} />
 
-      <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />
+      {!gameMode && <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />}
 
       <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
 
@@ -296,7 +325,7 @@ export default function ThronePage() {
               <p className="label text-bh-yellow">The archive</p>
               <h2 className="display mt-2 text-4xl">History of kings</h2>
               <p className="mt-3 font-medium leading-relaxed text-white/80">
-                Every ad that ever held the throne, kept forever: what they paid, how long they lasted, who toppled them.
+                Every ad that ever held the throne, kept forever: their winning time or price, how long they lasted, who toppled them.
               </p>
               <span className="label mt-6 inline-flex items-center gap-2 text-bh-yellow">
                 Enter the archive <ArrowRight className="h-4 w-4 transition duration-200 group-hover:translate-x-1" strokeWidth={3} />
@@ -308,7 +337,7 @@ export default function ThronePage() {
 
       <Story />
 
-      <HowItWorks rules={state.rules} boards={state.boards} />
+      <HowItWorks rules={state.rules} boards={state.boards} game={gameMode} />
       <Footer />
     </div>
   );

@@ -4,6 +4,7 @@ import Logo from './Logo.jsx';
 import SoundControls from './SoundControls.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import LanguagePicker from './LanguagePicker.jsx';
+import WalletChip from './WalletChip.jsx';
 import { t } from '../lib/i18n.js';
 import { ownedAds } from '../lib/owned.js';
 
@@ -11,6 +12,7 @@ const NAV = [
   { href: '/', key: 'nav.throne' },
   { href: '/kings', key: 'nav.kings' },
   { href: '/practice', key: 'nav.practice' },
+  { href: '/invite', key: 'nav.invite' },
 ];
 const MY_ADS = { href: '/my-ads', key: 'nav.myAds' };
 
@@ -39,6 +41,7 @@ export default function Header({ children }) {
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           {children}
+          <WalletChip />
           <div className="hidden md:block">
             <LanguagePicker />
           </div>

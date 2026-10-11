@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Crown, Loader2 } from 'lucide-react';
-import { api, formatDuration, formatMoney } from '../lib/api.js';
+import { adValue, api, formatDuration } from '../lib/api.js';
 import { adoptRegion } from '../lib/region.js';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
@@ -60,7 +60,7 @@ function LegendCard({ legend, index }) {
 
         <div className="mt-4 flex items-center gap-3">
           <span className="border-2 border-ink bg-bh-yellow px-3 py-1 text-2xl font-black tabular-nums">
-            {formatMoney(legend.amountCents)}
+            {adValue(legend)}
           </span>
           {legend.survivedShield && (
             <span className="label flex items-center gap-1.5 text-bh-blue">
@@ -125,7 +125,7 @@ function DayKings({ kings }) {
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between border-t-2 border-ink pt-3 text-sm">
-                <span className="font-black tabular-nums">{formatMoney(k.amountCents)}</span>
+                <span className="font-black tabular-nums">{adValue(k)}</span>
                 <span className="text-ink/60">{k.takeovers} takeovers that day</span>
               </div>
             </li>
