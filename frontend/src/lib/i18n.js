@@ -207,6 +207,9 @@ const en = {
   'flw.reopen': "Open the payment page again",
   'flw.secured': "Card or bank, secured by Flutterwave. Your card details go to Flutterwave, never to us.",
   'my.paidReturn': "Thanks! Your payment is being confirmed. Your ad appears here in a moment (refresh if it doesn’t).",
+  'rules.accept.nonRefundable': "Non-refundable: once your ad is live, you cannot get your money back.",
+  'pay.nonRefundable': "Ads that have gone live are non-refundable.",
+  'pay.refundRules': "Automatic refunds (outbid before live, rejected in review) are in the Terms.",
 };
 
 const pcm = {
@@ -401,6 +404,9 @@ const pcm = {
   'flw.reopen': "Open the payment page again",
   'flw.secured': "Card or bank, Flutterwave dey secure am. Your card details dey go Flutterwave, e no dey come meet us.",
   'my.paidReturn': "Thank you! We dey confirm your payment. Your ad go show here soon (refresh if e no show).",
+  'rules.accept.nonRefundable': "No refund: once your ad don go live, you no fit collect your money back.",
+  'pay.nonRefundable': "Ad wey don go live no get refund.",
+  'pay.refundRules': "The refunds wey dey happen by themselves (dem pay pass you before e go live, dem reject am for review) dey the Terms.",
 };
 
 const yo = {
@@ -595,6 +601,9 @@ const yo = {
   'flw.reopen': "Ṣí ojú-ìwé ìsanwó lẹ́ẹ̀kan sí i",
   'flw.secured': "Káàdì tàbí báńkì, nípasẹ̀ Flutterwave. Àlàyé káàdì rẹ ń lọ sí Flutterwave, kì í wá sọ́dọ̀ wa.",
   'my.paidReturn': "O ṣé! À ń jẹ́rìí sí ìsanwó rẹ. Ìpolówó rẹ yóò hàn níbí láìpẹ́ (tún ojú-ìwé gbé tí kò bá hàn).",
+  'rules.accept.nonRefundable': "Kò sí ìdápadà owó: ní kété tí ìpolówó rẹ bá ti hàn, o kò lè gba owó rẹ padà.",
+  'pay.nonRefundable': "Ìpolówó tó ti hàn kò ní ìdápadà owó.",
+  'pay.refundRules': "Ìdápadà owó aládàáṣe (wọ́n san jù ọ́ lọ kí ó tó hàn, wọ́n kọ̀ ọ́ nígbà àyẹ̀wò) wà nínú Àwọn Òfin.",
 };
 
 const ha = {
@@ -789,6 +798,9 @@ const ha = {
   'flw.reopen': "Sake buɗe shafin biya",
   'flw.secured': "Kati ko banki, ta hannun Flutterwave. Bayanan katinka suna zuwa Flutterwave, ba zuwa gare mu ba.",
   'my.paidReturn': "Na gode! Ana tabbatar da biyanka. Tallarka za ta bayyana a nan nan ba da jimawa ba (sake loda idan ba ta bayyana ba).",
+  'rules.accept.nonRefundable': "Babu mayar da kuɗi: da zarar tallarka ta bayyana, ba za ka iya karɓar kuɗinka ba.",
+  'pay.nonRefundable': "Tallar da ta riga ta bayyana ba a mayar da kuɗinta.",
+  'pay.refundRules': "Mayar da kuɗi na atomatik (an biya fiye da kai kafin ta bayyana, an ƙi ta a dubawa) suna cikin Sharuɗɗa.",
 };
 
 const ig = {
@@ -983,6 +995,9 @@ const ig = {
   'flw.reopen': "Mepee ibe ịkwụ ụgwọ ọzọ",
   'flw.secured': "Kaadị ma ọ bụ ụlọ akụ, site na Flutterwave. Nkọwa kaadị gị na-aga Flutterwave, ọ naghị abịakwute anyị.",
   'my.paidReturn': "Daalụ! A na-akwado ịkwụ ụgwọ gị. Mgbasa ozi gị ga-apụta ebe a n’oge na-adịghị anya (megharịa ibe ma ọ bụrụ na ọ pụtaghị).",
+  'rules.accept.nonRefundable': "Enweghị nkwụghachi: ozugbo mgbasa ozi gị pụtara, ị gaghị enweta ego gị azụ.",
+  'pay.nonRefundable': "Mgbasa ozi pụtarala enweghị nkwụghachi ego.",
+  'pay.refundRules': "Nkwụghachi na-akpaghị aka (a kwụrụ karịa gị tupu ọ pụta, a jụrụ ya na nyocha) dị na Usoro.",
 };
 
 const DICTS = { en, pcm, yo, ha, ig };

@@ -5,7 +5,7 @@ import { OfficialSocials } from '../components/Socials.jsx';
 
 const QUICK = [
   { icon: Flag, title: 'Scam or bad ad?', body: 'Press “Report ad” on the ad itself: it is the fastest way. Several reports hide an ad at once.' },
-  { icon: CreditCard, title: 'Payment or refund', body: 'Tell us the time you paid and the ad’s name. The ad ID is on My ads if you bought from this browser.' },
+  { icon: CreditCard, title: 'Payment or refund', body: 'Ads that have gone live are non-refundable; the automatic refunds are listed in the Terms. For a payment problem, tell us the time you paid and the ad’s name (the ad ID is on My ads).' },
   { icon: Scale, title: 'Legal, copyright or your data', body: 'Pick that topic below. Data requests (access or delete) are answered within one month.' },
 ];
 

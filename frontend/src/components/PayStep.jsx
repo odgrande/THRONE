@@ -70,6 +70,12 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
           <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
         </Suspense>
       )}
+      <p className="text-center text-xs font-bold">
+        {t('pay.nonRefundable')}{' '}
+        <a href="/legal#terms" target="_blank" rel="noopener" className="underline hover:text-bh-red">
+          {t('pay.refundRules')}
+        </a>
+      </p>
       {checkout.vatPct > 0 && <p className="text-center text-xs text-ink/60">{t('pay.vat', { pct: checkout.vatPct })}</p>}
       {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
       {!settling && (

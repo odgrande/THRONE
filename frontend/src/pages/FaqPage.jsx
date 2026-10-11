@@ -23,7 +23,7 @@ const GROUPS = [
     title: 'Payments and refunds',
     items: [
       ['How do I pay?', 'Nigeria: card, bank transfer or USSD through Paystack, in Naira (prices include 7.5% VAT). Global: card or bank in US dollars through Flutterwave. You pay on their secure page, never on ours.'],
-      ['When do I get a refund?', 'Automatically and in full if: someone else’s payment cleared first and yours no longer met the price; your video or Nigerian ad is rejected in review; a video isn’t reviewed within 24 hours; or a relegation offer was already used. Being outbid on the Throne after your ad went live is not a reason for a refund: that is how the auction works.'],
+      ['Can I get a refund?', 'Once your ad has gone live, your payment is non-refundable. We refund you automatically and in full only if: someone else’s payment cleared first and yours no longer met the price; your video or Nigerian ad is rejected in review; a video isn’t reviewed within 24 hours; or a relegation offer was already used. Being outbid on the Throne after your ad went live is not a reason for a refund: that is how the auction works.'],
       ['I was outbid. Is there anything I can do?', 'Yes. Within 24 hours you can move the same ad to a Court board for one day at half price, and every dethroned ad is shown free for 24 hours in “Recently dethroned”.'],
       ['Something went wrong with my payment.', 'Contact us with the time of payment and the ad’s name. If you bought from this browser, the ad’s details are on My ads.'],
     ],

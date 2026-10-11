@@ -105,6 +105,7 @@ export default function MyAdsPage() {
           </ul>
         )}
         <p className="mt-8 text-xs text-ink/60">{t('my.howCounted')}</p>
+        <p className="mt-2 text-xs font-bold text-ink/70">{t('pay.nonRefundable')}</p>
       </main>
       <Footer />
     </div>

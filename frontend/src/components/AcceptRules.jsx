@@ -27,6 +27,7 @@ export default function AcceptRules({ kind, checked, onChange, idPrefix = 'rules
       <p className="label flex items-center gap-1.5 border-b-2 border-ink bg-bh-yellow px-3 py-2 text-ink">
         <ShieldCheck className="h-4 w-4" strokeWidth={3} /> {t('rules.accept.title')}
       </p>
+      <p className="border-b-2 border-ink bg-bh-red px-3 py-2 text-xs font-black uppercase tracking-wide text-white">{t('rules.accept.nonRefundable')}</p>
       <ul className="space-y-1 px-3 py-2.5 text-xs font-medium leading-snug">
         {points.map((p) => (
           <li key={p} className="flex gap-2">
