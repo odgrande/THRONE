@@ -46,7 +46,9 @@ export const api = {
       body: JSON.stringify(body),
     }),
   visit: (bidId) => request(`/api/go/${bidId}`, { method: 'POST' }),
-  eventsUrl: () => `${API_URL}/api/events`,
+  // The live feed counts each viewer in the edition they watch (for ad reach).
+  eventsUrl: () => `${API_URL}/api/events${requestRegion() ? `?region=${requestRegion()}` : ''}`,
+  myAds: (ads) => request('/api/my-ads', { method: 'POST', body: JSON.stringify({ ads }) }),
 };
 
 // Money is in minor units (cents / kobo). Naira shows whole amounts (₦2,500);

@@ -8,6 +8,7 @@ import { useModal } from '../lib/useModal.js';
 import { needsEmail } from '../lib/region.js';
 import AdFields, { EMPTY_AD, EmailField, adPayload } from './AdFields.jsx';
 import AdMedia from './AdMedia.jsx';
+import ProofStrip from './ProofStrip.jsx';
 import PayStep from './PayStep.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
@@ -121,7 +122,7 @@ function MiniBoard({ board, now, onBook, onMap }) {
 
 const PACKAGE_COPY = { 1: '1 day', 3: '3 days', 7: '7 days' };
 
-function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCents = 0, onClose }) {
+function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCents = 0, performance, onClose }) {
   // Spotlight and Market tiles are too small to show a map: no add-on there.
   const mapAddonCents = board.tier && board.tier !== 'court' ? 0 : boardMapCents;
   const dialog = useModal(onClose);
@@ -207,6 +208,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
           />
         ) : (
           <form onSubmit={submit} className="space-y-5">
+            <ProofStrip performance={performance} compact />
             <fieldset>
               <legend className="label mb-2">How long?</legend>
               <div className="grid grid-cols-3 gap-2">
@@ -272,7 +274,7 @@ function MapDialog({ ad, addonCents, onClose }) {
   );
 }
 
-export default function Court({ boards, now, mapAddonCents, videoAddonCents }) {
+export default function Court({ boards, now, mapAddonCents, videoAddonCents, performance }) {
   const [booking, setBooking] = useState(null);
   const [mapFor, setMapFor] = useState(null);
   return (
@@ -295,7 +297,7 @@ export default function Court({ boards, now, mapAddonCents, videoAddonCents }) {
           ))}
         </div>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} onClose={() => setBooking(null)} />}
       {mapFor && <MapDialog ad={mapFor} addonCents={mapAddonCents} onClose={() => setMapFor(null)} />}
     </section>
   );
@@ -365,7 +367,7 @@ function Stall({ board, index, onBook, big = false }) {
 }
 
 // A wall of booking tiles (the Spotlight and the Market share it).
-function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddonCents, videoAddonCents }) {
+function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddonCents, videoAddonCents, performance }) {
   const [booking, setBooking] = useState(null);
   // Tiles pop in (CSS) the first time the wall scrolls into view. Plain CSS:
   // if the animation never runs, the tiles are simply shown.
@@ -411,7 +413,7 @@ function TileWall({ tier, id, copy, bg, grid, big = false, boards, now, mapAddon
         </div>
         <p className="mt-4 text-sm font-medium text-ink/70">{t(`${copy}.howto`)}</p>
       </div>
-      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} onClose={() => setBooking(null)} />}
+      {booking && <BookingDialog board={booking} now={now} mapAddonCents={mapAddonCents} videoAddonCents={videoAddonCents} performance={performance} onClose={() => setBooking(null)} />}
     </section>
   );
 }

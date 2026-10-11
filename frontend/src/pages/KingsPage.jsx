@@ -76,6 +76,8 @@ function LegendCard({ legend, index }) {
           <dd>{dateFmt.format(new Date(legend.crownedAt))}</dd>
           <dt>{legend.retired ? 'Left by' : 'Toppled by'}</dt>
           <dd className="truncate">{legend.retired ? 'Retiring after full term' : legend.deposedByName}</dd>
+          <dt>Reached</dt>
+          <dd>{(legend.views ?? 0).toLocaleString()} people</dd>
           <dt>Clicks</dt>
           <dd>{legend.clicks.toLocaleString()}</dd>
         </dl>

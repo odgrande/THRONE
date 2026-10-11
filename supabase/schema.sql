@@ -85,6 +85,21 @@ create table if not exists boards (
   booked_until  timestamptz,
   primary key (region, id)
 );
+-- Ad performance: reach = distinct visitors on the site while the ad was live
+-- (counted by the API from live connections; no personal data stored).
+alter table bids add column if not exists views integer not null default 0;
+
+-- Site traffic per edition per day (unique visitors, peak online), for the
+-- proof shown to advertisers before they pay.
+create table if not exists daily_stats (
+  region    text not null check (region in ('global', 'ng')),
+  day       date not null,
+  visitors  integer not null default 0,
+  peak      integer not null default 0,
+  primary key (region, day)
+);
+alter table daily_stats enable row level security;
+
 -- Video ads: stored file, and when the paid ad started waiting for review.
 alter table bids add column if not exists video_url text;
 alter table bids add column if not exists review_since timestamptz;
@@ -478,6 +493,40 @@ as $$
   update bids set clicks = clicks + 1 where id = p_bid_id;
 $$;
 
+-- Adds reach to many ads at once (the API batches it every ~30 s).
+create or replace function add_views(p_ids uuid[], p_counts integer[]) returns void
+language sql
+as $$
+  update bids b set views = b.views + v.n
+    from unnest(p_ids, p_counts) as v(id, n)
+   where b.id = v.id and v.n > 0;
+$$;
+
+-- Daily traffic only ever grows within a day (several API instances may report).
+create or replace function record_daily(p_region text, p_day date, p_visitors integer, p_peak integer) returns void
+language sql
+as $$
+  insert into daily_stats (region, day, visitors, peak) values (p_region, p_day, p_visitors, p_peak)
+  on conflict (region, day) do update
+     set visitors = greatest(daily_stats.visitors, excluded.visitors),
+         peak = greatest(daily_stats.peak, excluded.peak);
+$$;
+
+-- What an advertiser sees before paying: real traffic and real results.
+create or replace function ad_performance(p_region text) returns json
+language sql
+stable
+as $$
+  select json_build_object(
+    'visitors7d', (select coalesce(sum(visitors), 0) from daily_stats where region = p_region and day > current_date - 7),
+    'days', (select count(*) from daily_stats where region = p_region and day > current_date - 7),
+    'clicks7d', (select coalesce(sum(clicks), 0) from bids where region = p_region and status = 'won' and settled_at > now() - interval '7 days'),
+    'ads7d', (select count(*) from bids where region = p_region and status = 'won' and settled_at > now() - interval '7 days'),
+    'avgThroneReach', (select coalesce(round(avg(views)), 0) from bids where region = p_region and board = 'throne' and status = 'won' and views > 0 and settled_at > now() - interval '30 days'),
+    'avgThroneClicks', (select coalesce(round(avg(clicks)), 0) from bids where region = p_region and board = 'throne' and status = 'won' and views > 0 and settled_at > now() - interval '30 days')
+  );
+$$;
+
 -- Hands one pending job to one worker, even with several workers polling.
 create or replace function claim_hype_job() returns setof hype_jobs
 language sql
@@ -539,6 +588,9 @@ revoke execute on function settle_bid(uuid, text, jsonb) from public, anon, auth
 revoke execute on function tick_throne(text, jsonb) from public, anon, authenticated;
 revoke execute on function report_bid(uuid, text, text, text, integer) from public, anon, authenticated;
 revoke execute on function record_click(uuid) from public, anon, authenticated;
+revoke execute on function add_views(uuid[], integer[]) from public, anon, authenticated;
+revoke execute on function record_daily(text, date, integer, integer) from public, anon, authenticated;
+revoke execute on function ad_performance(text) from public, anon, authenticated;
 revoke execute on function count_advertisers(text) from public, anon, authenticated;
 revoke execute on function top_advertisers(text, integer) from public, anon, authenticated;
 revoke execute on function claim_hype_job() from public, anon, authenticated;

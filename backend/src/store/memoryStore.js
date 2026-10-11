@@ -21,6 +21,7 @@ const estFee = (region, charge) =>
 // separate regions (global in USD, ng in NGN) sharing one ads table.
 export function createMemoryStore() {
   const bids = new Map();
+  const daily = new Map(); // `${region}:${day}` -> { visitors, peak }
   const legends = [];
   const hypeJobs = [];
   const rounds = [];
@@ -116,6 +117,7 @@ export function createMemoryStore() {
         targetUrl,
         paymentRef: null,
         clicks: 0,
+        views: 0,
         createdAt: new Date().toISOString(),
         settledAt: null,
         removedAt: null,
@@ -290,7 +292,7 @@ export function createMemoryStore() {
         total: mine.length,
         items: sorted.slice(offset, offset + limit).map((l) => {
           const bid = bids.get(l.bidId);
-          return { ...l, clicks: bid.clicks, removedAt: bid.removedAt };
+          return { ...l, clicks: bid.clicks, views: bid.views, removedAt: bid.removedAt };
         }),
       };
     },
@@ -404,6 +406,36 @@ export function createMemoryStore() {
 
     async listHypeJobs(limit) {
       return hypeJobs.slice(-limit).reverse().map((j) => ({ ...j }));
+    },
+
+    // --- Ad performance (mirrors add_views / record_daily / ad_performance) ---
+    async addViews(deltas) {
+      for (const [id, n] of Object.entries(deltas)) {
+        const bid = bids.get(id);
+        if (bid && n > 0) bid.views += n;
+      }
+    },
+    async recordDaily(region, day, visitors, peak) {
+      const key = `${region}:${day}`;
+      const cur = daily.get(key) ?? { region, day, visitors: 0, peak: 0 };
+      daily.set(key, { ...cur, visitors: Math.max(cur.visitors, visitors), peak: Math.max(cur.peak, peak) });
+    },
+    async getPerformance(region) {
+      const now = Date.now();
+      const since7 = now - 7 * 86400_000;
+      const days = [...daily.values()].filter((d) => d.region === region && Date.parse(d.day) > since7 - 86400_000);
+      const won = [...bids.values()].filter((b) => b.region === region && b.status === 'won');
+      const recent = won.filter((b) => Date.parse(b.settledAt) > since7);
+      const kings = won.filter((b) => b.board === 'throne' && b.views > 0 && Date.parse(b.settledAt) > now - 30 * 86400_000);
+      const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
+      return {
+        visitors7d: days.reduce((a, d) => a + d.visitors, 0),
+        days: days.length,
+        clicks7d: recent.reduce((a, b) => a + b.clicks, 0),
+        ads7d: recent.length,
+        avgThroneReach: avg(kings.map((b) => b.views)),
+        avgThroneClicks: avg(kings.map((b) => b.clicks)),
+      };
     },
 
     // --- Admin: mirrors admin_financials() in schema.sql (one entry per region,

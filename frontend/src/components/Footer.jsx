@@ -21,6 +21,7 @@ export default function Footer() {
           <a href="/" className="label hover:text-bh-yellow">Advertise</a>
           <a href="/kings" className="label hover:text-bh-yellow">Kings</a>
           <a href="/practice" className="label hover:text-bh-yellow">Practice</a>
+          <a href="/my-ads" className="label hover:text-bh-yellow">My ads</a>
           <a href="/legal" className="label hover:text-bh-yellow">Terms &amp; Privacy</a>
         </nav>
       </div>

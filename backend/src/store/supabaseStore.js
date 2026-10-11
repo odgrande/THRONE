@@ -37,6 +37,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       targetUrl: r.target_url,
       paymentRef: r.payment_ref,
       clicks: r.clicks,
+      views: r.views ?? 0,
       createdAt: r.created_at,
       settledAt: r.settled_at,
       removedAt: r.removed_at,
@@ -60,6 +61,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     reignSeconds: r.reign_seconds,
     survivedShield: r.survived_shield,
     clicks: r.bid?.clicks ?? 0,
+    views: r.bid?.views ?? 0,
     removedAt: r.bid?.removed_at ?? null,
   });
 
@@ -73,7 +75,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
 
   const getBid = async (id) => fromRow(check(await db.from('bids').select('*').eq('id', id).maybeSingle()));
   // Two FKs point at bids (bid_id, deposed_by), so name the one we join on.
-  const LEGEND_SELECT = '*, bid:bids!throne_legends_bid_id_fkey(clicks, removed_at)';
+  const LEGEND_SELECT = '*, bid:bids!throne_legends_bid_id_fkey(clicks, views, removed_at)';
 
   return {
     kind: 'supabase',
@@ -149,6 +151,19 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
 
     async setStatus(id, status) {
       check(await db.from('bids').update({ status }).eq('id', id));
+    },
+
+    // --- Ad performance ---
+    async addViews(deltas) {
+      const ids = Object.keys(deltas);
+      if (!ids.length) return;
+      check(await db.rpc('add_views', { p_ids: ids, p_counts: ids.map((id) => deltas[id]) }));
+    },
+    async recordDaily(region, day, visitors, peak) {
+      check(await db.rpc('record_daily', { p_region: region, p_day: day, p_visitors: visitors, p_peak: peak }));
+    },
+    async getPerformance(region) {
+      return check(await db.rpc('ad_performance', { p_region: region }));
     },
 
     async recordClick(id) {

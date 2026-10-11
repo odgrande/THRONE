@@ -12,6 +12,7 @@ import { createRealtime } from './services/realtime.js';
 import { createHypeQueue } from './services/hype.js';
 import { decodeImage, saveImage } from './services/images.js';
 import { createVideoUploads, MAX_VIDEO_BYTES } from './services/videos.js';
+import { isOwner } from './services/owners.js';
 import { createStorage, LOCAL_DIRS } from './services/storage.js';
 import { createTurnstile } from './services/turnstile.js';
 import { newOwnerToken } from './services/owners.js';
@@ -27,7 +28,8 @@ const payments = createPayments({ stripe: config.stripe, paystack: config.paysta
 const moderation = createModeration(config.openaiApiKey);
 const links = createLinkChecker(config.webRiskApiKey);
 const turnstile = createTurnstile(config.turnstileSecret);
-const realtime = createRealtime();
+// Each live viewer is counted in the edition they're watching (?region=, else country).
+const realtime = createRealtime({ regions: REGION_IDS, regionOf: (req) => regionOf(req) });
 const hype = createHypeQueue({ store });
 const game = createGame({ store, payments, realtime, hype, regions: config.regions, storage });
 const videos = createVideoUploads({ storage, secret: config.reports.ipHashSalt });
@@ -714,6 +716,44 @@ app.post(
   }),
 );
 
+// --- My ads: private stats for the ads this browser bought ---
+// The browser sends the owner codes it kept at purchase; only ads whose code
+// matches are returned. No account, no email: the code is the proof.
+app.post(
+  '/api/my-ads',
+  limiter(30, 'Too many requests. Slow down for a minute.'),
+  handle(async (req, res) => {
+    const list = Array.isArray(req.body?.ads) ? req.body.ads.slice(0, 50) : [];
+    const items = [];
+    for (const { bidId, token } of list) {
+      if (typeof bidId !== 'string' || !UUID.test(bidId)) continue;
+      const bid = await store.getBid(bidId);
+      if (!bid || !isOwner(bid, token)) continue;
+      const rules = game.rulesOf(bid.region);
+      items.push({
+        id: bid.id,
+        region: bid.region,
+        board: bid.board,
+        boardName: bid.board === 'throne' ? 'The Throne' : rules.boards[bid.board]?.name ?? bid.board,
+        name: bid.name,
+        tagline: bid.tagline,
+        imageUrl: bid.imageUrl,
+        status: bid.status,
+        removed: Boolean(bid.removedAt),
+        paidCents: bid.amountCents + (bid.addonCents ?? 0),
+        currency: rules.currency,
+        views: bid.views ?? 0,
+        clicks: bid.clicks ?? 0,
+        createdAt: bid.createdAt,
+        settledAt: bid.settledAt,
+        startsAt: bid.startsAt,
+        endsAt: bid.endsAt,
+      });
+    }
+    res.json({ items });
+  }),
+);
+
 app.get('/api/bids/:id/status', async (req, res, next) => {
   try {
     const bid = UUID.test(req.params.id) ? await store.getBid(req.params.id) : null;
@@ -762,6 +802,11 @@ setInterval(async () => {
     tickRunning = false;
   }
 }, 1000).unref();
+
+// Ad reach: credit live viewers to live ads every 15 s.
+setInterval(() => {
+  game.trackReach(realtime).catch((err) => console.error('[throne] reach tracking failed', err));
+}, 15_000).unref();
 
 if (config.hype.inlineWorker) {
   // Imported lazily: the renderer is heavy and most API boxes don't need it.

@@ -46,6 +46,7 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
       // Only ads that paid for the map add-on carry an address.
       address: b.addonCents > 0 || b.relegatedFrom ? b.address : null,
       clicks: b.clicks,
+      views: b.views ?? 0,
       removedAt: b.removedAt,
       ...(b.board === 'throne'
         ? {
@@ -100,6 +101,8 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
         .slice(0, 8)
         .map((l) => maskRemoved(l)),
       stats: { takeovers, volumeCents, recordCents, advertisers, ads },
+      // Real numbers an advertiser can check before paying (see ad_performance()).
+      performance: await store.getPerformance(region),
       // Public already (every price is shown on the boards); summed per advertiser.
       topAdvertisers,
       crown: { round: publicRound(round), lastKing: maskRemoved(lastKing) ?? null },
@@ -277,7 +280,44 @@ export function createGame({ store, payments, realtime, hype, regions, storage =
     }
   }
 
+  // --- Reach: distinct visitors on the site while each ad was live ---
+  // Every 15 s, every visitor watching an edition is credited to every ad
+  // live there (each visitor counted once per ad per day; the visitor id is a
+  // daily-salted hash, never stored). Batched to the database every 30 s.
+  const seenBy = new Map(); // bidId -> Set(visitor hash)
+  let pendingViews = {};
+  let lastFlush = 0;
+  async function trackReach(realtime) {
+    const now = Date.now();
+    for (const region of REGION_IDS) {
+      const viewers = realtime.viewersIn(region);
+      if (viewers.size === 0) continue;
+      const [{ bid }, boards] = await Promise.all([store.getThrone(region), store.getBoards(region, now)]);
+      const live = [bid, ...Object.values(boards).map((b) => b.current)].filter((b) => b && !b.removedAt);
+      for (const ad of live) {
+        let seen = seenBy.get(ad.id);
+        if (!seen) seenBy.set(ad.id, (seen = new Set()));
+        for (const v of viewers) {
+          if (seen.has(v)) continue;
+          seen.add(v);
+          pendingViews[ad.id] = (pendingViews[ad.id] ?? 0) + 1;
+        }
+      }
+      const { day, visitsToday, peakToday } = realtime.dailyStats(region);
+      if (now - lastFlush >= 30_000) await store.recordDaily(region, day, visitsToday, peakToday);
+    }
+    if (now - lastFlush >= 30_000) {
+      lastFlush = now;
+      const batch = pendingViews;
+      pendingViews = {};
+      await store.addViews(batch);
+      // Ads that are no longer live don't need their visitor sets.
+      if (seenBy.size > 500) seenBy.clear();
+    }
+  }
+
   return {
+    trackReach,
     approveVideo,
     rejectVideo,
     expireReviews,

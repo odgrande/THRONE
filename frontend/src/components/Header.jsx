@@ -6,16 +6,19 @@ import ThemeToggle from './ThemeToggle.jsx';
 import RegionSwitch from './RegionSwitch.jsx';
 import LanguagePicker from './LanguagePicker.jsx';
 import { t } from '../lib/i18n.js';
+import { ownedAds } from '../lib/owned.js';
 
 const NAV = [
   { href: '/', key: 'nav.throne' },
   { href: '/kings', key: 'nav.kings' },
   { href: '/practice', key: 'nav.practice' },
 ];
+const MY_ADS = { href: '/my-ads', key: 'nav.myAds' };
 
 export default function Header({ children }) {
   const [open, setOpen] = useState(false);
   const path = window.location.pathname;
+  const nav = ownedAds().length > 0 || path === '/my-ads' ? [...NAV, MY_ADS] : NAV;
 
   const navLink = (item) => (
     <a
@@ -33,7 +36,7 @@ export default function Header({ children }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-10">
           <Logo />
-          <nav className="hidden items-center gap-8 md:flex">{NAV.map(navLink)}</nav>
+          <nav className="hidden items-center gap-8 md:flex">{nav.map(navLink)}</nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           {children}
@@ -61,7 +64,7 @@ export default function Header({ children }) {
       </div>
       {open && (
         <div className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 md:hidden">
-          <nav className="flex flex-col gap-4">{NAV.map(navLink)}</nav>
+          <nav className="flex flex-col gap-4">{nav.map(navLink)}</nav>
           <div className="flex flex-wrap items-center gap-3">
             <LanguagePicker />
             <SoundControls />

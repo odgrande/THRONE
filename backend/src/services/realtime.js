@@ -12,10 +12,11 @@ const MAX_STREAMS_PER_IP = 5;
 const MAX_STREAMS_TOTAL = 20000;
 const MAX_DAILY_VISITORS_TRACKED = 500000;
 
-// "Visitors today": unique visitors since midnight UTC, counted in memory as
-// salted hashes. The salt is random and replaced every day, so a hash can't
-// be linked to an IP or across days, and nothing is written anywhere. Resets
-// when the server restarts (it's a live counter, not analytics).
+// Visitors are identified only by a salted hash of their IP. The salt is
+// random and replaced every day (midnight UTC), so a hash can't be linked to
+// an IP or across days, and no hash is ever written anywhere. These hashes
+// power "online now", "visitors today" and each ad's reach (distinct people
+// on the site while it was live).
 function dailyVisitors() {
   let day = null;
   let salt = null;
@@ -30,46 +31,68 @@ function dailyVisitors() {
     peak = 0;
   };
   return {
-    visit(ip) {
+    hash(ip) {
       roll();
-      if (seen.size < MAX_DAILY_VISITORS_TRACKED) seen.add(createHash('sha256').update(salt).update(String(ip)).digest('base64url').slice(0, 16));
+      return createHash('sha256').update(salt).update(String(ip)).digest('base64url').slice(0, 16);
+    },
+    visit(hash) {
+      roll();
+      if (seen.size < MAX_DAILY_VISITORS_TRACKED) seen.add(hash);
     },
     online(count) {
       roll();
       peak = Math.max(peak, count);
     },
-    stats: () => (roll(), { visitsToday: seen.size, peakToday: peak }),
+    stats: () => (roll(), { day, visitsToday: seen.size, peakToday: peak }),
   };
 }
 
-export function createRealtime() {
-  const clients = new Set();
+// regionOf(req): which edition this viewer is watching (?region=, else country).
+export function createRealtime({ regions = ['global'], regionOf = () => regions[0] } = {}) {
+  const clients = new Map(); // res -> { region, visitor }
   const perIp = new Map();
-  const visitors = dailyVisitors();
-  const audience = () => {
-    visitors.online(clients.size);
-    return { count: clients.size, ...visitors.stats() };
+  const visitors = Object.fromEntries(regions.map((r) => [r, dailyVisitors()]));
+
+  const countIn = (region) => {
+    let n = 0;
+    for (const c of clients.values()) if (c.region === region) n++;
+    return n;
+  };
+  const audience = (region) => {
+    const count = countIn(region);
+    visitors[region].online(count);
+    const { visitsToday, peakToday } = visitors[region].stats();
+    return { region, count, visitsToday, peakToday };
   };
   let viewerTimer = null;
 
   const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
   const broadcast = (event, data) => {
-    for (const res of clients) send(res, event, data);
+    for (const res of clients.keys()) send(res, event, data);
   };
 
-  // Coalesce join/leave bursts into one viewer-count update per second.
+  // Coalesce join/leave bursts into one viewer-count update per second; each
+  // viewer gets the numbers for the edition they're watching.
   const scheduleViewerCount = () => {
     if (viewerTimer) return;
     viewerTimer = setTimeout(() => {
       viewerTimer = null;
-      broadcast('viewers', audience());
+      const byRegion = Object.fromEntries(regions.map((r) => [r, audience(r)]));
+      for (const [res, c] of clients) send(res, 'viewers', byRegion[c.region]);
     }, 1000);
   };
 
   return {
     broadcast,
     audience,
+    // Distinct visitors (hashes) watching an edition right now: the input for ad reach.
+    viewersIn(region) {
+      const set = new Set();
+      for (const c of clients.values()) if (c.region === region) set.add(c.visitor);
+      return set;
+    },
+    dailyStats: (region) => visitors[region].stats(),
 
     handler(req, res) {
       const ip = req.ip;
@@ -88,9 +111,11 @@ export function createRealtime() {
       res.flushHeaders();
       res.write('retry: 3000\n\n');
 
-      clients.add(res);
-      visitors.visit(ip);
-      send(res, 'viewers', audience());
+      const region = regions.includes(regionOf(req)) ? regionOf(req) : regions[0];
+      const visitor = visitors[region].hash(ip);
+      clients.set(res, { region, visitor });
+      visitors[region].visit(visitor);
+      send(res, 'viewers', audience(region));
       scheduleViewerCount();
 
       // Keeps proxies from closing an idle stream.

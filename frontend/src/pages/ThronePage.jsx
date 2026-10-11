@@ -253,7 +253,7 @@ export default function ThronePage() {
             <Shape kind="circle" color="yellow" className="hero-shape intro-pop absolute -right-16 -top-16 h-48 w-48 border-4 border-ink" />
             <Shape kind="square" color="red" className="hero-shape intro-pop absolute -bottom-12 -left-12 [animation-delay:120ms] h-32 w-32 rotate-45 border-4 border-ink" />
             <div className="bid-panel intro-slide relative">
-              <BidForm minNextBidCents={minNext} rules={state.rules} onPriceChange={refresh} />
+              <BidForm minNextBidCents={minNext} rules={state.rules} performance={state.performance} onPriceChange={refresh} />
             </div>
           </aside>
         </div>
@@ -263,11 +263,11 @@ export default function ThronePage() {
 
       <StatsStrip throne={state.throne} minNextBidCents={minNext} stats={state.stats} rules={state.rules} now={now} />
 
-      <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} />
+      <Spotlight boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
 
-      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} />
+      <Court boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
 
-      <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} />
+      <Market boards={state.boards} now={now} mapAddonCents={state.rules.mapAddonCents} videoAddonCents={state.rules.videoAddonCents} performance={state.performance} />
 
       <RecentlyDethroned legends={state.recentlyDethroned} now={now} />
 

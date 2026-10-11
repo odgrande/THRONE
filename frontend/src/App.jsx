@@ -4,6 +4,7 @@ import GoPage from './pages/GoPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import PracticePage from './pages/PracticePage.jsx';
 import LegalPage from './pages/LegalPage.jsx';
+import MyAdsPage from './pages/MyAdsPage.jsx';
 import { useEffect } from 'react';
 import CookieNotice from './components/CookieNotice.jsx';
 import { api } from './lib/api.js';
@@ -19,6 +20,7 @@ function Page() {
   if (path === '/admin') return <AdminPage />;
   if (path === '/practice') return <PracticePage />;
   if (path === '/legal') return <LegalPage />;
+  if (path === '/my-ads') return <MyAdsPage />;
   return <ThronePage />;
 }
 

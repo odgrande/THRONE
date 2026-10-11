@@ -7,6 +7,7 @@ import { CornerMark } from './Shape.jsx';
 import { t } from '../lib/i18n.js';
 import AdFields, { EMPTY_AD, EmailField, addonFor, adPayload } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
+import ProofStrip from './ProofStrip.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 
 export const RANGE_CLASS =
@@ -53,7 +54,7 @@ export function ThroneRules({ rules }) {
   );
 }
 
-export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
+export default function BidForm({ minNextBidCents, rules, performance, onPriceChange }) {
   const needsEmail = paymentNeedsEmail();
   const [ad, setAd] = useState(EMPTY_AD);
   const [email, setEmail] = useState('');
@@ -225,7 +226,12 @@ export default function BidForm({ minNextBidCents, rules, onPriceChange }) {
     <div className="card p-5 sm:p-6">
       <CornerMark index={0} />
       <p className="label text-bh-blue">{t('bid.kicker')}</p>
-      <h2 className="display mb-6 mt-1 text-3xl sm:text-4xl">{t('bid.title')}</h2>
+      <h2 className="display mb-4 mt-1 text-3xl sm:text-4xl">{t('bid.title')}</h2>
+      {step === 'form' || step === 'submitting' ? (
+        <div className="mb-5">
+          <ProofStrip performance={performance} />
+        </div>
+      ) : null}
       {body}
     </div>
   );

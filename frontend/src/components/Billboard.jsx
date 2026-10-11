@@ -221,7 +221,14 @@ export default function Billboard({ throne, now = Date.now(), practice = false }
             {/* Phones: the name gets its own row; ring and price share the next. */}
             <div className="flex min-w-0 flex-1 basis-full items-center gap-3 border-b-2 border-ink px-4 py-3 sm:basis-auto sm:border-b-0">
               <Shape kind="square" color={accent.name} className="h-4 w-4 shrink-0 rotate-45 border-2 border-ink" />
-              <p className="truncate text-xl font-black uppercase tracking-tight sm:text-2xl">{throne.name}</p>
+              <div className="min-w-0">
+                <p className="truncate text-xl font-black uppercase tracking-tight sm:text-2xl">{throne.name}</p>
+                {!practice && (
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-ink/60 tabular-nums">
+                    {t('perf.line', { reach: (throne.views ?? 0).toLocaleString(), clicks: (throne.clicks ?? 0).toLocaleString() })}
+                  </p>
+                )}
+              </div>
             </div>
             {!practice && throne.shieldEndsAt && (
               <div className="flex items-center border-ink px-3 sm:border-l-2 lg:border-l-4">

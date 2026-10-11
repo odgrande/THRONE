@@ -3,7 +3,8 @@
 // dethroned throne ad. Storage can be blocked (private mode), so every
 // access is guarded; the site works without it, minus those extras.
 const KEY = 'throne.ownedAds';
-const KEEP_MS = 14 * 86400_000;
+// Kept 90 days so advertisers can check their results on /my-ads.
+const KEEP_MS = 90 * 86400_000;
 
 function read() {
   try {
@@ -17,9 +18,9 @@ function read() {
 export function rememberOwnedAd({ bidId, ownerToken, board }) {
   if (!bidId || !ownerToken) return;
   try {
-    localStorage.setItem(KEY, JSON.stringify([{ bidId, token: ownerToken, board, at: Date.now() }, ...read()].slice(0, 30)));
+    localStorage.setItem(KEY, JSON.stringify([{ bidId, token: ownerToken, board, at: Date.now() }, ...read()].slice(0, 50)));
   } catch {
-    // Not fatal: only the relegation offer depends on it.
+    // Not fatal: only the relegation offer and My ads depend on it.
   }
 }
 
