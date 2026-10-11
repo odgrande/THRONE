@@ -50,7 +50,7 @@ const SECTIONS = [
       'Audience numbers. To show advertisers real results (people online, visitors per day, and each ad’s reach), our server turns each visitor’s IP address into a scrambled code using a secret that is replaced every day. The code is kept only in the server’s memory, is never stored, and cannot be linked back to you or across days. We store only totals (for example, 120 visitors on a day; 50 people reached by an ad).',
       'Video ads are watched by a member of our team before they go live. Videos that are rejected, or never paid for, are deleted.',
       'When you buy an ad we record that you accepted the rules (the version and the time), together with the ad.',
-      'If you write to us through the contact or partners form, we keep your message, the email you give us and any optional details only to answer you, and delete them after 90 days.',
+      'If you email us, we use your message and email address only to answer you, and delete the conversation when it is no longer needed.',
       'No accounts and no tracking cookies. Your browser keeps the owner codes for ads you bought (localStorage, for 90 days), so it can show your ads’ results on My ads and offer you a relegation if your Throne ad is outbid.',
       'Payments are processed by Paystack (Nigeria edition, in Naira) and Flutterwave (Global edition, in US dollars), on their own secure checkout pages. We never see or store card numbers or bank details.',
       'Email for payment receipts. Paystack and Flutterwave require an email address to send your receipt. We pass the email you type straight to them and do not store it ourselves.',
@@ -102,17 +102,7 @@ export default function LegalPage() {
             <h1 className="display text-5xl sm:text-7xl">The rules</h1>
             <p className="label mt-3 text-ink/60">Last updated {LAST_UPDATED}</p>
           </div>
-          <section id="company" className="card scroll-mt-8 bg-bh-cream p-6 lg:p-8" aria-label="Company details">
-            <p className="font-black uppercase tracking-tight">
-              © {new Date().getFullYear()} {OPERATOR}. Throne is owned and operated by {OPERATOR}.
-            </p>
-            <p className="mt-2 font-medium text-ink/80">
-              CAC registration number {RC_NUMBER} · Contact:{' '}
-              <a href={`mailto:${CONTACT}`} className="font-bold underline hover:text-bh-red">
-                {CONTACT}
-              </a>
-            </p>
-          </section>
+
           {SECTIONS.map((s) => (
             <section key={s.id} id={s.id} className="card scroll-mt-8 p-6 lg:p-8">
               <h2 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{s.title}</h2>
@@ -123,6 +113,17 @@ export default function LegalPage() {
               </div>
             </section>
           ))}
+          <section id="company" className="scroll-mt-8 border-t-2 border-ink pt-6 text-sm" aria-label="Company details">
+            <p className="font-bold">
+              © {new Date().getFullYear()} {OPERATOR}. Throne is owned and operated by {OPERATOR}.
+            </p>
+            <p className="mt-1 text-ink/70">
+              CAC registration number {RC_NUMBER} · Contact:{' '}
+              <a href={`mailto:${CONTACT}`} className="font-bold underline hover:text-bh-red">
+                {CONTACT}
+              </a>
+            </p>
+          </section>
         </div>
       </main>
       <Footer />

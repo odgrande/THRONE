@@ -903,6 +903,8 @@ app.post(
   '/api/contact',
   contactLimiter,
   handle(async (req, res) => {
+    // Off unless CONTACT_FORM=on: no form, no stored messages, nothing to attack.
+    if (!config.contactForm) return res.status(404).json({ error: 'Please email therone@gmail.com.' });
     const b = req.body ?? {};
     // Honeypot: a hidden field people never fill in. Bots do; pretend success.
     if (typeof b.website === 'string' && b.website.trim()) return res.status(201).json({ ok: true });

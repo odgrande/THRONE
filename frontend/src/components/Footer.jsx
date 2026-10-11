@@ -21,6 +21,7 @@ export default function Footer() {
             ['/safety', 'Safety'],
             ['/contact', 'Contact'],
             ['/partners', 'Partners'],
+            ['/changelog', 'Changelog'],
             ['/legal', 'Terms & Privacy'],
           ].map(([href, label]) => (
             <a key={href} href={href} className="label hover:text-bh-yellow">

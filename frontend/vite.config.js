@@ -52,13 +52,46 @@ function securityHeaders(apiOrigin, mediaOrigin) {
   };
 }
 
+// sitemap.xml + robots.txt, written at build time from the public site URL
+// (VITE_SITE_URL), so they always point at the real domain.
+const PUBLIC_PAGES = ['/', '/kings', '/practice', '/faq', '/safety', '/contact', '/partners', '/changelog', '/legal'];
+function seoFiles(siteUrl) {
+  return {
+    name: 'throne-seo-files',
+    apply: 'build',
+    generateBundle() {
+      const base = (siteUrl || 'https://throne.example').replace(/\/$/, '');
+      const today = new Date().toISOString().slice(0, 10);
+      const urls = PUBLIC_PAGES.map(
+        (path) => `  <url><loc>${base}${path === '/' ? '/' : path}</loc><lastmod>${today}</lastmod><changefreq>${path === '/' ? 'hourly' : 'weekly'}</changefreq><priority>${path === '/' ? '1.0' : '0.6'}</priority></url>`,
+      );
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sitemap.xml',
+        source: [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+          ...urls,
+          '</urlset>',
+          '',
+        ].join('\n'),
+      });
+      this.emitFile({
+        type: 'asset',
+        fileName: 'robots.txt',
+        source: ['User-agent: *', 'Allow: /', 'Disallow: /admin', 'Disallow: /my-ads', 'Disallow: /go/', 'Disallow: /api/', '', `Sitemap: ${base}/sitemap.xml`, ''].join('\n'),
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiOrigin = env.VITE_API_URL ? new URL(env.VITE_API_URL).origin : '';
   // Where ad images are served from in production (the Supabase project URL).
   const mediaOrigin = env.VITE_MEDIA_ORIGIN ? new URL(env.VITE_MEDIA_ORIGIN).origin : '';
   return {
-    plugins: [react(), securityHeaders(apiOrigin, mediaOrigin)],
+    plugins: [react(), securityHeaders(apiOrigin, mediaOrigin), seoFiles(env.VITE_SITE_URL)],
     server: {
       port: 5173,
       proxy: {

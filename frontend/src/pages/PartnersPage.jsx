@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Building2, Handshake, Megaphone, TrendingUp } from 'lucide-react';
 import { API_URL } from '../lib/api.js';
 import InfoPage, { SectionTitle } from '../components/InfoPage.jsx';
-import ContactForm from '../components/ContactForm.jsx';
 
 const WHO = [
   { icon: Megaphone, title: 'Agencies and resellers', body: 'Bring your clients to the billboard, the Spotlight and the Market, and grow with us.' },
@@ -81,10 +80,20 @@ export default function PartnersPage() {
       </ul>
 
       <SectionTitle id="talk">Talk to us</SectionTitle>
-      <ContactForm topics={['partner', 'investor', 'press']} defaultTopic={new URLSearchParams(window.location.search).get('topic') === 'investor' ? 'investor' : 'partner'} withCompany />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[
+          ['Partnership', 'Throne: partnership', 'Agencies, brands, sponsors and communities.'],
+          ['Investment', 'Throne: investment', 'Investors who want to help Throne grow.'],
+        ].map(([title, subject, body]) => (
+          <a key={title} href={`mailto:therone@gmail.com?subject=${encodeURIComponent(subject)}`} className="card block p-5 transition duration-200 hover:-translate-y-0.5">
+            <p className="text-lg font-black uppercase">{title}</p>
+            <p className="mt-1 text-ink/75">{body}</p>
+            <p className="label mt-3 text-bh-blue">Email therone@gmail.com →</p>
+          </a>
+        ))}
+      </div>
       <p className="text-xs leading-relaxed text-ink/60">
-        Throne is owned and operated by Odgrande NG Limited (RC1029807). Nothing on this page is an offer to sell, or a request for an offer to buy, shares or any other
-        investment.
+        Nothing on this page is an offer to sell, or a request for an offer to buy, shares or any other investment.
       </p>
     </InfoPage>
   );

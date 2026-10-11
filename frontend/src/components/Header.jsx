@@ -3,7 +3,6 @@ import { Menu, X } from 'lucide-react';
 import Logo from './Logo.jsx';
 import SoundControls from './SoundControls.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
-import RegionSwitch from './RegionSwitch.jsx';
 import LanguagePicker from './LanguagePicker.jsx';
 import { t } from '../lib/i18n.js';
 import { ownedAds } from '../lib/owned.js';
@@ -43,7 +42,6 @@ export default function Header({ children }) {
           <div className="hidden md:block">
             <LanguagePicker />
           </div>
-          <RegionSwitch />
           {/* On every page, so music and effects follow the visitor around the site.
               Phones get them in the menu, to keep the header on one line. */}
           <div className="hidden md:block">

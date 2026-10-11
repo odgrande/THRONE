@@ -175,7 +175,6 @@ export default function AdminPage() {
                 ['moderation', 'Moderation'],
                 ['videos', 'Review queue'],
                 ['god', 'God mode'],
-                ['inbox', 'Inbox'],
               ].map(([key, label]) => (
                 <button
                   key={key}

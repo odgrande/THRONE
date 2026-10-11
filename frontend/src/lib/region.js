@@ -1,30 +1,27 @@
 // Which edition this visitor sees. Each region is a separate throne with its
 // own currency; amounts are never compared across regions.
 //
-// First visit: no saved choice, so the server picks from the visitor's country
-// (Cloudflare's CF-IPCountry: Nigeria -> ng, else global) and getState tells
-// us which one it chose. Switching saves the choice and reloads the page, so
-// every screen, price and live feed comes from the new region.
+// There is no switch: the server picks from the visitor's location
+// (Cloudflare's CF-IPCountry: Nigeria -> ng, everywhere else -> global) and
+// getState tells us which one it chose. A ?region= link overrides it for that
+// page view only (for testing and support); nothing is saved.
 export const REGIONS = {
   global: { id: 'global', code: 'GL', name: 'Global', flag: '🌍', currency: 'USD', locale: 'en-US', symbol: '$' },
   ng: { id: 'ng', code: 'NG', name: 'Nigeria', flag: '🇳🇬', currency: 'NGN', locale: 'en-NG', symbol: '₦' },
 };
 
-const KEY = 'throne.region';
-
-function saved() {
-  try {
-    const value = localStorage.getItem(KEY);
-    return REGIONS[value] ? value : null;
-  } catch {
-    return null;
-  }
+// Forget any choice saved by the old edition switch.
+try {
+  localStorage.removeItem('throne.region');
+} catch {
+  // Storage blocked: nothing was saved anyway.
 }
 
-// null until the server (or a saved choice) settles it.
-let active = saved();
+const fromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('region') : null;
+// null until the server settles it (or a ?region= test link names it).
+let active = REGIONS[fromUrl] ? fromUrl : null;
 
-export const chosenRegion = () => saved();
+export const chosenRegion = () => (REGIONS[fromUrl] ? fromUrl : null);
 export const activeRegion = () => active ?? 'global';
 export const regionInfo = (id = activeRegion()) => REGIONS[id] ?? REGIONS.global;
 
@@ -41,31 +38,6 @@ export const subscribeRegion = (fn) => {
   listeners.add(fn);
   return () => listeners.delete(fn);
 };
-
-export function switchRegion(id) {
-  if (!REGIONS[id]) return;
-  try {
-    localStorage.setItem(KEY, id);
-  } catch {
-    // Storage blocked: the switch still applies for this page view via the URL.
-  }
-  const url = new URL(window.location.href);
-  url.searchParams.set('region', id);
-  window.location.assign(url.toString());
-}
-
-// A ?region= link (shared, or after a switch with storage blocked) wins once.
-{
-  const fromUrl = new URLSearchParams(window.location.search).get('region');
-  if (REGIONS[fromUrl]) {
-    active = fromUrl;
-    try {
-      localStorage.setItem(KEY, fromUrl);
-    } catch {
-      // ignore
-    }
-  }
-}
 
 // Region the next request should name explicitly; null lets the server decide.
 export const requestRegion = () => active;

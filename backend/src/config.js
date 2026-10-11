@@ -196,6 +196,9 @@ export const config = {
   },
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   webRiskApiKey: process.env.WEB_RISK_API_KEY || '',
+  // Contact form (POST /api/contact + admin Inbox). Off for now: support is by
+  // email. Set CONTACT_FORM=on to bring it back.
+  contactForm: process.env.CONTACT_FORM === 'on',
   // Bearer token for /api/admin/*. Blank = admin endpoints disabled.
   adminToken: process.env.ADMIN_TOKEN || '',
   // Cloudflare Turnstile: a bot check inside the bid form. Blank = off (dev only).
