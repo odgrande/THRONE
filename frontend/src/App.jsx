@@ -7,6 +7,7 @@ import LegalPage from './pages/LegalPage.jsx';
 import MyAdsPage from './pages/MyAdsPage.jsx';
 import { useEffect } from 'react';
 import CookieNotice from './components/CookieNotice.jsx';
+import MusicButton from './components/MusicButton.jsx';
 import { api } from './lib/api.js';
 import { adoptRegion, chosenRegion } from './lib/region.js';
 import { hidePreloader } from './lib/preloader.js';
@@ -37,6 +38,7 @@ export default function App() {
     <>
       <Page />
       <CookieNotice />
+      <MusicButton />
     </>
   );
 }

@@ -99,7 +99,7 @@ The Nigeria edition has a language picker: English, **Nigerian Pidgin, Yorùbá,
 - **Billboard first:** the live ad is the first thing on screen (phones too). On desktop the bid form scrolls inside its own panel, so the billboard stays visible while someone fills it in.
 - **Billboard:** the frame colour changes with each king, a ring counts down the shield, and a bar shows Total pool / Highest bid / Takeovers.
 - **Businesses we've helped:** live counts, a **Top advertisers** leaderboard (spend per business, per edition), and a logo wall of **labelled example brands**. Add real logos only with written permission (`frontend/src/data/showcase.js`).
-- **Sound:** synthesized effects, voice announcements and background music. Off by default, remembered per browser.
+- **Sound:** Afro-groove background music is **on by default**: it starts at the visitor's first tap or click (browsers forbid sound before that), pauses whenever the tab is hidden, resumes when they return, and can be stopped any time (header on desktop, floating button on phones; the choice is remembered). Effects and voice announcements stay off until switched on.
 - **Light/dark:** light by default; dark only when the visitor picks it.
 - **Cookie notice:** small. No tracking cookies are set. If analytics are ever added, it must become an opt-in.
 

@@ -1,11 +1,14 @@
 // The sound engine. Every sound is synthesized with the Web Audio API: no audio
-// files to license or download. Off by default; the visitor's choice is
-// remembered. Browsers only allow audio after a user gesture, so a remembered
-// "on" takes effect at the first tap or click on the page.
+// files to license or download.
+// Background music is ON by default (effects stay off); the visitor can stop
+// it and the choice is remembered. Browsers only allow sound after the
+// visitor taps, clicks or presses a key, so music starts at the first
+// interaction (or at once where the browser allows it). It pauses whenever
+// the tab is hidden and resumes when the visitor comes back.
 
 const PREF_KEY = 'throne.sound';
 const listeners = new Set();
-let prefs = { effects: false, music: false };
+let prefs = { effects: false, music: true };
 try {
   prefs = { ...prefs, ...JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') };
 } catch {
@@ -47,22 +50,48 @@ export function setSoundPrefs(next) {
     // Not fatal: the choice just won't be remembered.
   }
   if (prefs.effects || prefs.music) ensureContext(); // called from a click: allowed to start audio
-  if (prefs.music) startMusic();
+  if (prefs.music && visible()) startMusic();
   else stopMusic();
   if (!prefs.effects && 'speechSynthesis' in window) window.speechSynthesis.cancel();
   listeners.forEach((fn) => fn(soundPrefs()));
 }
 
-// A remembered "on" needs one user gesture before audio may start.
+// Sound may only start after a user gesture: the first tap, click or key
+// press anywhere unlocks it.
+const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
 if (typeof window !== 'undefined') {
-  window.addEventListener(
-    'pointerdown',
-    () => {
-      if (prefs.effects || prefs.music) ensureContext();
-      if (prefs.music) startMusic();
-    },
-    { once: true, capture: true },
-  );
+  const GESTURES = ['pointerdown', 'keydown', 'touchstart'];
+  const unlock = () => {
+    GESTURES.forEach((g) => window.removeEventListener(g, unlock, true));
+    if (prefs.effects || prefs.music) ensureContext();
+    if (prefs.music && visible()) startMusic();
+  };
+  GESTURES.forEach((g) => window.addEventListener(g, unlock, { capture: true, passive: true }));
+
+  // Some browsers let a site the visitor uses often play straight away.
+  if (prefs.music && visible()) {
+    try {
+      ensureContext();
+      ctx.resume().then(() => {
+        if (ctx.state === 'running' && prefs.music && visible()) startMusic();
+      }, () => {});
+    } catch {
+      // Not allowed yet: the first interaction starts it.
+    }
+  }
+
+  // Only plays while the visitor is on the tab: hidden = paused, back = resumes.
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.visibilityState === 'hidden') {
+      stopMusic();
+      ctx.suspend().catch(() => {});
+    } else if (prefs.music || prefs.effects) {
+      ctx.resume().then(() => {
+        if (prefs.music && ctx.state === 'running') startMusic();
+      }, () => {});
+    }
+  });
 }
 
 // --- Building blocks ---
@@ -408,4 +437,9 @@ if (typeof document !== 'undefined') {
     },
     { capture: true },
   );
+}
+
+// Development only: lets automated tests see whether music is playing.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__throneMusic = () => ({ playing: Boolean(musicTimer), state: ctx?.state ?? 'none', on: prefs.music });
 }
