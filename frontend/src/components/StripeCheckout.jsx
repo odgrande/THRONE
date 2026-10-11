@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+// The /pure build does not load Stripe's script on import: it only loads
+// when a Stripe checkout actually opens (this file is itself lazy-loaded).
+import { loadStripe } from '@stripe/stripe-js/pure';
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;

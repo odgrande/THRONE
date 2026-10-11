@@ -11,12 +11,22 @@ export default function Footer() {
           <OfficialSocials className="text-ink" />
         </div>
         <p className="max-w-xs text-sm leading-relaxed text-white/70">{t('footer.short')}</p>
-        <nav className="flex flex-wrap gap-x-6 gap-y-3">
-          <a href="/" className="label hover:text-bh-yellow">Advertise</a>
-          <a href="/kings" className="label hover:text-bh-yellow">Kings</a>
-          <a href="/practice" className="label hover:text-bh-yellow">Practice</a>
-          <a href="/my-ads" className="label hover:text-bh-yellow">My ads</a>
-          <a href="/legal" className="label hover:text-bh-yellow">Terms &amp; Privacy</a>
+        <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3">
+          {[
+            ['/', 'Advertise'],
+            ['/kings', 'Kings'],
+            ['/practice', 'Practice'],
+            ['/my-ads', 'My ads'],
+            ['/faq', 'FAQ'],
+            ['/safety', 'Safety'],
+            ['/contact', 'Contact'],
+            ['/partners', 'Partners'],
+            ['/legal', 'Terms & Privacy'],
+          ].map(([href, label]) => (
+            <a key={href} href={href} className="label hover:text-bh-yellow">
+              {label}
+            </a>
+          ))}
         </nav>
       </div>
     </footer>

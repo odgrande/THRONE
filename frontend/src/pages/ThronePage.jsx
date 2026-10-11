@@ -4,6 +4,7 @@ import { api, formatMoney, payableMinimum } from '../lib/api.js';
 import { minNextBidCents } from '../lib/rules.js';
 import { t } from '../lib/i18n.js';
 import { hidePreloader } from '../lib/preloader.js';
+import { setTermsVersion } from '../components/AcceptRules.jsx';
 import { activeRegion, adoptProcessor, adoptRegion } from '../lib/region.js';
 import { gsap, reducedMotion, useGSAP } from '../lib/motion.js';
 import { announceCrowned, announceTakeover, sfx } from '../lib/sound.js';
@@ -52,6 +53,7 @@ export default function ThronePage() {
       // Later requests, prices and the live feed follow the region the server chose.
       adoptRegion(next.region);
       adoptProcessor(next.paymentsMode);
+      setTermsVersion(next.rules?.termsVersion);
       setOffsetMs(Date.parse(next.serverTime) - Date.now());
       setState(next);
       setLoadError(null);

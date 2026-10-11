@@ -8,6 +8,7 @@ import { t } from '../lib/i18n.js';
 import AdFields, { EMPTY_AD, EmailField, addonFor, adPayload } from './AdFields.jsx';
 import PayStep from './PayStep.jsx';
 import ProofStrip from './ProofStrip.jsx';
+import AcceptRules, { termsVersion } from './AcceptRules.jsx';
 import Turnstile, { TURNSTILE_SITE_KEY } from './Turnstile.jsx';
 
 export const RANGE_CLASS =
@@ -58,6 +59,7 @@ export default function BidForm({ minNextBidCents, rules, performance, onPriceCh
   const needsEmail = paymentNeedsEmail();
   const [ad, setAd] = useState(EMPTY_AD);
   const [email, setEmail] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [amountText, setAmountText] = useState(amountToText(minNextBidCents));
   const amountCents = textToCents(amountText);
   const setAmountCents = (cents) => setAmountText(amountToText(cents));
@@ -92,7 +94,7 @@ export default function BidForm({ minNextBidCents, rules, performance, onPriceCh
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBid({ ...(await adPayload(ad)), amountCents, turnstileToken: botToken, ...(needsEmail ? { email } : {}) });
+      const res = await api.createBid({ ...(await adPayload(ad)), amountCents, acceptedTerms: termsVersion(), turnstileToken: botToken, ...(needsEmail ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -204,7 +206,9 @@ export default function BidForm({ minNextBidCents, rules, performance, onPriceCh
 
         <Turnstile ref={turnstileRef} onToken={setBotToken} />
 
-        <button type="submit" disabled={step === 'submitting' || amountCents < minNextBidCents || waitingForBotCheck} className="btn-red w-full text-lg">
+        <AcceptRules kind="throne" checked={accepted} onChange={setAccepted} idPrefix="throne" />
+
+        <button type="submit" disabled={step === 'submitting' || amountCents < minNextBidCents || waitingForBotCheck || !accepted} className="btn-red w-full text-lg">
           {waitingForBotCheck && step !== 'submitting' ? (
             t('bid.human')
           ) : step === 'submitting' ? (
@@ -218,6 +222,9 @@ export default function BidForm({ minNextBidCents, rules, performance, onPriceCh
           )}
         </button>
         <LegalNote />
+        <p className="text-center text-xs">
+          <a href="/safety" className="font-bold underline hover:text-bh-red">How we keep you safe</a> · <a href="/faq" className="font-bold underline hover:text-bh-red">FAQ</a>
+        </p>
         <ThroneRules rules={rules} />
       </form>
     );

@@ -27,6 +27,7 @@ export function createMemoryStore() {
   const rounds = [];
   const reports = [];
   const adminLog = [];
+  const contacts = [];
   const paused = Object.fromEntries(REGIONS.map((r) => [r, false]));
   const regionState = Object.fromEntries(
     REGIONS.map((r) => [r, { throneBidId: null, takeovers: 0, volumeCents: 0, boardsBookedUntil: Object.fromEntries(BOARD_IDS.map((id) => [id, null])) }]),
@@ -94,7 +95,7 @@ export function createMemoryStore() {
     kind: 'memory',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null }) {
       stateOf(region);
       const bid = {
         id: randomUUID(),
@@ -115,6 +116,8 @@ export function createMemoryStore() {
         tagline,
         imageUrl,
         videoUrl,
+        termsVersion,
+        termsAcceptedAt: termsVersion ? new Date().toISOString() : null,
         reviewSince: null,
         targetUrl,
         paymentRef: null,
@@ -457,6 +460,29 @@ export function createMemoryStore() {
       }
       return true;
     },
+    // --- Contact inbox (kept 90 days) ---
+    async createContact(msg) {
+      const entry = { id: contacts.length + 1, at: new Date().toISOString(), handledAt: null, ...msg };
+      contacts.push(entry);
+      return { ...entry };
+    },
+    async listContacts(limit) {
+      return contacts.slice(-limit).reverse().map((c) => ({ ...c }));
+    },
+    async markContactHandled(id) {
+      const c = contacts.find((x) => x.id === Number(id));
+      if (c) c.handledAt = c.handledAt ? null : new Date().toISOString();
+      return Boolean(c);
+    },
+    async deleteContact(id) {
+      const i = contacts.findIndex((x) => x.id === Number(id));
+      if (i >= 0) contacts.splice(i, 1);
+      return i >= 0;
+    },
+    async purgeContacts(beforeIso) {
+      for (let i = contacts.length - 1; i >= 0; i--) if (contacts[i].at < beforeIso) contacts.splice(i, 1);
+    },
+
     async videoUsage(url) {
       const users = [...bids.values()].filter((b) => b.videoUrl === url);
       if (users.some((b) => b.status !== 'pending')) return 'paid';

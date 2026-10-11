@@ -33,7 +33,7 @@ export default function Header({ children }) {
 
   return (
     <header className="border-b-4 border-ink bg-paper">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-10">
           <Logo />
           <nav className="hidden items-center gap-8 md:flex">{nav.map(navLink)}</nav>
@@ -64,7 +64,19 @@ export default function Header({ children }) {
       </div>
       {open && (
         <div className="flex flex-col gap-4 border-t-2 border-ink bg-bh-yellow px-4 py-4 md:hidden">
-          <nav className="flex flex-col gap-4">{nav.map(navLink)}</nav>
+          <nav className="flex flex-col gap-4">
+            {nav.map(navLink)}
+            {[
+              ['/faq', 'FAQ'],
+              ['/safety', 'Safety'],
+              ['/contact', 'Contact'],
+              ['/partners', 'Partners'],
+            ].map(([href, label]) => (
+              <a key={href} href={href} className="label hover:text-bh-red">
+                {label}
+              </a>
+            ))}
+          </nav>
           <div className="flex flex-wrap items-center gap-3">
             <LanguagePicker />
             <SoundControls />

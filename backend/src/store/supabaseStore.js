@@ -34,6 +34,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       imageUrl: r.image_url,
       videoUrl: r.video_url,
       reviewSince: r.review_since,
+      termsVersion: r.terms_version,
+      termsAcceptedAt: r.terms_accepted_at,
       targetUrl: r.target_url,
       paymentRef: r.payment_ref,
       clicks: r.clicks,
@@ -65,6 +67,9 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     removedAt: r.bid?.removed_at ?? null,
   });
 
+  const contactFromRow = (r) =>
+    r && { id: r.id, at: r.at, topic: r.topic, name: r.name, email: r.email, company: r.company, message: r.message, adId: r.ad_id, region: r.region, handledAt: r.handled_at };
+
   const logFromRow = (r) =>
     r && {
       id: r.id,
@@ -95,7 +100,7 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     kind: 'supabase',
 
     // --- Ads (throne bids and board bookings) ---
-    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl }) {
+    async createBid({ region, board, amountCents, addonCents = 0, address = null, shieldSeconds = 0, days = null, relegatedFrom = null, ownerHash, name, tagline, imageUrl, videoUrl = null, targetUrl, termsVersion = null }) {
       const row = check(
         await db
           .from('bids')
@@ -114,6 +119,8 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
             image_url: imageUrl,
             video_url: videoUrl,
             target_url: targetUrl,
+            terms_version: termsVersion,
+            terms_accepted_at: termsVersion ? new Date().toISOString() : null,
           })
           .select()
           .single(),
@@ -200,6 +207,27 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
       check(await db.from('throne_legends').delete().eq('bid_id', bidId).eq('retired', true).gte('deposed_at', sinceIso));
       return true;
     },
+    // --- Contact inbox (kept 90 days) ---
+    async createContact({ topic, name, email, company, message, adId, region }) {
+      const row = check(await db.from('contact_messages').insert({ topic, name, email, company, message, ad_id: adId, region }).select().single());
+      return contactFromRow(row);
+    },
+    async listContacts(limit) {
+      return check(await db.from('contact_messages').select('*').order('at', { ascending: false }).limit(limit)).map(contactFromRow);
+    },
+    async markContactHandled(id) {
+      const row = check(await db.from('contact_messages').select('handled_at').eq('id', id).maybeSingle());
+      if (!row) return false;
+      check(await db.from('contact_messages').update({ handled_at: row.handled_at ? null : new Date().toISOString() }).eq('id', id));
+      return true;
+    },
+    async deleteContact(id) {
+      return check(await db.from('contact_messages').delete().eq('id', id).select('id')).length > 0;
+    },
+    async purgeContacts(beforeIso) {
+      check(await db.from('contact_messages').delete().lt('at', beforeIso));
+    },
+
     async videoUsage(url) {
       const rows = check(await db.from('bids').select('status').eq('video_url', url));
       if (rows.some((r) => r.status !== 'pending')) return 'paid';

@@ -39,6 +39,8 @@ const SHARED_RULES = {
 
 // A region's full rule set: shared mechanics + its own prices, each price
 // overridable by env (e.g. NG_STARTING_PRICE_CENTS, NG_BOARD2_DAY_CENTS).
+export const TERMS_VERSION = '2026-10-11';
+
 function region(id, { name, currency, locale, envPrefix, defaults }) {
   const p = (key, fallback) => int(`${envPrefix}${key}`, fallback);
   return {
@@ -67,6 +69,9 @@ function region(id, { name, currency, locale, envPrefix, defaults }) {
       reviewHoldSeconds: p('REVIEW_HOLD_SECONDS', defaults.reviewHoldSeconds),
       // VAT included in the prices shown (percent; 0 = none shown).
       vatPct: p('VAT_PCT', defaults.vatPct),
+      // The rules version a buyer must accept before paying (stored with the ad).
+      // Change it whenever the Terms or Ad Policy change.
+      termsVersion: TERMS_VERSION,
       crownCutoffHourUtc: p('CROWN_CUTOFF_HOUR_UTC', defaults.crownCutoffHourUtc),
       // Render a takeover video only for bids at or above this amount.
       hypeMinCents: p('HYPE_MIN_CENTS', defaults.hypeMinCents),

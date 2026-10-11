@@ -3,6 +3,7 @@ import { Loader2, LogOut, RefreshCw } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import VideoReviews from '../components/VideoReviews.jsx';
 import GodMode from '../components/GodMode.jsx';
+import Inbox from '../components/Inbox.jsx';
 import Logo from '../components/Logo.jsx';
 import Shape from '../components/Shape.jsx';
 import ModerationQueue from '../components/ModerationQueue.jsx';
@@ -168,12 +169,13 @@ export default function AdminPage() {
           </p>
         ) : (
           <>
-            <nav className="mt-8 flex gap-3" aria-label="Admin sections">
+            <nav className="mt-8 flex flex-wrap gap-2 sm:gap-3" aria-label="Admin sections">
               {[
                 ['treasury', 'Treasury'],
                 ['moderation', 'Moderation'],
                 ['videos', 'Review queue'],
                 ['god', 'God mode'],
+                ['inbox', 'Inbox'],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -185,7 +187,7 @@ export default function AdminPage() {
                 </button>
               ))}
             </nav>
-            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : tab === 'god' ? <GodMode token={token} /> : <ModerationQueue token={token} />}
+            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : tab === 'god' ? <GodMode token={token} /> : tab === 'inbox' ? <Inbox token={token} /> : <ModerationQueue token={token} />}
           </>
         )}
       </main>

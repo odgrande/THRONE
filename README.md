@@ -118,6 +118,22 @@ Set `ADMIN_TOKEN` on the backend (32+ chars, `openssl rand -hex 32`), then sign 
 - **Moderation:** the report queue, with takedown (optionally deleting the image), dismiss and restore. Five distinct reporters auto-hide a live ad pending review.
 - The data comes from `GET /api/admin/health` (Bearer token), which you can also point an uptime monitor at.
 
+## Pages for buyers, partners and help
+- **`/safety`**: our security level (live status of each anti-fraud check), how we stop scams, what we never store, how the site is protected, and safety tips.
+- **`/faq`**: plain answers on buying, refunds, review, results, safety and data.
+- **`/contact`**: a protected form (bot check, honeypot, 3/min rate limit, size caps) plus email; `?topic=` preselects a topic.
+- **`/partners`**: agencies, sponsors, communities and investors; live numbers only once there is traffic; not an offer of securities.
+- Messages land in **Admin → Inbox** (reply by email, mark answered, delete) and are deleted automatically after 90 days.
+- Every page except the home page loads on demand, which keeps the first load small on mobile data. Stripe's script loads only if a Stripe checkout opens.
+
+## Accepting the rules (recorded)
+Before paying, every buyer sees a short "what you are buying" list (age, Ad Policy, outbid risk or guaranteed days, review/refunds, no promised sales, removal) and must tick a box. The server refuses any ad without the current rules version (`TERMS_VERSION` in `backend/src/config.js`, bump it when the Terms change) and saves the version and time on the ad (`bids.terms_version`, `terms_accepted_at`), visible in God mode and My ads.
+
+## Nigeria compliance switches
+- **Review hold (ARCON):** `NG_REVIEW_HOLD_SECONDS` (default 300). Every paid Nigerian ad waits in the review queue, then goes live unless rejected (full refund).
+- **Political and advocacy ads** are blocked automatically before payment (`backend/src/services/political.js`), and can be reported.
+- **VAT:** `NG_VAT_PCT` (default 7.5): Naira prices include VAT; the VAT share is shown in the treasury.
+
 ## Notices
 - A one-time notice (with the cookie line): every ad is a paid placement by an independent advertiser; Throne isn't affiliated with or endorsing any of them; never send money to anyone claiming to be Throne. The same text is in the footer, and a short version sits under the logo on the preloader.
 - Every ad unit (throne, Court, Spotlight, Market, Recently dethroned, archive) is labelled **Paid ad** and has **Report**.

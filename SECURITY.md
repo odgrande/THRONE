@@ -106,6 +106,14 @@ Write that procedure down before launch.
 | `/my-ads` returns an ad only when the browser presents its 256-bit owner code (only the SHA-256 is stored); 30 req/min | Code: `server.js`, `owners.js` |
 | Body-parser errors (oversized upload, malformed JSON) answer 4xx, never a server error | Code: `server.js` |
 
+## 9. Contact form, rules acceptance, third parties
+
+| Defence | Where |
+|---|---|
+| Contact/partner form: bot check, hidden honeypot, 3 messages/min per IP, topic whitelist, length caps; messages readable only in /admin and deleted after 90 days | Code: `server.js`, `ContactForm.jsx` |
+| Every purchase requires acceptance of the current rules version; the version and time are stored on the ad | Code: `validateBid()`, `AcceptRules.jsx` |
+| No third-party trackers: Stripe's script is lazy-loaded only for a Stripe checkout; no analytics or ad pixels anywhere (checked by the test suite) | Code: `PayStep.jsx` |
+
 ## Known gaps before launch
 - The legal pages are live. Clauses added on 11 October 2026 (owner, governing law, political ads, data rights, video ads, results disclaimer) should be checked by counsel. Check whether the company's CAC registration number (and registered office) must appear on the site.
 - Unpaid `pending` bids and their images pile up. Add a cleanup job (delete `pending` older than 1 hour).

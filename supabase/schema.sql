@@ -120,6 +120,27 @@ create table if not exists daily_stats (
 );
 alter table daily_stats enable row level security;
 
+-- The buyer's acceptance of the rules: which version, and when.
+alter table bids add column if not exists terms_version text;
+alter table bids add column if not exists terms_accepted_at timestamptz;
+
+-- Messages from the contact and partners forms. Kept only to answer them,
+-- deleted automatically after 90 days. Never readable by the public.
+create table if not exists contact_messages (
+  id          bigint generated always as identity primary key,
+  at          timestamptz not null default now(),
+  topic       text not null check (topic in ('ad', 'payment', 'abuse', 'legal', 'data', 'partner', 'investor', 'press', 'other')),
+  name        text check (char_length(name) <= 80),
+  email       text not null check (char_length(email) <= 254),
+  company     text check (char_length(company) <= 120),
+  message     text not null check (char_length(message) between 10 and 4000),
+  ad_id       uuid,
+  region      text,
+  handled_at  timestamptz
+);
+create index if not exists contact_messages_at_idx on contact_messages (at desc);
+alter table contact_messages enable row level security;
+
 -- Video ads: stored file, and when the paid ad started waiting for review.
 alter table bids add column if not exists video_url text;
 alter table bids add column if not exists review_since timestamptz;

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
-import StripeCheckout from './StripeCheckout.jsx';
+// Loaded only for a Stripe checkout, so Stripe's scripts never run elsewhere.
+const StripeCheckout = lazy(() => import('./StripeCheckout.jsx'));
 import { t } from '../lib/i18n.js';
 import PaystackCheckout from './PaystackCheckout.jsx';
 
@@ -57,7 +58,9 @@ export default function PayStep({ checkout, intro, onDone, onCancel }) {
           onPaid={() => finish(() => waitForSettlement(checkout.bidId))}
         />
       ) : (
-        <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
+        <Suspense fallback={<Loader2 className="mx-auto h-6 w-6 animate-spin" strokeWidth={3} />}>
+          <StripeCheckout clientSecret={checkout.clientSecret} label={`Pay ${price}`} onPaid={() => finish(() => waitForSettlement(checkout.bidId))} />
+        </Suspense>
       )}
       {checkout.vatPct > 0 && <p className="text-center text-xs text-ink/60">{t('pay.vat', { pct: checkout.vatPct })}</p>}
       {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}

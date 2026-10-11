@@ -192,6 +192,17 @@ const en = {
   'hold.booking': "Every ad is checked before it goes live in Nigeria. Yours starts within about {m} minutes, for the days you booked. If it is rejected, you are refunded in full.",
   'pay.vat': "Price includes {pct}% VAT.",
   'footer.short': "Paid ads by independent advertisers. Throne does not endorse them.",
+  'rules.accept.title': "Before you pay: what you are buying",
+  'rules.accept.age': "I am 18 or older and I have the right to advertise this business, product or person.",
+  'rules.accept.policy': "My ad follows the Ad Policy: no scams, nothing false or misleading, no adult content, no political or advocacy ads.",
+  'rules.accept.throne': "On the Throne, anyone can pay more and replace my ad at any time. That is how it works and it is not a reason for a refund.",
+  'rules.accept.booking': "My ad runs for the days I book, and nobody can replace it in that time.",
+  'rules.accept.reviewNg': "In Nigeria every ad is checked for about 5 minutes before it goes live (video ads by a person). If it is rejected, I am refunded in full.",
+  'rules.accept.reviewVideo': "Video ads are checked by a person before they go live. If one is rejected, I am refunded in full.",
+  'rules.accept.results': "Reach and click numbers are estimates. Throne does not promise any traffic or sales.",
+  'rules.accept.removal': "Throne may remove an ad that breaks the rules or the law, without a refund.",
+  'rules.accept.check': "I have read and accept the",
+  'rules.accept.recorded': "Your acceptance is saved with your ad (date and version of the rules).",
 };
 
 const pcm = {
@@ -371,6 +382,17 @@ const pcm = {
   'hold.booking': "We dey check every ad before e go live for Nigeria. Your own go start inside like {m} minutes, for the days wey you book. If dem reject am, you go collect your money back complete.",
   'pay.vat': "The price don include {pct}% VAT.",
   'footer.short': "Na independent advertisers pay for these ads. Throne no dey vouch for dem.",
+  'rules.accept.title': "Before you pay: wetin you dey buy",
+  'rules.accept.age': "I don reach 18 and I get right to advertise this business, product or person.",
+  'rules.accept.policy': "My ad follow the Ad Policy: no scam, no lie or deceive, no adult content, no political or advocacy ad.",
+  'rules.accept.throne': "For the Throne, anybody fit pay pass and replace my ad any time. Na so e dey work, and e no be reason for refund.",
+  'rules.accept.booking': "My ad go run for the days wey I book, and nobody fit replace am for that time.",
+  'rules.accept.reviewNg': "For Nigeria, dem dey check every ad for like 5 minutes before e go live (person dey check video ads). If dem reject am, I go collect my money back complete.",
+  'rules.accept.reviewVideo': "Person dey check video ads before dem go live. If dem reject am, I go collect my money back complete.",
+  'rules.accept.results': "Reach and clicks na estimate. Throne no promise any traffic or sales.",
+  'rules.accept.removal': "Throne fit remove ad wey break the rules or the law, without refund.",
+  'rules.accept.check': "I don read and I accept the",
+  'rules.accept.recorded': "We go save say you accept with your ad (date and version of the rules).",
 };
 
 const yo = {
@@ -550,6 +572,17 @@ const yo = {
   'hold.booking': "A ń ṣàyẹ̀wò gbogbo ìpolówó kí ó tó hàn ní Nàìjíríà. Tìrẹ yóò bẹ̀rẹ̀ láàárín ìṣẹ́jú {m}, fún ọjọ́ tí o gbà. Tí wọ́n bá kọ̀ ọ́, a ó dá owó rẹ padà ní kíkún.",
   'pay.vat': "Iye owó náà ní VAT {pct}% nínú.",
   'footer.short': "Àwọn olùpolówó aládàáni ló sanwó fún ìpolówó wọ̀nyí. Throne kò fọwọ́ sí wọn.",
+  'rules.accept.title': "Kí o tó sanwó: ohun tí o ń rà",
+  'rules.accept.age': "Mo ti pé ọmọ ọdún 18, mo sì ní ẹ̀tọ́ láti polówó ilé-iṣẹ́, ọjà tàbí ènìyàn yìí.",
+  'rules.accept.policy': "Ìpolówó mi tẹ̀lé Ìlànà Ìpolówó: kò sí jìbìtì, kò sí irọ́ tàbí ẹ̀tàn, kò sí ohun àgbàlagbà, kò sí ìpolówó òṣèlú tàbí ìgbèjà.",
+  'rules.accept.throne': "Lórí Ìtẹ́, ẹnikẹ́ni lè san jù mí lọ kí ó sì rọ́pò ìpolówó mi nígbàkigbà. Bẹ́ẹ̀ ló ṣe ń ṣiṣẹ́, kì í sì í ṣe ìdí fún ìdápadà owó.",
+  'rules.accept.booking': "Ìpolówó mi yóò hàn fún ọjọ́ tí mo gbà, kò sì sí ẹni tó lè rọ́pò rẹ̀ ní àkókò náà.",
+  'rules.accept.reviewNg': "Ní Nàìjíríà, a ń ṣàyẹ̀wò gbogbo ìpolówó fún ìṣẹ́jú márùn-ún kí ó tó hàn (ènìyàn ń wo ìpolówó fídíò). Tí wọ́n bá kọ̀ ọ́, a ó dá owó mi padà ní kíkún.",
+  'rules.accept.reviewVideo': "Ènìyàn ń ṣàyẹ̀wò ìpolówó fídíò kí ó tó hàn. Tí wọ́n bá kọ̀ ọ́, a ó dá owó mi padà ní kíkún.",
+  'rules.accept.results': "Iye ènìyàn àti títẹ̀ jẹ́ ìṣirò lásán. Throne kò ṣèlérí ìrìnàjò tàbí títà kankan.",
+  'rules.accept.removal': "Throne lè yọ ìpolówó tó rú òfin kúrò, láìdá owó padà.",
+  'rules.accept.check': "Mo ti kà, mo sì gbà",
+  'rules.accept.recorded': "A ó tọ́jú ìgbàwọlé rẹ pẹ̀lú ìpolówó rẹ (ọjọ́ àti ẹ̀yà àwọn òfin).",
 };
 
 const ha = {
@@ -729,6 +762,17 @@ const ha = {
   'hold.booking': "Ana duba kowace talla kafin ta bayyana a Najeriya. Taka za ta fara cikin kusan minti {m}, na kwanakin da ka yi booking. Idan aka ƙi, za a mayar maka da kuɗinka gaba ɗaya.",
   'pay.vat': "Farashin ya haɗa da VAT {pct}%.",
   'footer.short': "Masu talla masu zaman kansu ne suka biya waɗannan tallace-tallace. Throne ba ya ba su tabbaci.",
+  'rules.accept.title': "Kafin ka biya: abin da kake saya",
+  'rules.accept.age': "Na kai shekara 18 kuma ina da ’yancin tallata wannan kasuwanci, kaya ko mutum.",
+  'rules.accept.policy': "Tallata ta bi Manufar Talla: babu zamba, babu ƙarya ko yaudara, babu abubuwan manya, babu tallar siyasa ko fafutuka.",
+  'rules.accept.throne': "A Karagar Mulki, kowa zai iya biya fiye kuma ya maye gurbin tallata a kowane lokaci. Haka yake aiki, kuma ba dalilin mayar da kuɗi ba ne.",
+  'rules.accept.booking': "Tallata za ta gudana na kwanakin da na yi booking, kuma babu wanda zai iya maye gurbinta a lokacin.",
+  'rules.accept.reviewNg': "A Najeriya ana duba kowace talla na kusan minti 5 kafin ta bayyana (mutum yana duba tallar bidiyo). Idan aka ƙi, za a mayar mini da kuɗina gaba ɗaya.",
+  'rules.accept.reviewVideo': "Mutum yana duba tallar bidiyo kafin ta bayyana. Idan aka ƙi, za a mayar mini da kuɗina gaba ɗaya.",
+  'rules.accept.results': "Ƙididdigar isa da dannawa ƙiyasi ne. Throne ba ya alƙawarin zirga-zirga ko ciniki.",
+  'rules.accept.removal': "Throne zai iya cire tallar da ta karya doka, ba tare da mayar da kuɗi ba.",
+  'rules.accept.check': "Na karanta kuma na yarda da",
+  'rules.accept.recorded': "Ana adana yardarka tare da tallarka (kwanan wata da sigar dokokin).",
 };
 
 const ig = {
@@ -908,6 +952,17 @@ const ig = {
   'hold.booking': "A na-enyocha mgbasa ozi ọ bụla tupu ọ pụta na Naịjirịa. Nke gị ga-amalite n’ime ihe dị ka nkeji {m}, maka ụbọchị ị debere. Ọ bụrụ na a jụrụ ya, a ga-eweghachiri gị ego gị niile.",
   'pay.vat': "Ọnụ ahịa a gụnyere VAT {pct}%.",
   'footer.short': "Ndị na-akpọsa ahịa n’onwe ha kwụrụ ụgwọ mgbasa ozi ndị a. Throne anaghị akwado ha.",
+  'rules.accept.title': "Tupu ị kwụọ ụgwọ: ihe ị na-azụ",
+  'rules.accept.age': "Agam afọ 18 ma ọ bụ karịa, enwekwara m ikike ịkpọsa azụmahịa, ngwaahịa ma ọ bụ onye a.",
+  'rules.accept.policy': "Mgbasa ozi m na-agbaso Iwu Mgbasa Ozi: enweghị aghụghọ, enweghị ụgha ma ọ bụ nduhie, enweghị ihe ndị okenye, enweghị mgbasa ozi ndọrọ ndọrọ ọchịchị ma ọ bụ mkpọsa.",
+  'rules.accept.throne': "Na Oche Eze, onye ọ bụla nwere ike ịkwụ karịa ma dochie mgbasa ozi m n’oge ọ bụla. Otú a ka ọ na-arụ ọrụ, ọ bụghịkwa ihe kpatara iweghachi ego.",
+  'rules.accept.booking': "Mgbasa ozi m ga-agba maka ụbọchị m debere, ọ dịghịkwa onye nwere ike idochie ya n’oge ahụ.",
+  'rules.accept.reviewNg': "Na Naịjirịa a na-enyocha mgbasa ozi ọ bụla ihe dị ka nkeji 5 tupu ọ pụta (mmadụ na-elele mgbasa ozi vidiyo). Ọ bụrụ na a jụrụ ya, a ga-eweghachiri m ego m niile.",
+  'rules.accept.reviewVideo': "Mmadụ na-enyocha mgbasa ozi vidiyo tupu ọ pụta. Ọ bụrụ na a jụrụ ya, a ga-eweghachiri m ego m niile.",
+  'rules.accept.results': "Ọnụọgụ iru na ịpị bụ atụmatụ. Throne ekweghị nkwa ọbịbịa ma ọ bụ ire ahịa ọ bụla.",
+  'rules.accept.removal': "Throne nwere ike iwepụ mgbasa ozi mebiri iwu, n’eweghachighị ego.",
+  'rules.accept.check': "Agụọla m ma kwenye na",
+  'rules.accept.recorded': "A na-echekwa nkwenye gị na mgbasa ozi gị (ụbọchị na ụdị iwu ahụ).",
 };
 
 const DICTS = { en, pcm, yo, ha, ig };

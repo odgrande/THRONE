@@ -9,6 +9,7 @@ import { needsEmail } from '../lib/region.js';
 import AdFields, { EMPTY_AD, EmailField, adPayload } from './AdFields.jsx';
 import AdMedia from './AdMedia.jsx';
 import ProofStrip from './ProofStrip.jsx';
+import AcceptRules, { termsVersion } from './AcceptRules.jsx';
 import PayStep from './PayStep.jsx';
 import ReportButton from './ReportDialog.jsx';
 import Shape from './Shape.jsx';
@@ -133,6 +134,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [email, setEmail] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [botToken, setBotToken] = useState(null);
   const turnstileRef = useRef(null);
   const waitingForBotCheck = Boolean(TURNSTILE_SITE_KEY) && !botToken;
@@ -143,7 +145,7 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
     setError(null);
     setStep('submitting');
     try {
-      const res = await api.createBooking({ board: board.id, days, ...(await adPayload(ad)), turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
+      const res = await api.createBooking({ board: board.id, days, ...(await adPayload(ad)), acceptedTerms: termsVersion(), turnstileToken: botToken, ...(needsEmail() ? { email } : {}) });
       rememberOwnedAd(res);
       setCheckout(res);
       setStep('pay');
@@ -239,7 +241,8 @@ function BookingDialog({ board, now, mapAddonCents: boardMapCents, videoAddonCen
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
             <Turnstile ref={turnstileRef} onToken={setBotToken} />
 
-            <button type="submit" disabled={step === 'submitting' || waitingForBotCheck} className="btn-blue w-full text-lg">
+            <AcceptRules kind="booking" checked={accepted} onChange={setAccepted} idPrefix={`book-${board.id}`} />
+            <button type="submit" disabled={step === 'submitting' || waitingForBotCheck || !accepted} className="btn-blue w-full text-lg">
               {step === 'submitting' ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" strokeWidth={3} /> Checking your ad

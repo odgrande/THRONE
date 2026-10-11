@@ -39,8 +39,11 @@ export const api = {
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
   createBooking: (booking) => request('/api/bookings', { method: 'POST', body: JSON.stringify(booking) }),
   relegationOffer: (bidId, ownerToken) => request(`/api/relegations/${bidId}`, { headers: { 'X-Owner-Token': ownerToken } }),
-  relegate: (fromBidId, ownerToken, email) =>
-    request('/api/relegations', { method: 'POST', body: JSON.stringify({ fromBidId, ownerToken, email }) }),
+  relegate: (fromBidId, ownerToken, email, acceptedTerms) =>
+    request('/api/relegations', { method: 'POST', body: JSON.stringify({ fromBidId, ownerToken, email, acceptedTerms }) }),
+  contact: (msg) => request('/api/contact', { method: 'POST', body: JSON.stringify(msg) }),
+  adminInbox: (token) => request('/api/admin/inbox', { headers: { Authorization: `Bearer ${token}` } }),
+  adminInboxAction: (token, id, action) => request(`/api/admin/inbox/${id}/${action}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }),
   getLink: (bidId) => request(`/api/go/${bidId}`),
   report: (bidId, reason, details) => request('/api/reports', { method: 'POST', body: JSON.stringify({ bidId, reason, details }) }),
   adminHealth: (token) => request('/api/admin/health', { headers: { Authorization: `Bearer ${token}` } }),

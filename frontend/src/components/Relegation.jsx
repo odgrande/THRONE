@@ -5,6 +5,7 @@ import { ownedAds, rememberOwnedAd } from '../lib/owned.js';
 import { useModal } from '../lib/useModal.js';
 import PayStep from './PayStep.jsx';
 import { EmailField } from './AdFields.jsx';
+import AcceptRules, { termsVersion } from './AcceptRules.jsx';
 import Shape from './Shape.jsx';
 import ReportButton from './ReportDialog.jsx';
 import { accentFor } from './Billboard.jsx';
@@ -42,6 +43,7 @@ function RelegateDialog({ offer, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [email, setEmail] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [sent, setSent] = useState(false);
   const started = useRef(false);
 
@@ -51,7 +53,7 @@ function RelegateDialog({ offer, onClose }) {
     started.current = true;
     setSent(true);
     api
-      .relegate(offer.bidId, offer.token, receiptEmail)
+      .relegate(offer.bidId, offer.token, receiptEmail, termsVersion())
       .then((res) => {
         rememberOwnedAd(res);
         setCheckout(res);
@@ -62,12 +64,8 @@ function RelegateDialog({ offer, onClose }) {
         setError(err.message);
       });
   };
-  // Paystack offers wait for the receipt email; others start straight away.
-  useEffect(() => {
-    if (!offer.needsEmail) start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offer]);
-  const asking = offer.needsEmail && !checkout && !sent;
+  // Every purchase starts with the rules (and the receipt email for Paystack).
+  const asking = !checkout && !sent;
 
   return (
     <dialog ref={dialog} aria-labelledby="relegate-title" className="m-auto w-[calc(100%-2rem)] max-w-md border-4 border-ink bg-paper p-0 text-ink shadow-hard-lg backdrop:bg-ink/60">
@@ -86,15 +84,16 @@ function RelegateDialog({ offer, onClose }) {
             onSubmit={(e) => {
               e.preventDefault();
               setError(null);
-              start(email);
+              start(offer.needsEmail ? email : undefined);
             }}
           >
             <p className="font-medium leading-relaxed">
               1 day on the {offer.boardName} for <span className="font-black">{formatMoney(offer.priceCents, offer.region)}</span>, starting {when(offer.startsAt)}.
             </p>
-            <EmailField value={email} onChange={setEmail} idPrefix="relegate" />
+            {offer.needsEmail && <EmailField value={email} onChange={setEmail} idPrefix="relegate" />}
+            <AcceptRules kind="relegation" checked={accepted} onChange={setAccepted} idPrefix="relegate" />
             {error && <p role="alert" className="border-2 border-ink bg-bh-red px-3 py-2 text-sm font-bold text-white">{error}</p>}
-            <button type="submit" className="btn-blue w-full">Continue to payment</button>
+            <button type="submit" disabled={!accepted} className="btn-blue w-full">Continue to payment</button>
           </form>
         ) : result ? (
           <div className="space-y-4">

@@ -362,6 +362,8 @@ if (config.adminToken) {
         settledAt: b.settledAt,
         startsAt: b.startsAt,
         endsAt: b.endsAt,
+        termsVersion: b.termsVersion ?? null,
+        termsAcceptedAt: b.termsAcceptedAt ?? null,
         live: b.status === 'won' && !b.removedAt && (b.board === 'throne' ? null : Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now),
       }));
       // Which throne ad is reigning right now, per edition.
@@ -513,6 +515,31 @@ if (config.adminToken) {
     }
   });
 
+  // --- Inbox: contact, partner and investor messages ---
+  admin.get('/inbox', async (_req, res, next) => {
+    try {
+      res.json({ items: await store.listContacts(200) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  admin.post('/inbox/:id/handled', async (req, res, next) => {
+    try {
+      if (!/^\d{1,15}$/.test(req.params.id)) return res.status(404).json({ error: 'Not found.' });
+      res.json({ ok: await store.markContactHandled(req.params.id) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  admin.post('/inbox/:id/delete', async (req, res, next) => {
+    try {
+      if (!/^\d{1,15}$/.test(req.params.id)) return res.status(404).json({ error: 'Not found.' });
+      res.json({ ok: await store.deleteContact(req.params.id) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.use('/api/admin', admin);
 }
 
@@ -640,6 +667,8 @@ function validateBid(body, rules) {
   // Sanity cap: 2,000x the starting price ($10,000 / ₦4,000,000 by default).
   const maxCents = rules.startingPriceCents * 2000;
 
+  // The buyer must accept the current rules; the version is saved with the ad.
+  if (body.acceptedTerms !== rules.termsVersion) return { error: 'Please read and accept the rules before you pay.', needsTerms: true };
   if (name.length < 1 || name.length > 40) return { error: 'Name must be 1-40 characters.' };
   if (tagline.length > 100) return { error: 'Tagline must be 100 characters or fewer.' };
   if (!Number.isInteger(amountCents) || amountCents <= 0 || amountCents > maxCents) {
@@ -672,7 +701,7 @@ function validateBid(body, rules) {
     }
     addonCents += rules.videoAddonCents;
   }
-  return { name, tagline, targetUrl, amountCents, address, addonCents, videoName };
+  return { name, tagline, targetUrl, amountCents, address, addonCents, videoName, termsVersion: rules.termsVersion };
 }
 
 // Boards that can carry a video: the Throne, the Court and the Spotlight
@@ -802,6 +831,41 @@ const handle = (fn) => async (req, res, next) => {
   }
 };
 
+// --- Contact, partners and investors: a protected form ---
+// Bot check + rate limit + honeypot + size caps. Messages are stored only so
+// we can answer them, readable only in /admin, and deleted after 90 days.
+const CONTACT_TOPICS = ['ad', 'payment', 'abuse', 'legal', 'data', 'partner', 'investor', 'press', 'other'];
+const contactLimiter = limiter(3, 'Too many messages. Please wait a minute.');
+app.post(
+  '/api/contact',
+  contactLimiter,
+  handle(async (req, res) => {
+    const b = req.body ?? {};
+    // Honeypot: a hidden field people never fill in. Bots do; pretend success.
+    if (typeof b.website === 'string' && b.website.trim()) return res.status(201).json({ ok: true });
+    const text = (v, max) => (typeof v === 'string' ? v.trim().replace(/\s+\n/g, '\n').slice(0, max) : '');
+    const topic = CONTACT_TOPICS.includes(b.topic) ? b.topic : null;
+    const email = text(b.email, 254);
+    const message = text(b.message, 4000);
+    if (!topic) throw new Reject(400, 'Pick a topic.');
+    if (!EMAIL.test(email)) throw new Reject(400, 'Enter a valid email so we can reply.');
+    if (message.length < 10) throw new Reject(400, 'Tell us a little more (at least 10 characters).');
+    const adId = typeof b.adId === 'string' && UUID.test(b.adId.trim()) ? b.adId.trim() : null;
+    await requireHuman(req);
+    await store.createContact({
+      topic,
+      name: text(b.name, 80) || null,
+      email,
+      company: text(b.company, 120) || null,
+      message,
+      adId,
+      region: regionOf(req),
+    });
+    console.log(`[contact] new ${topic} message`);
+    res.status(201).json({ ok: true });
+  }),
+);
+
 // --- Video upload (before the ad is created) ---
 // Raw MP4/MOV body, capped in size and length; returns a signed token the bid
 // form sends back. Strictly rate-limited: uploads cost storage.
@@ -907,6 +971,7 @@ app.post(
     // Same ad, already screened when it took the throne: no new upload or check.
     // It stays in its own region, paid in that region's currency.
     const { bid } = offer;
+    if (req.body?.acceptedTerms !== game.rulesOf(bid.region).termsVersion) throw new Reject(400, 'Please read and accept the rules before you pay.');
     if (await store.isPaused(bid.region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
     const email = paymentEmail(req, bid.region);
     await createPaidAd(
@@ -917,6 +982,7 @@ app.post(
         days: 1,
         amountCents: offer.priceCents,
         relegatedFrom: bid.id,
+        termsVersion: game.rulesOf(bid.region).termsVersion,
         name: bid.name,
         tagline: bid.tagline,
         imageUrl: bid.imageUrl,
@@ -963,6 +1029,8 @@ app.post(
         settledAt: bid.settledAt,
         startsAt: bid.startsAt,
         endsAt: bid.endsAt,
+        termsVersion: bid.termsVersion ?? null,
+        termsAcceptedAt: bid.termsAcceptedAt ?? null,
       });
     }
     res.json({ items });
@@ -1029,6 +1097,11 @@ setInterval(async () => {
 setInterval(() => {
   videos.sweep((url) => store.videoUsage(url)).catch((err) => console.error('[videos] sweep failed', err));
 }, 10 * 60_000).unref();
+
+// Contact messages are deleted 90 days after they arrive.
+setInterval(() => {
+  store.purgeContacts(new Date(Date.now() - 90 * 86400_000).toISOString()).catch((err) => console.error('[contact] purge failed', err));
+}, 6 * 3600_000).unref();
 
 // Ad reach: credit live viewers to live ads every 15 s.
 setInterval(() => {
