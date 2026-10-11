@@ -237,6 +237,7 @@ if (config.adminToken) {
       const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
       if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
       await store.removeBid(bid.id, reason);
+      await store.logAdmin({ action: 'remove', bidId: bid.id, region: bid.region, reason, undoable: req.body?.purgeMedia !== true });
       let purged = false;
       if (req.body?.purgeMedia === true && (bid.imageUrl || bid.videoUrl)) {
         if (bid.imageUrl) purged = await storage.remove(bid.imageUrl);
@@ -253,6 +254,7 @@ if (config.adminToken) {
     '/bids/:id/restore',
     withBid(async (_req, res, bid) => {
       await store.restoreBid(bid.id);
+      await store.logAdmin({ action: 'restore', bidId: bid.id, region: bid.region, before: { removedReason: bid.removedReason }, undoable: true });
       console.log(`[admin] restored ad ${bid.id}`);
       realtime.broadcast('removed', { region: bid.region, bidId: bid.id });
       res.json({ ok: true });
@@ -296,6 +298,7 @@ if (config.adminToken) {
     '/bids/:id/approve',
     withBid(async (_req, res, bid) => {
       const result = await game.approveVideo(bid.id);
+      await store.logAdmin({ action: 'approve-video', bidId: bid.id, region: bid.region, after: { status: result.status } });
       console.log(`[admin] approved video ad ${bid.id}: ${result.status}`);
       res.json({ status: result.status });
     }),
@@ -307,10 +310,187 @@ if (config.adminToken) {
       const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
       if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
       const result = await game.rejectVideo(bid.id, reason);
+      await store.logAdmin({ action: 'reject-video', bidId: bid.id, region: bid.region, reason, after: { status: result.status } });
       console.log(`[admin] rejected video ad ${bid.id} (${reason}): ${result.status}`);
       res.json({ status: result.status });
     }),
   );
+
+  // --- God mode: search, edit, end, refund, pause, and undo ---
+  const changed = (region) => realtime.broadcast('removed', { region });
+
+  admin.get('/ads', async (req, res, next) => {
+    try {
+      const region = isRegion(req.query.region) ? req.query.region : null;
+      const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 60) : '';
+      const now = Date.now();
+      const items = (await store.searchAds({ region, q, limit: 40 })).map((b) => ({
+        id: b.id,
+        region: b.region,
+        board: b.board,
+        boardName: b.board === 'throne' ? 'The Throne' : game.rulesOf(b.region).boards[b.board]?.name ?? b.board,
+        name: b.name,
+        tagline: b.tagline,
+        targetUrl: b.targetUrl,
+        imageUrl: b.imageUrl,
+        videoUrl: b.videoUrl ?? null,
+        status: b.status,
+        removed: Boolean(b.removedAt),
+        paidCents: b.amountCents + (b.addonCents ?? 0),
+        views: b.views ?? 0,
+        clicks: b.clicks ?? 0,
+        settledAt: b.settledAt,
+        startsAt: b.startsAt,
+        endsAt: b.endsAt,
+        live: b.status === 'won' && !b.removedAt && (b.board === 'throne' ? null : Date.parse(b.startsAt) <= now && Date.parse(b.endsAt) > now),
+      }));
+      // Which throne ad is reigning right now, per edition.
+      const kings = {};
+      for (const r of REGION_IDS) kings[r] = (await store.getThrone(r)).bid?.id ?? null;
+      const paused = {};
+      for (const r of REGION_IDS) paused[r] = await store.isPaused(r);
+      res.json({ items: items.map((i) => (i.board === 'throne' ? { ...i, live: kings[i.region] === i.id } : i)), paused });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Fix an ad's words or link (a typo, a dead link, a softened claim). Undoable.
+  admin.post(
+    '/bids/:id/edit',
+    withBid(async (req, res, bid) => {
+      const name = typeof req.body?.name === 'string' ? req.body.name.trim() : bid.name;
+      const tagline = typeof req.body?.tagline === 'string' ? req.body.tagline.trim() : bid.tagline;
+      if (name.length < 1 || name.length > 40) return res.status(400).json({ error: 'Name must be 1-40 characters.' });
+      if ((tagline ?? '').length > 100) return res.status(400).json({ error: 'Tagline must be 100 characters or fewer.' });
+      let targetUrl = bid.targetUrl;
+      if (typeof req.body?.targetUrl === 'string' && req.body.targetUrl !== bid.targetUrl) {
+        try {
+          targetUrl = normalizeTargetUrl(req.body.targetUrl);
+        } catch (err) {
+          return res.status(400).json({ error: err.message });
+        }
+        if (!(await links.check(targetUrl)).ok) return res.status(422).json({ error: 'That link is flagged as unsafe.' });
+      }
+      const before = { name: bid.name, tagline: bid.tagline, targetUrl: bid.targetUrl };
+      const after = { name, tagline: tagline || null, targetUrl };
+      await store.updateAdFields(bid.id, after);
+      await store.logAdmin({ action: 'edit', bidId: bid.id, region: bid.region, before, after, undoable: true });
+      changed(bid.region);
+      res.json({ ok: true });
+    }),
+  );
+
+  // End a reign or a booking now (the ad was paid for; this does not refund). Undoable.
+  admin.post(
+    '/bids/:id/end',
+    withBid(async (req, res, bid) => {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
+      if (bid.status !== 'won') return res.status(409).json({ error: 'Only a live or booked ad can be ended.' });
+      // Exact moment it ended: undo removes the archive entry made from here on.
+      const endedAt = new Date().toISOString();
+      if (bid.board === 'throne') {
+        if (!(await store.forceRetire(bid.region, bid.id))) return res.status(409).json({ error: 'This ad is not on the throne right now.' });
+        realtime.broadcast('retired', { region: bid.region, name: bid.removedAt ? 'Removed ad' : bid.name });
+      } else {
+        const now = new Date().toISOString();
+        if (Date.parse(bid.endsAt) <= Date.now()) return res.status(409).json({ error: 'This booking has already ended.' });
+        const startsAt = Date.parse(bid.startsAt) > Date.now() ? now : bid.startsAt;
+        await store.setAdTimes(bid.id, { startsAt, endsAt: now });
+      }
+      await store.logAdmin({ action: 'end', bidId: bid.id, region: bid.region, reason, before: { startsAt: bid.startsAt, endsAt: bid.endsAt, board: bid.board, endedAt }, undoable: true });
+      changed(bid.region);
+      res.json({ ok: true });
+    }),
+  );
+
+  // Give the money back. Irreversible: the processor has paid it out.
+  admin.post(
+    '/bids/:id/refund',
+    withBid(async (req, res, bid) => {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < 3 || reason.length > 200) return res.status(400).json({ error: 'Give a reason (3-200 characters).' });
+      if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirm the refund: it cannot be undone.' });
+      if (!['won', 'review'].includes(bid.status) || !bid.paymentRef) return res.status(409).json({ error: 'Only a paid ad can be refunded.' });
+      const charge = bid.amountCents + (bid.addonCents ?? 0);
+      await payments.refund(bid.region, bid.paymentRef, charge, `admin-${bid.id}`);
+      if (bid.board === 'throne') await store.forceRetire(bid.region, bid.id);
+      await store.setStatus(bid.id, 'refunded');
+      if (!bid.removedAt) await store.removeBid(bid.id, `Refunded: ${reason}`);
+      await store.logAdmin({ action: 'refund', bidId: bid.id, region: bid.region, reason, after: { refundedCents: charge } });
+      console.log(`[admin] refunded ad ${bid.id} (${charge}) - ${reason}`);
+      changed(bid.region);
+      res.json({ ok: true, refundedCents: charge });
+    }),
+  );
+
+  // Emergency stop for one edition: no new ads until resumed. Undoable.
+  admin.post('/regions/:region/pause', async (req, res, next) => {
+    try {
+      const region = req.params.region;
+      if (!isRegion(region)) return res.status(404).json({ error: 'Unknown edition.' });
+      const value = req.body?.paused === true;
+      await store.setPaused(region, value);
+      await store.logAdmin({ action: value ? 'pause' : 'resume', region, after: { paused: value }, undoable: true });
+      console.log(`[admin] ${region} ${value ? 'PAUSED' : 'resumed'}`);
+      res.json({ ok: true, paused: value });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  admin.get('/log', async (_req, res, next) => {
+    try {
+      res.json({ items: await store.listAdminLog(60) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Undo one logged action, if it can still be undone.
+  admin.post('/log/:id/undo', async (req, res, next) => {
+    try {
+      const entry = await store.getAdminLog(req.params.id);
+      if (!entry) return res.status(404).json({ error: 'Not found.' });
+      if (!entry.undoable) return res.status(409).json({ error: 'This action cannot be undone.' });
+      if (entry.undoneAt) return res.status(409).json({ error: 'Already undone.' });
+      const bid = entry.bidId ? await store.getBid(entry.bidId) : null;
+      switch (entry.action) {
+        case 'remove':
+          await store.restoreBid(entry.bidId);
+          break;
+        case 'restore':
+          await store.removeBid(entry.bidId, entry.before?.removedReason || 'Removed again (undo of restore)');
+          break;
+        case 'edit':
+          await store.updateAdFields(entry.bidId, entry.before);
+          break;
+        case 'end':
+          if (entry.before.board === 'throne') {
+            if (!(await store.unretire(entry.region, entry.bidId, entry.before.endedAt ?? entry.at))) {
+              return res.status(409).json({ error: 'Someone else has taken the throne since; it cannot be given back.' });
+            }
+          } else {
+            await store.setAdTimes(entry.bidId, { startsAt: entry.before.startsAt, endsAt: entry.before.endsAt });
+          }
+          break;
+        case 'pause':
+        case 'resume':
+          await store.setPaused(entry.region, !entry.after.paused);
+          break;
+        default:
+          return res.status(409).json({ error: 'This action cannot be undone.' });
+      }
+      if (!(await store.markUndone(entry.id))) return res.status(409).json({ error: 'Already undone.' });
+      await store.logAdmin({ action: `undo-${entry.action}`, bidId: entry.bidId, region: entry.region ?? bid?.region ?? null });
+      console.log(`[admin] undid #${entry.id} (${entry.action})`);
+      changed(entry.region ?? bid?.region);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   app.use('/api/admin', admin);
 }
@@ -615,6 +795,7 @@ app.post(
   bidLimiter,
   handle(async (req, res) => {
     const region = regionOf(req);
+    if (await store.isPaused(region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
     const rules = game.rulesOf(region);
     const input = validateBid(req.body, rules);
     if (input.error) throw new Reject(400, input.error);
@@ -646,6 +827,7 @@ app.post(
     if (!BOARD_IDS.includes(board)) throw new Reject(400, 'Unknown board.');
     if (!BOOKING_DAYS.includes(days)) throw new Reject(400, 'Pick 1, 3 or 7 days.');
     const region = regionOf(req);
+    if (await store.isPaused(region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
     const rules = game.rulesOf(region);
     const amountCents = bookingPriceCents(board, days, rules);
     // Spotlight and Market tiles are too small to show a map, so they never sell the add-on.
@@ -693,6 +875,7 @@ app.post(
     // Same ad, already screened when it took the throne: no new upload or check.
     // It stays in its own region, paid in that region's currency.
     const { bid } = offer;
+    if (await store.isPaused(bid.region)) throw new Reject(503, 'New ads are paused for a few minutes. Please try again shortly.');
     const email = paymentEmail(req, bid.region);
     await createPaidAd(
       res,

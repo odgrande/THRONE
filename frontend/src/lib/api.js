@@ -29,6 +29,12 @@ export const api = {
   // Raw MP4/MOV body; returns { videoToken, seconds }.
   uploadVideo: (file) => request('/api/uploads/video', { method: 'POST', headers: { 'Content-Type': file.type }, body: file }),
   adminReviews: (token) => request('/api/admin/reviews', { headers: { Authorization: `Bearer ${token}` } }),
+  adminAds: (token, region, q) =>
+    request(`/api/admin/ads?region=${encodeURIComponent(region ?? '')}&q=${encodeURIComponent(q ?? '')}`, { headers: { Authorization: `Bearer ${token}` } }),
+  adminLog: (token) => request('/api/admin/log', { headers: { Authorization: `Bearer ${token}` } }),
+  adminUndo: (token, id) => request(`/api/admin/log/${id}/undo`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }),
+  adminPause: (token, region, paused) =>
+    request(`/api/admin/regions/${region}/pause`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ paused }) }),
   demoPay: (bidId) => request(`/api/bids/${bidId}/demo-pay`, { method: 'POST' }),
   bidStatus: (bidId) => request(`/api/bids/${bidId}/status`),
   createBooking: (booking) => request('/api/bookings', { method: 'POST', body: JSON.stringify(booking) }),

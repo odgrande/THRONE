@@ -26,6 +26,8 @@ export function createMemoryStore() {
   const hypeJobs = [];
   const rounds = [];
   const reports = [];
+  const adminLog = [];
+  const paused = Object.fromEntries(REGIONS.map((r) => [r, false]));
   const regionState = Object.fromEntries(
     REGIONS.map((r) => [r, { throneBidId: null, takeovers: 0, volumeCents: 0, boardsBookedUntil: Object.fromEntries(BOARD_IDS.map((id) => [id, null])) }]),
   );
@@ -406,6 +408,70 @@ export function createMemoryStore() {
 
     async listHypeJobs(limit) {
       return hypeJobs.slice(-limit).reverse().map((j) => ({ ...j }));
+    },
+
+    // --- Admin god mode ---
+    async logAdmin({ action, bidId = null, region = null, reason = null, before = null, after = null, undoable = false }) {
+      const entry = { id: adminLog.length + 1, at: new Date().toISOString(), action, bidId, region, reason, before, after, undoable, undoneAt: null };
+      adminLog.push(entry);
+      return { ...entry };
+    },
+    async listAdminLog(limit) {
+      return adminLog.slice(-limit).reverse().map((e) => ({ ...e, name: e.bidId ? bids.get(e.bidId)?.name ?? null : null }));
+    },
+    async getAdminLog(id) {
+      const e = adminLog.find((x) => x.id === Number(id));
+      return e ? { ...e } : null;
+    },
+    async markUndone(id) {
+      const e = adminLog.find((x) => x.id === Number(id));
+      if (!e || e.undoneAt) return false;
+      e.undoneAt = new Date().toISOString();
+      return true;
+    },
+    async updateAdFields(id, fields) {
+      const bid = bids.get(id);
+      if (!bid) return null;
+      Object.assign(bid, fields);
+      return { ...bid };
+    },
+    async setAdTimes(id, { startsAt, endsAt }) {
+      const bid = bids.get(id);
+      if (bid) Object.assign(bid, { startsAt, endsAt });
+    },
+    // Ends a reign now, exactly like a term-limit retirement (archived as retired).
+    async forceRetire(region, bidId) {
+      const s = stateOf(region);
+      if (s.throneBidId !== bidId) return false;
+      archive(bids.get(bidId), null, new Date().toISOString());
+      s.throneBidId = null;
+      return true;
+    },
+    // Undo of forceRetire: only while the throne is still empty.
+    async unretire(region, bidId, sinceIso) {
+      const s = stateOf(region);
+      if (s.throneBidId) return false;
+      s.throneBidId = bidId;
+      for (let i = legends.length - 1; i >= 0; i--) {
+        if (legends[i].bidId === bidId && legends[i].retired && legends[i].deposedAt >= sinceIso) legends.splice(i, 1);
+      }
+      return true;
+    },
+    async setPaused(region, value) {
+      stateOf(region);
+      paused[region] = Boolean(value);
+    },
+    async isPaused(region) {
+      return paused[region] ?? false;
+    },
+    async searchAds({ region, q, limit }) {
+      const needle = (q ?? '').trim().toLowerCase();
+      return [...bids.values()]
+        .filter((b) => (!region || b.region === region) && b.status !== 'pending')
+        .filter((b) => !needle || b.id === needle || b.name.toLowerCase().includes(needle))
+        .sort((a, b) => (b.settledAt ?? b.createdAt).localeCompare(a.settledAt ?? a.createdAt))
+        .slice(0, limit)
+        .map((b) => ({ ...b }));
     },
 
     // --- Ad performance (mirrors add_views / record_daily / ad_performance) ---

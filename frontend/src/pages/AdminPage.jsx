@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, LogOut, RefreshCw } from 'lucide-react';
 import { api, formatMoney } from '../lib/api.js';
 import VideoReviews from '../components/VideoReviews.jsx';
+import GodMode from '../components/GodMode.jsx';
 import Logo from '../components/Logo.jsx';
 import Shape from '../components/Shape.jsx';
 import ModerationQueue from '../components/ModerationQueue.jsx';
@@ -172,6 +173,7 @@ export default function AdminPage() {
                 ['treasury', 'Treasury'],
                 ['moderation', 'Moderation'],
                 ['videos', 'Video review'],
+                ['god', 'God mode'],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -183,7 +185,7 @@ export default function AdminPage() {
                 </button>
               ))}
             </nav>
-            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : <ModerationQueue token={token} />}
+            {tab === 'treasury' ? <Dashboard health={health} error={error} /> : tab === 'videos' ? <VideoReviews token={token} /> : tab === 'god' ? <GodMode token={token} /> : <ModerationQueue token={token} />}
           </>
         )}
       </main>

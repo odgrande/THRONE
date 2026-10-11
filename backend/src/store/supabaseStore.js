@@ -65,6 +65,20 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
     removedAt: r.bid?.removed_at ?? null,
   });
 
+  const logFromRow = (r) =>
+    r && {
+      id: r.id,
+      at: r.at,
+      action: r.action,
+      bidId: r.bid_id,
+      region: r.region,
+      reason: r.reason,
+      before: r.before,
+      after: r.after,
+      undoable: r.undoable,
+      undoneAt: r.undone_at,
+    };
+
   const jobFromRow = (r) =>
     r && { id: r.id, status: r.status, payload: r.payload, videoUrl: r.video_url, error: r.error, createdAt: r.created_at };
 
@@ -151,6 +165,54 @@ export function createSupabaseStore({ url, serviceRoleKey }) {
 
     async setStatus(id, status) {
       check(await db.from('bids').update({ status }).eq('id', id));
+    },
+
+    // --- Admin god mode ---
+    async logAdmin({ action, bidId = null, region = null, reason = null, before = null, after = null, undoable = false }) {
+      const row = check(await db.from('admin_log').insert({ action, bid_id: bidId, region, reason, before, after, undoable }).select().single());
+      return logFromRow(row);
+    },
+    async listAdminLog(limit) {
+      const rows = check(await db.from('admin_log').select('*, bid:bids(name)').order('at', { ascending: false }).limit(limit));
+      return rows.map((r) => ({ ...logFromRow(r), name: r.bid?.name ?? null }));
+    },
+    async getAdminLog(id) {
+      return logFromRow(check(await db.from('admin_log').select('*').eq('id', id).maybeSingle()));
+    },
+    async markUndone(id) {
+      const rows = check(await db.from('admin_log').update({ undone_at: new Date().toISOString() }).eq('id', id).is('undone_at', null).select('id'));
+      return rows.length > 0;
+    },
+    async updateAdFields(id, { name, tagline, targetUrl }) {
+      return fromRow(check(await db.from('bids').update({ name, tagline, target_url: targetUrl }).eq('id', id).select().maybeSingle()));
+    },
+    async setAdTimes(id, { startsAt, endsAt }) {
+      check(await db.from('bids').update({ starts_at: startsAt, ends_at: endsAt }).eq('id', id));
+    },
+    // The archive trigger records it as a retirement (bid_id -> null).
+    async forceRetire(region, bidId) {
+      const rows = check(await db.from('throne').update({ bid_id: null }).eq('region', region).eq('bid_id', bidId).select('region'));
+      return rows.length > 0;
+    },
+    async unretire(region, bidId, sinceIso) {
+      const rows = check(await db.from('throne').update({ bid_id: bidId }).eq('region', region).is('bid_id', null).select('region'));
+      if (!rows.length) return false;
+      check(await db.from('throne_legends').delete().eq('bid_id', bidId).eq('retired', true).gte('deposed_at', sinceIso));
+      return true;
+    },
+    async setPaused(region, value) {
+      check(await db.from('throne').update({ paused: Boolean(value) }).eq('region', region));
+    },
+    async isPaused(region) {
+      return Boolean(check(await db.from('throne').select('paused').eq('region', region).single()).paused);
+    },
+    async searchAds({ region, q, limit }) {
+      let query = db.from('bids').select('*').neq('status', 'pending').order('created_at', { ascending: false }).limit(limit);
+      if (region) query = query.eq('region', region);
+      const needle = (q ?? '').trim();
+      if (/^[0-9a-f-]{36}$/i.test(needle)) query = query.eq('id', needle);
+      else if (needle) query = query.ilike('name', `%${needle.replace(/[%_\\]/g, '')}%`);
+      return check(await query).map(fromRow);
     },
 
     // --- Ad performance ---

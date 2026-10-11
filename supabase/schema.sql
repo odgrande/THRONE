@@ -85,6 +85,26 @@ create table if not exists boards (
   booked_until  timestamptz,
   primary key (region, id)
 );
+-- Admin "god mode": every admin action, with what it changed, so it can be
+-- reviewed and (where possible) undone. Never readable by the public.
+create table if not exists admin_log (
+  id          bigint generated always as identity primary key,
+  at          timestamptz not null default now(),
+  action      text not null,
+  bid_id      uuid references bids (id),
+  region      text,
+  reason      text,
+  before      jsonb,
+  after       jsonb,
+  undoable    boolean not null default false,
+  undone_at   timestamptz
+);
+create index if not exists admin_log_at_idx on admin_log (at desc);
+alter table admin_log enable row level security;
+
+-- Emergency switch per edition: while paused, no new ads are accepted.
+alter table throne add column if not exists paused boolean not null default false;
+
 -- Ad performance: reach = distinct visitors on the site while the ad was live
 -- (counted by the API from live connections; no personal data stored).
 alter table bids add column if not exists views integer not null default 0;
